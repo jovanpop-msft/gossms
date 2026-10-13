@@ -6,6 +6,68 @@ entries start with v0.0.2 onward.
 
 ## [Unreleased]
 
+## [0.0.15] - 2026-10-13
+
+### Added
+
+- **Live Query Statistics** in the query toolbar: a running statement shows
+  its plan live, with per-operator row counts, elapsed time and progress,
+  filled in from the query-profile DMVs and switching to the actual plan when
+  the statement ends (`query_panel_live.go`). Operators without an estimate get
+  one filled in by `internal/showplan`.
+- **Show Live Execution Plan** in Activity Monitor: another session's
+  in-flight plan in a read-only panel (`live_plan_panel.go`), with an idle
+  note when the session is not running a statement.
+- **Replication** under the server: Local Publications and Local
+  Subscriptions with read-only Properties (general, articles, filter rows,
+  snapshot, subscription options; `replication_props.go`), and **Launch
+  Replication Monitor** (`replication_monitor_panel.go`) listing publications,
+  subscriptions and agents with their error detail, keeping the selection
+  across refreshes.
+- **Full-text dialogs.** New Full-Text Catalog, New Full-Text Index, New
+  Search Property List and New Full-Text Stoplist.
+- **Blocked-run label.** A property-sheet Apply that waits on another
+  session names the blocker beside the spinner ("Blocked 12s by session 57
+  (login@host, program)") instead of spinning silently
+  (`watchBlocking`, `PropertySheet.SetApplyingLabel`).
+- **Restore sequence hint.** Choosing a log or differential set says the
+  target must be RESTORING from an earlier `NORECOVERY` restore, instead of the
+  server's message about files not ready to roll forward.
+
+### Fixed
+
+- **A failed or cancelled connect in a query window** paired the old
+  connection with the attempted database, so Reconnect and IntelliSense could
+  target the wrong server; the previous connection is kept intact.
+- **A commit that lost its session** now says the server rolled the work back
+  and leaves the window disconnected, instead of offering a retry.
+- **Whole-word search** missed T-SQL variables and temp tables (`@id`,
+  `#tmp`) and non-ASCII words (`café`); regex replace now uses line context.
+- **Extended Events filters** mishandled negated conditions, and grouping did
+  not follow the filter's equality (case-insensitive text, numbers).
+- **Disabling Change Tracking** on a database with tracked tables now says
+  why it cannot, and the enable/disable order is correct.
+- **Database Files** showed non-whole MB sizes rounded; KB and MB are told
+  apart.
+- **A lone `!` in a filter** hung the UI.
+- **Backup set types** other than full were offered for restore as full;
+  they now carry their own names (Transaction Log, Differential, Files,
+  Partial) and unknown types say Unknown.
+- **Login CONNECT SQL** applied over a `GRANT WITH GRANT OPTION` revoked the
+  grant option, and a DENY/REVOKE away from one failed (Msg 4611); it now goes
+  through the shared permission-change path with `CASCADE`.
+- **Parallel plan CPU time** took the largest thread instead of the sum.
+- **Menu bar and toolbar hover** lit up behind an open dialog or context
+  menu, and a menu label stayed lit after the pointer left it downwards.
+
+### Changed
+
+- `gosmo` v0.0.16 → v0.0.17. The `replace` directive is commented out for
+  the release.
+- Source comments compacted; loops moved to `range` syntax; tests added for
+  the SQL parser, terminal controls, grapheme clusters, the new `ToolRow`
+  control and a filter-parsing fuzz target.
+
 ## [0.0.14] - 2026-10-06
 
 ### Added
