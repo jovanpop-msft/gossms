@@ -103,7 +103,7 @@ func (c *fakeMsgConn) QueryContext(ctx context.Context, q string, _ []driver.Nam
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		if q == stateQuery {
+		if q == stateQuery || q == openQuery {
 			return &fakeMsgRows{sets: []fakeMsg{{cols: []string{"", "", ""}, rows: [][]driver.Value{{c.spid, c.dbName, c.tranCount}}}}}, nil
 		}
 		if strings.Contains(q, "DB_NAME()") {

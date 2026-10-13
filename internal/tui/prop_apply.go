@@ -7,6 +7,7 @@ import (
 	"os"
 	"slices"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -197,6 +198,35 @@ func (p *applyPlan) value(key string) (any, bool) {
 	return v, ok
 }
 
+// applyNotes collects what a successful run has to tell the user beyond "saved":
+// a result that differs from what was asked without being an error, such as a
+// shrink that stopped above its target. Written from the apply goroutine.
+type applyNotes struct {
+	mu    sync.Mutex
+	notes []string
+}
+
+type applyNotesKey struct{}
+
+// noteApply records msg for the run's success report; a no-op on a context no
+// pipeline gave a collector.
+func noteApply(ctx context.Context, msg string) {
+	n, _ := ctx.Value(applyNotesKey{}).(*applyNotes)
+	if n == nil {
+		return
+	}
+	n.mu.Lock()
+	n.notes = append(n.notes, msg)
+	n.mu.Unlock()
+}
+
+// text is every note recorded, in order, as one message.
+func (n *applyNotes) text() string {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return strings.Join(n.notes, " ")
+}
+
 // run carries out every step in phase order, stopping at the first error.
 func (p *applyPlan) run(ctx context.Context) error {
 	return p.runPhases(ctx, func(int) bool { return true })
@@ -285,8 +315,9 @@ func (d *PropDialog) dirtyApplyFns() (pages []int, fns []propApply) {
 // goroutine, report back on the UI goroutine via d.post. noChanges runs on the UI
 // goroutine when nothing was dirty; onSuccess once every closure succeeded.
 // Callers differ in the context (real or gosmo.WithScript) and what "nothing to
-// do" and "it worked" mean.
-func (d *PropDialog) runPipeline(runCtx context.Context, noChanges, onSuccess func()) {
+// do" and "it worked" mean. onSuccess gets what the closures noted (noteApply),
+// "" for nothing.
+func (d *PropDialog) runPipeline(runCtx context.Context, noChanges func(), onSuccess func(notes string)) {
 	if !d.validateDirty() {
 		return
 	}
@@ -303,6 +334,8 @@ func (d *PropDialog) runPipeline(runCtx context.Context, noChanges, onSuccess fu
 
 	d.StartApplying(pipelineLabel(runCtx))
 	d.SetMessage("", false)
+	notes := &applyNotes{}
+	runCtx = context.WithValue(runCtx, applyNotesKey{}, notes)
 	runCtx = d.run.start(runCtx)
 	stop := d.run.stop
 
@@ -319,7 +352,7 @@ func (d *PropDialog) runPipeline(runCtx context.Context, noChanges, onSuccess fu
 				d.applyFailed(runCtx, runErr, progress, pages)
 				return
 			}
-			onSuccess()
+			onSuccess(notes.text())
 		})
 	})
 }
@@ -505,12 +538,18 @@ func (d *PropDialog) applyNow(hideOnSuccess bool) {
 			d.Dismiss()
 		}
 	}
-	d.runPipeline(d.ctx, hide, func() {
-		d.app.setStatus("Properties saved")
+	d.runPipeline(d.ctx, hide, func(notes string) {
+		if notes == "" {
+			d.app.setStatus("Properties saved")
+		} else {
+			// The status bar too, since OK closes the dialog the message is shown in.
+			d.app.setStatus("Properties saved. " + notes)
+		}
 		// Only a dialog that stays open reloads: InvalidateAll dispatches the current
 		// page's fetch at once, and OK would close over it.
 		if !hideOnSuccess {
 			d.InvalidateAll()
+			d.SetMessage(notes, false)
 		}
 		d.saved()
 		hide()
@@ -552,7 +591,7 @@ func (d *PropDialog) runScript() {
 	scriptCtx, script := gosmo.WithScript(d.ctx)
 	sc, database := d.sc, d.database
 	noChanges := func() { d.SetMessage("No changes to script.", false) }
-	d.runPipeline(scriptCtx, noChanges, func() {
+	d.runPipeline(scriptCtx, noChanges, func(string) {
 		if script.Len() == 0 {
 			noChanges()
 			return

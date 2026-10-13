@@ -49,3 +49,33 @@ func TestLiveVariantCells(t *testing.T) {
 		}
 	}
 }
+
+// TestLiveMoneyCells checks money and smallmoney columns through the real
+// scanner, as SSMS shows them ("#0.00##"), and that decimal keeps its scale.
+func TestLiveMoneyCells(t *testing.T) {
+	db, ctx, done := livePlanDB(t)
+	defer done()
+
+	s, _, err := Open(ctx, db, "tempdb")
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer s.Close()
+
+	for _, tt := range []struct{ expr, want string }{
+		{"CAST(12.5 AS money)", "12.50"},
+		{"CAST(-3 AS smallmoney)", "-3.00"},
+		{"CAST(12.1234 AS money)", "12.1234"},
+		{"CAST(12.123 AS smallmoney)", "12.123"},
+		{"CAST(0 AS money)", "0.00"},
+		{"CAST(12.5000 AS decimal(9,4))", "12.5000"},
+	} {
+		res := s.Execute(ctx, "SELECT "+tt.expr)
+		if res.HasErrors() {
+			t.Fatalf("%s: %v", tt.expr, messageTexts(res))
+		}
+		if got := res.Sets[0].Rows[0][0]; got != tt.want {
+			t.Errorf("%s: cell = %q, want %q", tt.expr, got, tt.want)
+		}
+	}
+}

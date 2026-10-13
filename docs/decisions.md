@@ -1349,6 +1349,13 @@ it from the string 'NULL'.
   rather than silently reconnecting on F5, since the new session lacks the temp
   tables and transaction. The commit-on-close loop is bounded by the starting
   `@@TRANCOUNT`, so a doomed transaction reports and leaves the window open.
+- **A query window's session runs with `ARITHABORT ON`, as SSMS's does**
+  (decided 2026-10-13). go-mssqldb logs in with it OFF (`@@OPTIONS` 5432
+  against SSMS's 5496); `query.Open` sets it before its state read. Results
+  are the same either way (ANSI_WARNINGS ON implies it), but `set_options`
+  keys the plan cache, so OFF would compile and reuse plans an SSMS window
+  never sees — and match an ADO.NET application's instead. Matching SSMS is the
+  choice; `TestLiveSessionOpensWithArithAbortOn` pins it.
 - **Comment prose is not a cleanup target** — the long blocks `CLAUDE.md` §
   Coding conventions names, and failure-naming comments in
   `query_store_panel.go`, `prop_grid_helpers.go` and similar. Drift that does
@@ -1362,7 +1369,8 @@ it from the string 'NULL'.
   as text too — accepted), a nameless fixed zone is a `datetimeoffset`, and
   fractions show at least three digits. A `date` still shows as a datetime at
   midnight, a `time` on 0001-01-01, a GUID as its wire bytes in hex, and money
-  with four decimals where SSMS shows two — the driver must return a typed
+  with four decimals where SSMS shows `#0.00##` (a money *column* is right —
+  `query.appendMoney`, by its column type) — the driver must return a typed
   value (or the base type) before those can be right; `TestLiveVariantCells`
   pins today's text. The complete fix is upstream, not a heuristic here.
 - **Which databases a dropdown offers** is settled in

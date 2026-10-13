@@ -372,6 +372,7 @@ type rowScanner struct {
 	ptrs        []any
 	guids       []*mssql.NullUniqueIdentifier
 	decimalLike []bool
+	isMoney     []bool
 	isReal      []bool
 	isVariant   []bool
 	layouts     []string
@@ -392,6 +393,7 @@ type rowScanner struct {
 //
 // decimal/numeric/money/smallmoney scan as []byte already decoded to ASCII
 // digits ("0.070312"), so render as text, not hex. (numeric reports as DECIMAL.)
+// money/smallmoney arrive with four decimals; isMoney trims them as SSMS does.
 //
 // real scans as float64(float32); formatting at 64 bits shows widening noise
 // (0.1 -> 0.10000000149011612), so isReal marks those columns for 32-bit.
@@ -418,6 +420,7 @@ func newRowScanner(rows *sql.Rows) (*rowScanner, error) {
 		ptrs:        make([]any, len(cols)),
 		guids:       make([]*mssql.NullUniqueIdentifier, len(cols)),
 		decimalLike: make([]bool, len(cols)),
+		isMoney:     make([]bool, len(cols)),
 		isReal:      make([]bool, len(cols)),
 		isVariant:   make([]bool, len(cols)),
 		layouts:     make([]string, len(cols)),
@@ -430,8 +433,11 @@ func newRowScanner(rows *sql.Rows) (*rowScanner, error) {
 			sc.guids[i] = &mssql.NullUniqueIdentifier{}
 			sc.ptrs[i] = sc.guids[i]
 			continue
-		case "DECIMAL", "MONEY", "SMALLMONEY":
+		case "DECIMAL":
 			sc.decimalLike[i] = true
+		case "MONEY", "SMALLMONEY":
+			sc.decimalLike[i] = true
+			sc.isMoney[i] = true
 		case "REAL":
 			sc.isReal[i] = true
 		case "SQL_VARIANT":
@@ -458,6 +464,9 @@ func (sc *rowScanner) scan(rows *sql.Rows, row []string, a *cellArena) error {
 		} else if f, ok := sc.vals[i].(float64); ok && sc.isReal[i] {
 			sc.isNull[i] = false
 			sc.buf = appendFloat(sc.buf, f, 32)
+		} else if b, ok := sc.vals[i].([]byte); ok && sc.isMoney[i] {
+			sc.isNull[i] = false
+			sc.buf = appendMoney(sc.buf, b)
 		} else if sc.isVariant[i] {
 			sc.isNull[i] = sc.vals[i] == nil
 			sc.buf = appendVariant(sc.buf, sc.vals[i])
@@ -711,6 +720,22 @@ func appendValue(dst []byte, v any, isDecimalLike bool, layout string) []byte {
 	default:
 		return fmt.Appendf(dst, "%v", x)
 	}
+}
+
+// appendMoney renders money/smallmoney digits as SSMS does, SqlMoney's
+// "#0.00##": at least two decimals, at most four, trailing zeros past the
+// second dropped (12.5000 -> 12.50, 12.1230 -> 12.123). The driver always
+// sends four; the padding covers anything shorter.
+func appendMoney(dst []byte, digits []byte) []byte {
+	intPart, frac, _ := bytes.Cut(digits, []byte{'.'})
+	frac = bytes.TrimRight(frac, "0")
+	dst = append(dst, intPart...)
+	dst = append(dst, '.')
+	dst = append(dst, frac...)
+	for range 2 - len(frac) {
+		dst = append(dst, '0')
+	}
+	return dst
 }
 
 // appendVariant renders a sql_variant cell. go-mssqldb decodes the variant's

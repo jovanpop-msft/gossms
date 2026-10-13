@@ -379,11 +379,23 @@ func TestFilesPageGridShowsTheEditOnceMovedOff(t *testing.T) {
 }
 
 // shrinkResponse answers DatabaseFileInfo.Shrink's DBCC SHRINKFILE row:
-// DbId, FileId, CurrentSize, MinimumSize, UsedPages, EstimatedPages (pages).
-func shrinkResponse() fakeResponse {
+// DbId, FileId, CurrentSize, MinimumSize, UsedPages, EstimatedPages (pages),
+// the file ending at reachedPages.
+func shrinkResponse(reachedPages int64) fakeResponse {
 	return fakeResponse{match: "DBCC SHRINKFILE", cols: 6, rows: [][]driver.Value{
-		{int64(7), int64(2), int64(2048), int64(128), int64(100), int64(100)},
+		{int64(7), int64(2), reachedPages, int64(128), int64(100), int64(100)},
 	}}
+}
+
+// applyWithNotes runs a page's apply as the dialog's pipeline does, returning
+// what it noted for the success report.
+func applyWithNotes(t *testing.T, apply propApply) string {
+	t.Helper()
+	notes := &applyNotes{}
+	if err := apply(context.WithValue(context.Background(), applyNotesKey{}, notes)); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	return notes.text()
 }
 
 // A smaller size is a shrink, not MODIFY FILE — that is Msg 5039 below the
@@ -392,7 +404,7 @@ func shrinkResponse() fakeResponse {
 // SIZE, and the shrink that follows names the file by its new name. Apply asks
 // first, naming the file.
 func TestFilesPageShrinksALoweredSize(t *testing.T) {
-	sc, inst := newFakeConn(t, append(filesPageResponses(), shrinkResponse())...)
+	sc, inst := newFakeConn(t, append(filesPageResponses(), shrinkResponse(2048))...)
 	form, apply := loadPage(t, pageDatabaseFiles(sc, "appdb"), inst)
 
 	selectGridRow(t, plainGrid(t, form), 0, "appdb_log")
@@ -404,8 +416,8 @@ func TestFilesPageShrinksALoweredSize(t *testing.T) {
 	if w := form.ApplyConfirm(); !strings.Contains(w, "appdb_log2") || !strings.Contains(w, "SHRINKFILE") {
 		t.Errorf("apply warning = %q, want it to name the file and the shrink", w)
 	}
-	if err := apply(context.Background()); err != nil {
-		t.Fatalf("apply: %v", err)
+	if note := applyWithNotes(t, apply); note != "" {
+		t.Errorf("a shrink that reached its 16 MB target noted %q", note)
 	}
 	stmts := inst.Statements()
 	if len(stmts) != 1 {
@@ -425,10 +437,48 @@ func TestFilesPageShrinksALoweredSize(t *testing.T) {
 	}
 }
 
+// A shrink that stops above its target says where, for Apply's success report:
+// SHRINKFILE stops at the file's contents without an error (review plan N2).
+// 0 MB is sent as 1 MB (gosmo), and the 2816 KB the file reached is reported.
+func TestFilesPageReportsWhereAShrinkStopped(t *testing.T) {
+	sc, inst := newFakeConn(t, append(filesPageResponses(), shrinkResponse(352))...)
+	form, apply := loadPage(t, pageDatabaseFiles(sc, "appdb"), inst)
+
+	selectGridRow(t, plainGrid(t, form), 0, "appdb_log")
+	editText(t, form, "Initial size", "0")
+	form.Commit()
+
+	note := applyWithNotes(t, apply)
+	if want := "appdb_log stopped shrinking at 2816 KB, not 0 MB: its data needs that much."; note != want {
+		t.Errorf("note = %q, want %q", note, want)
+	}
+	if r := inst.Reads("DBCC SHRINKFILE"); len(r) != 1 || r[0] != "DBCC SHRINKFILE (N'appdb_log', 1)" {
+		t.Errorf("shrink reads = %q, want one DBCC SHRINKFILE (N'appdb_log', 1)", r)
+	}
+}
+
+func TestShrinkStoppedNote(t *testing.T) {
+	for _, tt := range []struct {
+		targetKB, reachedKB int64
+		want                bool
+	}{
+		{0, 1024, false}, // sent as 1 MB, reached it
+		{0, 2816, true},  // above the 1 MB sent
+		{16384, 16384, false},
+		{16384, 16392, true},
+		{1536, 2048, false}, // 1.5 MB is sent as 2
+		{0, 0, false},       // WithScript returns 0
+	} {
+		if got := shrinkStoppedNote("f", tt.targetKB, tt.reachedKB) != ""; got != tt.want {
+			t.Errorf("target %d KB, reached %d KB: noted = %v, want %v", tt.targetKB, tt.reachedKB, got, tt.want)
+		}
+	}
+}
+
 // A larger size still grows through MODIFY FILE, with no shrink and no
 // question.
 func TestFilesPageGrowsARaisedSize(t *testing.T) {
-	sc, inst := newFakeConn(t, append(filesPageResponses(), shrinkResponse())...)
+	sc, inst := newFakeConn(t, append(filesPageResponses(), shrinkResponse(2048))...)
 	form, apply := loadPage(t, pageDatabaseFiles(sc, "appdb"), inst)
 
 	selectGridRow(t, plainGrid(t, form), 0, "appdb_log")

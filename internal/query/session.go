@@ -52,6 +52,13 @@ const stateReadTimeout = 5 * time.Second
 // stateQuery reads a session's state; @@SPID is only needed by Open.
 const stateQuery = "SELECT @@SPID, DB_NAME(), @@TRANCOUNT"
 
+// openQuery is Open's first batch: SSMS's ARITHABORT ON, then the state read.
+// go-mssqldb logs in with it OFF (@@OPTIONS 5432 against SSMS's 5496). Results
+// match either way — ANSI_WARNINGS ON implies it — but set_options keys the
+// plan cache, so OFF compiles and caches a different plan from SSMS's for the
+// same query (docs/decisions.md).
+const openQuery = "SET ARITHABORT ON; " + stateQuery
+
 // Open checks a connection out of db for the Session's exclusive use, in
 // database if non-empty, and reads its SPID and state. The connection is never
 // returned to db; Close discards it. A dead pooled connection is retried (see
@@ -63,7 +70,7 @@ func Open(ctx context.Context, db *sql.DB, database string) (*Session, SessionSt
 	}
 	s := &Session{conn: conn}
 	var st SessionState
-	if err := conn.QueryRowContext(ctx, stateQuery).Scan(&s.spid, &st.Database, &st.TranCount); err != nil {
+	if err := conn.QueryRowContext(ctx, openQuery).Scan(&s.spid, &st.Database, &st.TranCount); err != nil {
 		s.Close()
 		return nil, SessionState{}, err
 	}

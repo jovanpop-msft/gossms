@@ -375,6 +375,51 @@ func TestPropDialogCommitsPagesBeforeApplyAndScript(t *testing.T) {
 	}
 }
 
+// What an apply notes (a shrink that stopped above its target) reaches the
+// status bar after "Properties saved" — the only place left once OK closes the
+// dialog — and, on Apply, the dialog's own message after the reload.
+func TestPropDialogReportsApplyNotes(t *testing.T) {
+	const note = "f stopped shrinking at 2816 KB, not 0 MB: its data needs that much."
+	for _, tc := range []struct {
+		name        string
+		run         func(d *PropDialog)
+		wantStatus  string
+		wantMessage string
+	}{
+		{"Apply", func(d *PropDialog) { d.runApply(false) }, "Properties saved. " + note, note},
+		{"OK", func(d *PropDialog) { d.runApply(true) }, "Properties saved. " + note, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sheet := propsheet.NewPropertySheet(&fakeSizedScreen{w: 120, h: 40}, "Test Properties")
+			d := &PropDialog{PropertySheet: sheet, app: newTestApp(), ctx: context.Background(), applyFn: map[int]propApply{}}
+			d.SetPages([]string{"Files"})
+			d.OnLoadPage = func(page, seq int) {
+				row := propsheet.Text("Name", "", 40)
+				f := propsheet.NewForm(row)
+				f.SetCommit(func() { row.Edit("edited") })
+				d.SetPageForm(page, seq, f)
+				d.applyFn[page] = func(ctx context.Context) error {
+					noteApply(ctx, note)
+					return nil
+				}
+			}
+			d.Show()
+			d.SelectPage(0)
+
+			runAndWait(t, d, func() { tc.run(d) })
+
+			if got := d.app.statusText; got != tc.wantStatus {
+				t.Errorf("status = %q, want %q", got, tc.wantStatus)
+			}
+			if tc.wantMessage != "" {
+				if got := d.Message(); got != tc.wantMessage {
+					t.Errorf("dialog message = %q, want %q", got, tc.wantMessage)
+				}
+			}
+		})
+	}
+}
+
 // newObjectDialog commits every page's form before preflight, so the request
 // preflight builds on the UI goroutine sees what the editors hold.
 func TestNewObjectDialogCommitsBeforePreflight(t *testing.T) {

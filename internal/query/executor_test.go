@@ -309,6 +309,29 @@ func TestAppendVariant(t *testing.T) {
 	}
 }
 
+// TestAppendMoney pins SqlMoney's "#0.00##", which SSMS shows money and
+// smallmoney columns in; the input is the driver's four-decimal text.
+func TestAppendMoney(t *testing.T) {
+	for _, tt := range []struct{ in, want string }{
+		{"12.5000", "12.50"},
+		{"-3.0000", "-3.00"},
+		{"12.1234", "12.1234"},
+		{"12.1230", "12.123"},
+		{"0.0000", "0.00"},
+		{"-0.0001", "-0.0001"},
+		{"922337203685477.5807", "922337203685477.5807"},
+		{"-214748.3648", "-214748.3648"},
+		{"100.0100", "100.01"},
+		// Shorter than the driver sends, padded to two.
+		{"7", "7.00"},
+		{"7.1", "7.10"},
+	} {
+		if got := string(appendMoney(nil, []byte(tt.in))); got != tt.want {
+			t.Errorf("appendMoney(%q) = %q, want %q", tt.in, got, tt.want)
+		}
+	}
+}
+
 // formatGUID is appendGUID's string form.
 func formatGUID(g mssql.NullUniqueIdentifier) string {
 	return string(appendGUID(nil, g))

@@ -110,3 +110,25 @@ func TestLiveSessionCloseEndsTheServerSession(t *testing.T) {
 	}
 	t.Errorf("SPID %d still holds an open transaction after Close", spid)
 }
+
+// A new Session runs with ARITHABORT ON, as an SSMS query window does, so the
+// two share set_options and with it cached plans (@@OPTIONS 5496, not the
+// driver's 5432).
+func TestLiveSessionOpensWithArithAbortOn(t *testing.T) {
+	db, ctx, done := livePlanDB(t)
+	defer done()
+
+	s, _, err := Open(ctx, db, "tempdb")
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer s.Close()
+
+	res := s.Execute(ctx, "SELECT CAST(SESSIONPROPERTY('ARITHABORT') AS int), @@OPTIONS & 64")
+	if res.HasErrors() || len(res.Sets) != 1 {
+		t.Fatalf("Execute: %v", messageTexts(res))
+	}
+	if got := res.Sets[0].Rows[0]; got[0] != "1" || got[1] != "64" {
+		t.Errorf("SESSIONPROPERTY('ARITHABORT'), @@OPTIONS & 64 = %v, want [1 64]", got)
+	}
+}
