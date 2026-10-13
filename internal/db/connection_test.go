@@ -492,3 +492,21 @@ func TestCertStoreHint(t *testing.T) {
 		})
 	}
 }
+
+// An auth method gossms doesn't know is refused by Connect and the dialog
+// preview alike, never dialled as SQL Server Authentication; every known one
+// maps.
+func TestUnknownAuthMethodIsRefused(t *testing.T) {
+	for _, m := range config.AllAuthMethods() {
+		if _, err := toGosmoAuth(m); err != nil {
+			t.Errorf("%s: %v", config.AuthMethodName(m), err)
+		}
+	}
+	opts := config.Connection{Server: "s", AuthMethod: 7, User: "u", Password: "p"}
+	if s, err := BuildConnectionString(opts); err == nil || !strings.Contains(err.Error(), "unknown authentication method 7") {
+		t.Errorf("BuildConnectionString = %q, %v; want the unknown method refused", s, err)
+	}
+	if sc, err := ConnectContext(context.Background(), opts, RoleExplorer); sc != nil || err == nil || !strings.Contains(err.Error(), "unknown authentication method 7") {
+		t.Errorf("ConnectContext = %v, %v; want the unknown method refused before dialling", sc, err)
+	}
+}

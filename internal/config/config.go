@@ -75,9 +75,10 @@ var authMethods = []authMethodInfo{
 	{AuthEntraAzCLI, "Microsoft Entra Azure CLI", "Entra Azure CLI", true, AuthFields{Tenant: true}},
 }
 
-// authInfo looks m up in authMethods. An unknown method (only from a
-// hand-edited config.json) reads as SQL Server Authentication, as
-// db.toGosmoAuth dials it, labelled "Unknown".
+// authInfo looks m up in authMethods. An unknown method (a hand-edited
+// config.json, or a newer gossms's) is labelled "Unknown" with SQL Server
+// Authentication's fields and tag, for display only: db.toGosmoAuth refuses
+// to dial it.
 func authInfo(m AuthMethod) authMethodInfo {
 	for _, info := range authMethods {
 		if info.method == m {

@@ -108,8 +108,9 @@ type ServerConn struct {
 // connect timeout never has to cover finding a phone. An existing sign-in costs
 // nothing.
 //
-// Failures are *ConnectionError, including option errors before dialling (a
-// malformed Extra Properties entry, or one naming a dialog-owned setting).
+// Failures are *ConnectionError, including option errors before dialling (an
+// unknown auth method, a malformed Extra Properties entry, or one naming a
+// dialog-owned setting).
 func ConnectContext(ctx context.Context, opts config.Connection, role Role) (*ServerConn, error) {
 	co, err := toGosmoOptions(opts, role)
 	if err != nil {
@@ -166,11 +167,15 @@ func newServerConn(ctx context.Context, opts config.Connection, srv *gosmo.Serve
 // are not passed. Every Entra method gets the shared entraCache and
 // device-code prompt (entra.go).
 func toGosmoOptions(opts config.Connection, role Role) (gosmo.ConnectionOptions, error) {
+	auth, err := toGosmoAuth(opts.AuthMethod)
+	if err != nil {
+		return gosmo.ConnectionOptions{}, err
+	}
 	co := gosmo.ConnectionOptions{
 		Server:                 opts.Server,
 		Port:                   config.DialPort(opts.Port),
 		Database:               opts.Database,
-		Auth:                   toGosmoAuth(opts.AuthMethod),
+		Auth:                   auth,
 		TrustServerCertificate: opts.TrustServerCertificate,
 		Encrypt:                encryptString(opts.Encrypt),
 		HostNameInCertificate:  strings.TrimSpace(opts.HostNameInCertificate),
@@ -338,29 +343,32 @@ func encryptString(m config.EncryptMode) string {
 }
 
 // toGosmoAuth maps config.AuthMethod to gosmo.AuthMethod with an explicit
-// switch; the enums aren't guaranteed to align.
-func toGosmoAuth(m config.AuthMethod) gosmo.AuthMethod {
+// switch; the enums aren't guaranteed to align. An unknown method (a
+// hand-edited config.json, or one written by a newer gossms) is refused, not
+// dialled as some other login mode: the Connect dialog opens it on its first
+// method, so picking one there and connecting is the repair.
+func toGosmoAuth(m config.AuthMethod) (gosmo.AuthMethod, error) {
 	switch m {
 	case config.AuthSQLServer:
-		return gosmo.AuthSQLServer
+		return gosmo.AuthSQLServer, nil
 	case config.AuthWindows:
-		return gosmo.AuthWindows
+		return gosmo.AuthWindows, nil
 	case config.AuthEntraDefault:
-		return gosmo.AuthEntraDefault
+		return gosmo.AuthEntraDefault, nil
 	case config.AuthEntraPassword:
-		return gosmo.AuthEntraPassword
+		return gosmo.AuthEntraPassword, nil
 	case config.AuthEntraMSI:
-		return gosmo.AuthEntraMSI
+		return gosmo.AuthEntraMSI, nil
 	case config.AuthEntraServicePrincipal:
-		return gosmo.AuthEntraServicePrincipal
+		return gosmo.AuthEntraServicePrincipal, nil
 	case config.AuthEntraInteractive:
-		return gosmo.AuthEntraInteractive
+		return gosmo.AuthEntraInteractive, nil
 	case config.AuthEntraDeviceCode:
-		return gosmo.AuthEntraDeviceCode
+		return gosmo.AuthEntraDeviceCode, nil
 	case config.AuthEntraAzCLI:
-		return gosmo.AuthEntraAzCLI
+		return gosmo.AuthEntraAzCLI, nil
 	default:
-		return gosmo.AuthSQLServer
+		return 0, fmt.Errorf("unknown authentication method %d in the saved connection; choose one in the Connect dialog", int(m))
 	}
 }
 

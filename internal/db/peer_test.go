@@ -539,3 +539,22 @@ func TestAbandonedPeerDialIsRetriedByAWaiter(t *testing.T) {
 		t.Error("the cancelled dial was cached as the instance's failure")
 	}
 }
+
+// A closed parent answers ErrServerConnClosed whatever the cache holds: its own
+// instance, a live cached peer, a cached failure. The error is still a
+// cancellation, which UI callers treat as "superseded".
+func TestPeerOfAClosedParentRefuses(t *testing.T) {
+	for _, server := range []string{"primary", "secondary", "failed"} {
+		sc := newTestConn("primary")
+		peer := newTestConn("secondary")
+		defer peer.Close()
+		sc.peers = map[string]*ServerConn{"secondary": peer}
+		sc.recordPeerFailure(config.InstanceKey("failed"), errors.New("i/o timeout"))
+		sc.closed.Store(true) // closed, but closePeers not yet run: Close mid-way
+
+		got, err := sc.Peer(context.Background(), server)
+		if got != nil || !errors.Is(err, ErrServerConnClosed) || !errors.Is(err, context.Canceled) {
+			t.Errorf("Peer(%q) on a closed parent = %v, %v; want ErrServerConnClosed", server, got, err)
+		}
+	}
+}

@@ -498,6 +498,21 @@ Peer credentials, easy to undo:
   Invalidated by a successful direct File > Connect to it and by Refresh
   anywhere in the Always On subtree (both recurse into cached peers, where
   chained reads record failures). The 15 s timeout stays (WAN peers).
+- **A closed parent's `Peer` answers `db.ErrServerConnClosed`** — before
+  `isSelf` and the caches, and again under `peerMu` (Close marks `closed`
+  before `closePeers` takes it). It wraps `context.Canceled`, so callers that
+  silence a superseded load still do.
+- **An unknown saved auth method is refused, not dialled as SQL auth.**
+  `db.toGosmoAuth` errors (a hand-edited or newer-gossms config.json), so
+  Connect and the preview refuse it alike; as a peer credential the resolver
+  falls back to the parent's options. The Connect dialog opens such an entry on
+  its first method — picking one and connecting is the repair. config.json is
+  never rewritten for it.
+- **A hand-edited non-canonical `encrypt_mode` is left as is — author's call.**
+  gossms only writes `optional`/`mandatory`/`strict`; the Connect dialog shows
+  anything else (`"Optional"`, `"true"`) as Mandatory, while a direct dial (a
+  peer credential) hands it to go-mssqldb, which lowercases it and accepts its
+  synonyms. No normalising in `Connection.UnmarshalJSON`.
 
 ## Always Encrypted: what the two create dialogs leave out
 

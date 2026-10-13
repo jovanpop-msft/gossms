@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"fmt"
 	"maps"
 	"slices"
 	"strings"
@@ -19,6 +20,12 @@ import (
 //
 // Peers are cached for the parent's lifetime and closed with it.
 
+// ErrServerConnClosed is Peer's answer once its parent is closed: no peer,
+// cached or new, outlives the parent. It wraps context.Canceled, which a
+// closed parent's statements already fail with, so a caller treating
+// cancellation as "superseded, say nothing" still does.
+var ErrServerConnClosed = fmt.Errorf("connection closed: %w", context.Canceled)
+
 // Peer returns a connection to another instance in the same topology,
 // authenticated as sc is and cached on sc so repeated expansions reuse it.
 //
@@ -27,13 +34,17 @@ import (
 // peerOptions picks credentials, port and transport.
 //
 // Returns sc itself when server is sc's own instance, so callers can always
-// route through Peer.
+// route through Peer. Once sc is closed it returns ErrServerConnClosed instead,
+// whatever the cache holds.
 //
 // One dial per instance at a time: three folders asking for the same primary
 // dial it once and the other callers wait, each bounded by its own ctx.
 // Cancelling ctx abandons the caller's wait or, for the dialling caller, the
 // dial itself, so a superseded load no longer waits out two 30s connects.
 func (sc *ServerConn) Peer(ctx context.Context, server string) (*ServerConn, error) {
+	if !sc.IsOpen() {
+		return nil, ErrServerConnClosed
+	}
 	if sc.isSelf(server) {
 		return sc, nil
 	}
@@ -45,6 +56,12 @@ func (sc *ServerConn) Peer(ctx context.Context, server string) (*ServerConn, err
 
 	for {
 		sc.peerMu.Lock()
+		// Under peerMu: Close marks sc closed before closePeers takes the
+		// lock, so a lookup after that never hands out a peer closing with it.
+		if !sc.IsOpen() {
+			sc.peerMu.Unlock()
+			return nil, ErrServerConnClosed
+		}
 		if p, ok := sc.peers[key]; ok && p.IsOpen() {
 			sc.peerMu.Unlock()
 			return p, nil
@@ -56,12 +73,19 @@ func (sc *ServerConn) Peer(ctx context.Context, server string) (*ServerConn, err
 		d, leader := sc.peerDials.join(key)
 		if leader {
 			sc.peerMu.Unlock()
-			return sc.dialPeer(ctx, server, key, d)
+			p, err := sc.dialPeer(ctx, server, key, d)
+			if err != nil && !sc.IsOpen() {
+				err = ErrServerConnClosed
+			}
+			return p, err
 		}
 		sc.peerMu.Unlock()
 
 		if !d.wait(ctx) {
 			return nil, ctx.Err()
+		}
+		if !sc.IsOpen() {
+			return nil, ErrServerConnClosed
 		}
 		if d.val != nil {
 			return d.val, nil
