@@ -128,7 +128,7 @@ func databaseMailHidden(info *gosmo.ServerInfo) bool {
 // folder: Azure SQL Database (EngineEdition 5) can only be a push subscriber
 // and keeps no replication catalog to read, and gosmo refuses every
 // replication read there. A Managed Instance publishes and distributes, and
-// keeps it (shown and unverified, docs/open-threads.md V7).
+// keeps it (shown and unverified, docs/decisions.md § Replication).
 func replicationHidden(info *gosmo.ServerInfo) bool {
 	return info != nil && gosmo.EngineEdition(info.EngineEdition) == gosmo.EngineAzureSQLDatabase
 }

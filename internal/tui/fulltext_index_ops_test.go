@@ -1,9 +1,13 @@
 package tui
 
 import (
+	"context"
 	"database/sql/driver"
+	"errors"
+	"fmt"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -272,6 +276,55 @@ func TestFullTextEnableListsNoTaskWhenNothingPopulates(t *testing.T) {
 	a.drainPending()
 	if len(a.tasks) != 0 {
 		t.Errorf("tasks = %d, want none", len(a.tasks))
+	}
+}
+
+// A failed read is retried (the poll can lose a deadlock to the crawl, Msg
+// 1205): fullTextFollowReadRetries failures in a row keep the follow going,
+// one more ends it with the error, and a dropped index ends it at once.
+func TestFullTextFollowRetriesAFailedRead(t *testing.T) {
+	defer func(d time.Duration) { fullTextPollInterval = d }(fullTextPollInterval)
+	fullTextPollInterval = time.Millisecond
+
+	deadlock := errors.New("Msg 1205: chosen as deadlock victim")
+	finished := &gosmo.FullTextIndex{CrawlStart: ftCrawl0.Add(time.Hour), CrawlCompleted: true, ItemCount: 40}
+	cases := []struct {
+		name      string
+		fails     int   // reads that fail before one succeeds
+		failWith  error // what they fail with
+		wantReads int64
+		wantErr   string // "" for a follow that finishes
+	}{
+		{"retries up to the limit", fullTextFollowReadRetries, deadlock, fullTextFollowReadRetries + 1, ""},
+		{"gives up past it", fullTextFollowReadRetries + 1, deadlock, fullTextFollowReadRetries + 1, deadlock.Error()},
+		{"a dropped index ends it at once", 99, fmt.Errorf("no index: %w", gosmo.ErrNotFound), 1,
+			"the full-text index on [dbo].[Notes] was dropped"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			a := ftTestApp()
+			task, ctx := a.startTask(context.Background(), "Full population — [dbo].[Notes]")
+			var reads atomic.Int64
+			read := func(context.Context) (*gosmo.FullTextIndex, error) {
+				if reads.Add(1) <= int64(tc.fails) {
+					return nil, tc.failWith
+				}
+				return finished, nil
+			}
+			go a.followFullTextPopulation(ctx, task, "[dbo].[Notes]", read, ftCrawl0)
+			drainUntil(t, a, func() bool { return task.Done }, "the follow to end")
+			if got := reads.Load(); got != tc.wantReads {
+				t.Errorf("reads = %d, want %d", got, tc.wantReads)
+			}
+			switch {
+			case tc.wantErr == "" && task.Err != nil:
+				t.Errorf("task failed: %v", task.Err)
+			case tc.wantErr == "" && a.statusText != task.Label+" finished — 40 rows indexed":
+				t.Errorf("status = %q", a.statusText)
+			case tc.wantErr != "" && (task.Err == nil || task.Err.Error() != tc.wantErr):
+				t.Errorf("task err = %v, want %q", task.Err, tc.wantErr)
+			}
+		})
 	}
 }
 

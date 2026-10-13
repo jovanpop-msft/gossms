@@ -126,22 +126,6 @@ None open.
   of one. Activity Monitor's **Show Live Execution Plan** is likewise unrun
   there: MI should behave as 2019+ (lightweight profiling on, so an unprofiled
   query shows).
-- **V7 — Replication reads (gosmo `replication*.go`) met real rows on 17
-  only.** The fixture is on win10cli (2025). win10cli\SQL2016 and
-  win10cli\SQL2017 (`sp_adddistributor` fails Msg 21028,
-  no `Replication` registry key) have **replication components not
-  installed** (`sp_addpullsubscription` fails Msg 21028 on 2016), so on 2016 only the subscriber-side transactional read ran, against
-  tables made by `sp_MScreate_sub_tables` in a throwaway database; the
-  publisher-side reads (`syspublications`, `sysarticles`, `syssubscriptions`)
-  and every merge read are unrun below 17. Linux (ubusql1) and 2016 ran the
-  not-configured path only; MI not at all. Every column read predates 2016,
-  so no gate was added — run `TestLiveReplication*` wherever a publisher can
-  be set up. The Object Explorer Replication folder is shown on MI and
-  undriven there. Replication Monitor (gosmo `replication_monitor.go`,
-  `sp_replmonitor*`/`sp_MSenum_*`) likewise ran against the 2025 fixture
-  only; on 2016/2017 only the not-a-distributor path (`MonitorPublishers`
-  empty, the panel's not-configured note). Its remote-distributor note is
-  unit-tested only — no instance here uses another as its distributor.
 - **V8 — Full-Text unverified outside 17 and 14.** Reads, folders,
   properties, writes, New dialogs and the end-to-end drive (create → populate
   → `CONTAINS` → alter → drop) ran on 17 (rows) and 14; win10cli\SQL2016 has
@@ -152,8 +136,10 @@ None open.
   `FULLTEXTSERVICEPROPERTY`/`sys.fulltext_document_types` on Azure SQL
   Database (assumed); whether its `HAS_PERMS_BY_NAME` accepts the class words
   for 23/29/31 (a rejection would fail the whole database probe, not just
-  these rows). Still never seen: a
-  `STATISTICAL_SEMANTICS` column — win10cli has no semantic language database.
+  these rows). `STATISTICAL_SEMANTICS`
+  ran on 17 only (2026-10-13): win10cli's default instance has `semanticsdb`
+  registered; create, add-column, read, script and replay are in gosmo's
+  `TestLiveFullText`, and the Columns page showed True/False.
   The follow's read was picked as a deadlock victim (Msg 1205) mid-crawl and
   ended the task; it now retries `fullTextFollowReadRetries` reads, with no
   test for the retry.

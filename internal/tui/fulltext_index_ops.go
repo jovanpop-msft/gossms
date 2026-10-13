@@ -149,7 +149,7 @@ func (a *App) watchFullTextPopulation(sc *db.ServerConn, dbName, schema, table s
 	label = label + " — " + fqn(schema, table)
 	follow := func(task *Task, ctx context.Context, tbl *gosmo.Table) {
 		a.safegoRepair("following a full-text population", func() { a.markTaskDone(task, errTaskPanicked) }, func() {
-			a.followFullTextPopulation(ctx, task, tbl, before)
+			a.followFullTextPopulation(ctx, task, tbl.FullName(), tbl.FullTextIndex, before)
 		})
 	}
 	if !maybe {
@@ -160,7 +160,7 @@ func (a *App) watchFullTextPopulation(sc *db.ServerConn, dbName, schema, table s
 				a.postTaskDone(task, err)
 				return
 			}
-			a.followFullTextPopulation(ctx, task, tbl, before)
+			a.followFullTextPopulation(ctx, task, tbl.FullName(), tbl.FullTextIndex, before)
 		})
 		return
 	}
@@ -184,14 +184,15 @@ func (a *App) watchFullTextPopulation(sc *db.ServerConn, dbName, schema, table s
 
 // followFullTextPopulation is the follow loop, on its own goroutine: each
 // read posts progress until fullTextPopulationPoll says the population is
-// over.
-func (a *App) followFullTextPopulation(ctx context.Context, task *Task, tbl *gosmo.Table, before time.Time) {
+// over. read is the table's FullTextIndex, a parameter so a test can fail it;
+// name is the table's for the "dropped" error.
+func (a *App) followFullTextPopulation(ctx context.Context, task *Task, name string, read func(context.Context) (*gosmo.FullTextIndex, error), before time.Time) {
 	ticker := time.NewTicker(fullTextPollInterval)
 	defer ticker.Stop()
 	idle, failed := 0, 0
 	for {
 		rctx, cancel := context.WithTimeout(ctx, childFetchTimeout)
-		cur, err := tbl.FullTextIndex(rctx)
+		cur, err := read(rctx)
 		cancel()
 		if ctx.Err() != nil {
 			a.postAndWake(func() { a.endFullTextFollow(task, ctx.Err(), "") })
@@ -199,7 +200,7 @@ func (a *App) followFullTextPopulation(ctx context.Context, task *Task, tbl *gos
 		}
 		dropped := errors.Is(err, gosmo.ErrNotFound)
 		if dropped {
-			err = fmt.Errorf("the full-text index on %s was dropped", tbl.FullName())
+			err = fmt.Errorf("the full-text index on %s was dropped", name)
 		}
 		if err != nil {
 			if failed++; dropped || failed > fullTextFollowReadRetries {

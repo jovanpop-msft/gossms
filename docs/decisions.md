@@ -691,6 +691,17 @@ Peer credentials, easy to undo:
   subscribe to two publishers' same-named publication, and the subscriber stores
   one publisher name in two cases (`WIN10CLI` / `win10cli`).
 
+- **Live replication coverage is closed as it stands (2026-10-13)** — no
+  further runs on 2016/2017. Publisher-side and merge reads and Replication
+  Monitor met real rows on 17 only (the gosmo `testdata/replication` fixture);
+  win10cli\SQL2016/SQL2017 have the Replication feature not installed (Msg
+  21028), so there only the not-configured path and, on 2016, the
+  subscriber-side read (tables from `sp_MScreate_sub_tables`) ran. Every column
+  read predates 2016, so no gate is needed. Also accepted unverified: the
+  Replication folder on Managed Instance (shown, `replicationHidden`), Linux
+  beyond the not-configured path, and the monitor's remote-distributor note
+  (unit-tested only).
+
 ## Database-scoped credentials: what the design settled
 
 - **CONTROL on the database is the whole right set; `ALTER` is deliberately

@@ -20,8 +20,8 @@ func filesPageResponses() []fakeResponse {
 	return []fakeResponse{
 		{match: "compatibility_level, collation_name", cols: 10, rows: [][]driver.Value{{
 			"appdb", int64(7), "ONLINE", "FULL", int64(160), "SQL_Latin1_General_CP1_CI_AS", "SQL_Latin1_General_CP1_CI_AS", false, time.Now(), int64(0)}}},
-		{match: "page_verify_option_desc", cols: 27, rows: [][]driver.Value{
-			append(append([]driver.Value{"sa", "CHECKSUM", "MULTI_USER", "NONE", false, "OFF"}, falses(19)...), "OFF", ""),
+		{match: "page_verify_option_desc", cols: 35, rows: [][]driver.Value{
+			append(append(append([]driver.Value{"sa", "CHECKSUM", "MULTI_USER", "NONE", false, "OFF"}, falses(19)...), "OFF", ""), optionsRowTail()...),
 		}},
 		// First: FileGroups' select names the file columns too, so the Files
 		// answer below would serve it.
@@ -33,6 +33,14 @@ func filesPageResponses() []fakeResponse {
 			{int64(2), "appdb_log", `C:\data\appdb_log.ldf`, "LOG", "", "ONLINE", int64(51200), int64(-1), int64(1280), false},
 		}},
 	}
+}
+
+// optionsRowTail is the options row's last eight columns — DB_CHAINING,
+// PARAMETERIZATION, DATE_CORRELATION_OPTIMIZATION, HONOR_BROKER_PRIORITY,
+// DELAYED_DURABILITY, TARGET_RECOVERY_TIME, ADR and LEDGER — at a new
+// database's values.
+func optionsRowTail() []driver.Value {
+	return []driver.Value{false, false, false, false, "DISABLED", int64(60), false, false}
 }
 
 // falses is n false values, for the run of boolean option flags the options
