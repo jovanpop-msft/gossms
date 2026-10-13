@@ -533,6 +533,32 @@ func TestSheetCancelWhileApplyingStopsTheRun(t *testing.T) {
 	}
 }
 
+// SetApplyingLabel retitles only a live run: a report landing after the run
+// ended, or after Cancel, must not overwrite what the sheet says.
+func TestSheetSetApplyingLabelOnlyWhileRunning(t *testing.T) {
+	p := newTestSheet("General")
+	p.Show()
+	p.OnCancelApply = func() {}
+
+	p.SetApplyingLabel("Blocked")
+	p.StartApplying("Applying...")
+	started := p.applyStarted
+	p.SetApplyingLabel("Blocked")
+	if p.applyingLabel != "Blocked" || p.applyStarted != started {
+		t.Errorf("while running: label %q, clock moved %v; want Blocked, unmoved", p.applyingLabel, p.applyStarted != started)
+	}
+	p.cancel()
+	p.SetApplyingLabel("Blocked again")
+	if p.applyingLabel != "Cancelling..." {
+		t.Errorf("after Cancel: label %q, want Cancelling...", p.applyingLabel)
+	}
+	p.SetApplying(false)
+	p.SetApplyingLabel("Late")
+	if p.applyingLabel == "Late" {
+		t.Error("a label set after the run ended was taken")
+	}
+}
+
 // Refresh on a page whose load is still out must not dispatch a second one.
 // The host cannot cancel a load it was never told was superseded, so every
 // extra dispatch is another fetch holding a connection the page's real load

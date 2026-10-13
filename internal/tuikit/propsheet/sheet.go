@@ -504,6 +504,15 @@ func (p *PropertySheet) StartApplying(label string) {
 	p.applyStarted = time.Now()
 }
 
+// SetApplyingLabel replaces the label beside the spinner of the run in flight,
+// keeping its clock: a host reporting what a long run is waiting on. Ignored
+// when nothing is running, and once Cancel has made it "Cancelling...".
+func (p *PropertySheet) SetApplyingLabel(label string) {
+	if p.applying && !p.cancelling {
+		p.applyingLabel = label
+	}
+}
+
 // Applying reports whether an Apply/OK/Script is in flight.
 func (p *PropertySheet) Applying() bool { return p.applying }
 

@@ -407,11 +407,19 @@ func (a *App) routeRelease(ev *tcell.EventMouse) {
 		a.drag.node, a.drag.active = nil, false
 	}
 
-	a.menuBar.HandleMouse(ev)
-	a.toolbar.HandleMouse(ev)
-	a.explorerSplit.HandleMouse(ev)
-	a.explorer.HandleMouse(ev)
-	a.panels.HandleMouse(ev)
+	// Under a dialog or context menu the layer beneath only resets its latches.
+	// Pointer motion arrives as ButtonNone too, so the real position would light
+	// up the menu bar, toolbar and panels behind the overlay as the pointer
+	// crosses them; a release nowhere resets the latches and clears any hover.
+	base := ev
+	if len(a.dialogStack) > 0 || a.contextMenu.Visible() {
+		base = tcell.NewEventMouse(-1, -1, tcell.ButtonNone, ev.Modifiers())
+	}
+	a.menuBar.HandleMouse(base)
+	a.toolbar.HandleMouse(base)
+	a.explorerSplit.HandleMouse(base)
+	a.explorer.HandleMouse(base)
+	a.panels.HandleMouse(base)
 }
 
 // armGesture records that region consumed a Button1 press, so events until the

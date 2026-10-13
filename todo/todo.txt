@@ -3,8 +3,8 @@ script database security
  enable MI / shutdown MI
 
 - number formatting: whete you shown MB, KB . TB etc ... if there is more than 1000 show next scale: ex:
-2.000 KB -> 2 MB
-2.400 KB  -> 2.4 MB
+2.000 KB -> 2    MB
+2.400 KB -> 2.4  MB
 3.750 MB -> 3.75 TB
     
 new tab: waits
@@ -16,7 +16,7 @@ group by schema
 
 white/light style ? -> options, default dark
 
-keyboard shortcuts for mac (platform dependednt?
+keyboard shortcuts for mac (platform dependednt)?
 
 sp_blitz & index with reference built in
 
@@ -42,12 +42,12 @@ go over the source files code comments and compact them. make them concise. thro
 check for go.mod updates
 commit before both projects
 
-prepare gosmo for release v0.0.16 . Update readme.md, release.md, changelog.md, and all other documentations and diagramms. the release document should contain only the changes from the last release, delete the old release. they should be summarized as bullet points and splitted in three cantegories. New, Fixes and Changes. The texts should be short an concise, the long explanation is in the changelog.md
+prepare gosmo for release v0.0.17 . Update readme.md, release.md, changelog.md, and all other documentations and diagramms. the release document should contain only the changes from the last release, delete the old release. they should be summarized as bullet points and splitted in three cantegories. New, Fixes and Changes. The texts should be short an concise, the long explanation is in the changelog.md
 do not commit or tag anything to git. 
 
 fix go.mod before, reference the new :
 
-prepare gossms for release v0.0.14. Update readme.md, release.md, changelog.md, and all other documentations and diagramms. the release document should contain only the changes from the last release, delete the old release information. they should be summarized as bullet points and splitted in three cantegories. New, Fixes and Changes. The texts should be short an concise, the long explanation is in the changelog.md
+prepare gossms for release v0.0.15. Update readme.md, release.md, changelog.md, and all other documentations and diagramms. the release document should contain only the changes from the last release, delete the old release information. they should be summarized as bullet points and splitted in three cantegories. New, Fixes and Changes. The texts should be short an concise, the long explanation is in the changelog.md
 do not commit or tag anything to git. 
 make the text in the RELEASE.md shorter and conciser. the long explanation is in CHANGELOG.md
 update the docs/dicord.md file for this release. it should be below 2000 characters.

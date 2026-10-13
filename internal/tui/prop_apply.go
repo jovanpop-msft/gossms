@@ -4,11 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"slices"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/radix29/gosmo"
+	"github.com/radix29/gossms/internal/db"
 	"github.com/radix29/gossms/internal/tuikit/propsheet"
 )
 
@@ -305,6 +308,7 @@ func (d *PropDialog) runPipeline(runCtx context.Context, noChanges, onSuccess fu
 
 	done := make(chan struct{})
 	d.app.animateUntil("animating the properties spinner", propsheet.ApplyingSpinner.Period, done)
+	d.app.watchBlocking(d.sc, pipelineLabel(runCtx), done, d.SetApplyingLabel)
 	d.app.safegoRepair("applying property changes", d.applyPanicked, func() {
 		defer close(done)
 		defer stop()
@@ -318,6 +322,91 @@ func (d *PropDialog) runPipeline(runCtx context.Context, noChanges, onSuccess fu
 			onSuccess()
 		})
 	})
+}
+
+// How long a run goes before watchBlocking first asks the server whether it is
+// waiting on another session, how often it asks again, and how long one asking
+// may take.
+const (
+	blockedCheckAfter   = 2 * time.Second
+	blockedCheckEvery   = 2 * time.Second
+	blockedCheckTimeout = 3 * time.Second
+)
+
+// watchBlocking says beside the spinner when the run behind done has stopped to
+// wait on another session, and on which. Without it a run held by a lock
+// elsewhere — an open transaction in another session — spins with no sign of
+// why: a Max DOP change waited behind another session's uncommitted
+// sp_configure, and only Cancel ended it. From blockedCheckAfter on it reads
+// this process's blocked requests every blockedCheckEvery until done closes,
+// and setLabel gets the blocker, or base once the wait is over. A login without
+// VIEW SERVER STATE sees no other session, so the label stays base.
+//
+// setLabel runs on the UI goroutine and is skipped once done has closed: the
+// run's own completion, posted before done closes, has cleared the spinner, and
+// a report arriving after it would retitle the next run's.
+func (a *App) watchBlocking(sc *db.ServerConn, base string, done <-chan struct{}, setLabel func(string)) {
+	if sc == nil || sc.Server == nil {
+		return
+	}
+	srv := sc.Server
+	started := time.Now()
+	a.safego("watching a run for blocking", func() {
+		shown := base
+		timer := time.NewTimer(blockedCheckAfter)
+		defer timer.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-timer.C:
+			}
+			ctx, cancel := context.WithTimeout(srv.Context(), blockedCheckTimeout)
+			reqs, err := srv.BlockedRequests(ctx, os.Getpid())
+			cancel()
+			if err == nil {
+				if label := blockedLabel(base, reqs, time.Since(started)); label != shown {
+					shown = label
+					a.postAndWake(func() {
+						select {
+						case <-done:
+						default:
+							setLabel(label)
+						}
+					})
+				}
+			}
+			timer.Reset(blockedCheckEvery)
+		}
+	})
+}
+
+// blockedLabel is the spinner label for a run that has been going for running:
+// the blocker of the longest wait that can be the run's, or base when none is.
+// reqs is every blocked request of this process, longest wait first, so it can
+// include another of its sessions — a query panel's statement. A wait longer
+// than the run began before it and is not the run's (a second of slack covers
+// the clocks).
+func blockedLabel(base string, reqs []gosmo.BlockedRequest, running time.Duration) string {
+	for _, r := range reqs {
+		wait := time.Duration(r.WaitTimeMS) * time.Millisecond
+		if wait > running+time.Second {
+			continue
+		}
+		label := fmt.Sprintf("Blocked %ds by session %d", int(wait.Seconds()), r.BlockingSessionID)
+		who := r.BlockerLogin
+		if r.BlockerHost != "" {
+			who += "@" + r.BlockerHost
+		}
+		if r.BlockerProgram != "" {
+			who = strings.TrimPrefix(who+", "+r.BlockerProgram, ", ")
+		}
+		if who != "" {
+			label += " (" + who + ")"
+		}
+		return label
+	}
+	return base
 }
 
 // applyFailed reports a pipeline that stopped at runErr and reloads every page

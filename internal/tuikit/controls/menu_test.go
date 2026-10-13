@@ -346,3 +346,19 @@ func TestADisabledCascadeShowsItsNoteRatherThanTheMarker(t *testing.T) {
 		t.Errorf("menu width = %d, want %d — the note must be measured, not the marker", narrow, want)
 	}
 }
+
+// A hovered label goes dark once the pointer leaves the bar's row, downwards
+// or to App's off-screen release under a dialog — it stayed lit behind one.
+func TestMenuBarHoverClearsOffTheBarRow(t *testing.T) {
+	for _, pos := range [][2]int{{2, 5}, {-1, -1}} {
+		mb := newTestMenuBar()
+		mb.HandleMouse(tcell.NewEventMouse(2, 0, tcell.ButtonNone, 0))
+		if mb.hoverMenu != 0 {
+			t.Fatalf("hoverMenu over File = %d, want 0", mb.hoverMenu)
+		}
+		mb.HandleMouse(tcell.NewEventMouse(pos[0], pos[1], tcell.ButtonNone, 0))
+		if mb.hoverMenu != -1 {
+			t.Errorf("hoverMenu after moving to %v = %d, want -1", pos, mb.hoverMenu)
+		}
+	}
+}

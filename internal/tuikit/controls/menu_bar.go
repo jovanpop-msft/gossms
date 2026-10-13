@@ -236,9 +236,11 @@ func (mb *MenuBar) HandleMouse(ev *tcell.EventMouse) bool {
 		mb.mouseDragging = false
 	}
 
+	// Cleared off the bar's row as well, or a label stays lit after the pointer
+	// leaves it downwards.
+	mb.hoverMenu = -1
 	if my == mb.rect.Y {
 		col := mb.rect.X + 1
-		mb.hoverMenu = -1
 		for i, m := range mb.menus {
 			label := " " + m.Label + " "
 			labelW := core.DisplayWidth(label)

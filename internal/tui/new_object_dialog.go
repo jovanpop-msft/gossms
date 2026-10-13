@@ -355,6 +355,7 @@ func (d *newObjectDialog[P]) runPipeline(runCtx context.Context, onSuccess func(
 
 	done := make(chan struct{})
 	d.app.animateUntil("animating the create dialog spinner", propsheet.ApplyingSpinner.Period, done)
+	d.app.watchBlocking(d.sc, pipelineLabel(runCtx), done, d.SetApplyingLabel)
 	d.app.safegoRepair("creating the object", d.applyPanicked, func() {
 		defer close(done)
 		defer stop()
