@@ -59,7 +59,7 @@ func TestQueryStoreWritesEveryFieldIntoItsOwnClause(t *testing.T) {
 	editSelect(t, form, "Size based cleanup mode", "OFF")
 	editText(t, form, "Stale query threshold", "45")
 	editText(t, form, "Data flush interval", "660")
-	editText(t, form, "Statistics interval", "15")
+	editSelect(t, form, "Statistics interval (min)", "15")
 	editText(t, form, "Max plans per query", "77")
 	editSelect(t, form, "Wait stats capture", "OFF")
 	editText(t, form, "Custom: execution count", "88")
@@ -83,7 +83,7 @@ func TestQueryStoreWritesEveryFieldIntoItsOwnClause(t *testing.T) {
 		"Size based cleanup mode":     "SIZE_BASED_CLEANUP_MODE = OFF",
 		"Stale query threshold":       "CLEANUP_POLICY = (STALE_QUERY_THRESHOLD_DAYS = 45)",
 		"Data flush interval":         "DATA_FLUSH_INTERVAL_SECONDS = 660",
-		"Statistics interval":         "INTERVAL_LENGTH_MINUTES = 15",
+		"Statistics interval (min)":   "INTERVAL_LENGTH_MINUTES = 15",
 		"Max plans per query":         "MAX_PLANS_PER_QUERY = 77",
 		"Wait stats capture":          "WAIT_STATS_CAPTURE_MODE = OFF",
 		"Custom: execution count":     "EXECUTION_COUNT = 88",
@@ -278,5 +278,59 @@ func TestQueryStoreApplyOn2016WritesNoWaitStatsClause(t *testing.T) {
 	}
 	if !strings.Contains(stmts[0], "MAX_STORAGE_SIZE_MB = 512") {
 		t.Errorf("the edit that was made did not reach the server:\n%s", stmts[0])
+	}
+}
+
+// The server takes only seven statistics intervals and narrower bounds than
+// the spinners once offered (review plan M6): 7 minutes was Msg 153, a 500
+// hour stale threshold Msg 12453, a flush under 60 s Msg 153, and a custom
+// count or CPU time of 0 Msg 12452. Each is now refused, or not offered,
+// before Apply.
+func TestQueryStoreOffersOnlyWhatTheServerAccepts(t *testing.T) {
+	sc, inst := newFakeConn(t, queryStoreResponses()...)
+	form, _ := loadPage(t, pageDatabaseQueryStore(sc, "appdb"), inst)
+
+	if got, want := selectRow(t, form, "Statistics interval (min)").Items(), []string{"1", "5", "10", "15", "30", "60", "1440"}; !slices.Equal(got, want) {
+		t.Errorf("interval items = %v, want %v", got, want)
+	}
+	for label, bad := range map[string]string{
+		"Custom: stale threshold":     "169",
+		"Data flush interval":         "59",
+		"Custom: execution count":     "0",
+		"Custom: total compile CPU":   "0",
+		"Custom: total execution CPU": "2147483648",
+	} {
+		row := textRow(t, form, label)
+		row.Edit(bad)
+		if err := row.Validate(); err == nil {
+			t.Errorf("%s = %s was accepted", label, bad)
+		}
+		row.Revert()
+	}
+	for label, good := range map[string]string{"Custom: stale threshold": "168", "Data flush interval": "60"} {
+		row := textRow(t, form, label)
+		row.Edit(good)
+		if err := row.Validate(); err != nil {
+			t.Errorf("%s = %s was refused: %v", label, good, err)
+		}
+	}
+}
+
+// An interval outside the seven still displays as itself rather than as a
+// neighbour — preservingItems — and an untouched page writes nothing.
+func TestQueryStoreKeepsAnOddIntervalVisible(t *testing.T) {
+	r := queryStoreResponses()
+	r[1].rows[0][6] = int64(7)
+	sc, inst := newFakeConn(t, r...)
+	form, apply := loadPage(t, pageDatabaseQueryStore(sc, "appdb"), inst)
+
+	if got := selectRow(t, form, "Statistics interval (min)").Value(); got != "7" {
+		t.Errorf("interval shows %q, want the server's 7", got)
+	}
+	if err := apply(context.Background()); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	if stmts := inst.Statements(); len(stmts) != 0 {
+		t.Errorf("an untouched page wrote: %q", stmts)
 	}
 }

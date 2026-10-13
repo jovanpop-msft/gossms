@@ -155,6 +155,15 @@ func pageLoginGeneral(sc *db.ServerConn, loginName *string) propPage {
 				mustChangeRow.SetChecked(false)
 				unlockRow.SetChecked(false)
 			}
+			// On all three rows: a row's validator runs only while it is dirty, and any of
+			// them can be the one edit that makes the combination one SQL Server refuses.
+			policyValidate := func(bool) error {
+				return loginPolicyError(policyRow.Checked(), expirationRow.Checked(), mustChangeRow.Checked(),
+					passwordRow.Value() != "", det.MustChangePassword)
+			}
+			policyRow.SetValidate(policyValidate)
+			expirationRow.SetValidate(policyValidate)
+			mustChangeRow.SetValidate(policyValidate)
 
 			defaultDBRow := selectPreserving("Default database", dbNames, l.DefaultDatabase, unsetItem)
 			defaultLangRow := selectPreserving("Default language", langNames, det.DefaultLanguage, unsetItem)
@@ -204,12 +213,22 @@ func pageLoginGeneral(sc *db.ServerConn, loginName *string) propPage {
 				if err != nil {
 					return err
 				}
-				if isSQLLogin && passwordRow.Value() != "" {
-					if err := l.ChangePassword(ctx, passwordRow.Value(), gosmo.ChangePasswordOptions{MustChange: mustChangeRow.Checked(), Unlock: unlockRow.Checked()}); err != nil {
+				// With a password typed the policy rows ride in its own statement: as a
+				// separate ALTER before or after it, one order fails turning MUST_CHANGE on over
+				// a policy-off login (Msg 15122) and the other turning the policy off on a
+				// must-change login (Msg 15128), the password already changed.
+				policyDirty := policyRow.Dirty() || expirationRow.Dirty()
+				switch {
+				case isSQLLogin && passwordRow.Value() != "":
+					opts := gosmo.ChangePasswordOptions{MustChange: mustChangeRow.Checked(), Unlock: unlockRow.Checked()}
+					if policyDirty {
+						opts.CheckPolicy = new(policyRow.Checked())
+						opts.CheckExpiration = new(expirationRow.Checked())
+					}
+					if err := l.ChangePassword(ctx, passwordRow.Value(), opts); err != nil {
 						return err
 					}
-				}
-				if isSQLLogin && (policyRow.Dirty() || expirationRow.Dirty()) {
+				case isSQLLogin && policyDirty:
 					if err := l.SetPasswordPolicy(ctx, policyRow.Checked(), expirationRow.Checked()); err != nil {
 						return err
 					}
@@ -249,6 +268,24 @@ func pageLoginGeneral(sc *db.ServerConn, loginName *string) propPage {
 			return f, apply, nil
 		},
 	}
+}
+
+// loginPolicyError refuses, before Apply sends anything, the General page's
+// password-policy combinations SQL Server refuses: expiration without policy
+// (Msg 15122), MUST_CHANGE without both (gosmo turns both on with it, so an
+// unticked one would be silently overridden), and either turned off on a login
+// that must change its password with no new password set in the same Apply
+// (Msg 15128 — a new password clears the flag, so gosmo can sequence that one).
+func loginPolicyError(policy, expiration, mustChange, passwordTyped, isMustChange bool) error {
+	switch {
+	case expiration && !policy:
+		return fmt.Errorf("\"Enforce password expiration\" needs \"Enforce password policy\" ticked")
+	case passwordTyped && mustChange && !(policy && expiration):
+		return fmt.Errorf("\"User must change password at next login\" needs both password policy and expiration enforced")
+	case !passwordTyped && isMustChange && !(policy && expiration):
+		return fmt.Errorf("this login must change its password at next login, and SQL Server refuses turning password policy or expiration off until it has (Msg 15128); set a new password in the same Apply to do both")
+	}
+	return nil
 }
 
 func pageLoginServerRoles(sc *db.ServerConn, loginName *string) propPage {

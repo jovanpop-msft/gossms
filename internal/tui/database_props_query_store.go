@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"math"
 	"strconv"
 
 	gosmo "github.com/radix29/gosmo"
@@ -54,8 +55,17 @@ func pageDatabaseQueryStore(sc *db.ServerConn, dbName string) propPage {
 			maxSizeRow := propsheet.Int("Max size", qs.MaxStorageMB, 10, 2147483647, "MB")
 			cleanupRow := propsheet.Select("Size based cleanup mode", cleanupItems, indexOf(cleanupItems, string(qs.SizeCleanupMode)))
 			staleRow := propsheet.Int("Stale query threshold", int64(qs.StaleThresholdDays), 0, 999999, "days")
-			flushIntervalRow := propsheet.Int("Data flush interval", int64(qs.FlushIntervalSec), 1, 86400, "sec")
-			intervalRow := propsheet.Int("Statistics interval", int64(qs.IntervalMinutes), 1, 1440, "min")
+			// The bounds below are the server's, probed live on 17.0 (review
+			// plan M6): a flush interval under 60 s is Msg 153, and so is an
+			// interval outside the seven INTERVAL_LENGTH_MINUTES takes — a
+			// free spinner offered 1440 values of which 7 could apply.
+			flushIntervalRow := propsheet.Int("Data flush interval", int64(qs.FlushIntervalSec), 60, 86400, "sec")
+			var intervalBase []string
+			for _, m := range gosmo.QueryStoreIntervalMinutes() {
+				intervalBase = append(intervalBase, strconv.Itoa(m))
+			}
+			intervalItems, intervalIdx := preservingItems(intervalBase, strconv.Itoa(qs.IntervalMinutes))
+			intervalRow := propsheet.Select("Statistics interval (min)", intervalItems, intervalIdx)
 			maxPlansRow := propsheet.Int("Max plans per query", int64(qs.MaxPlansPerQuery), 0, 999999, "")
 			// indexOfOK, not indexOf: below 2017 the read has no column to
 			// report and returns "", which indexOf resolves to onOff[0] — a
@@ -68,10 +78,12 @@ func pageDatabaseQueryStore(sc *db.ServerConn, dbName string) propPage {
 
 			var execCountRow, compileCPURow, execCPURow, staleHoursRow *propsheet.TextRow
 			if hasCustomPolicy {
-				execCountRow = propsheet.Int("Custom: execution count", int64(qs.CapturePolicyExecCount), 0, 999999, "")
-				compileCPURow = propsheet.Int("Custom: total compile CPU", qs.CapturePolicyCompileCPUMs, 0, 999999999, "ms")
-				execCPURow = propsheet.Int("Custom: total execution CPU", qs.CapturePolicyExecCPUMs, 0, 999999999, "ms")
-				staleHoursRow = propsheet.Int("Custom: stale threshold", int64(qs.CapturePolicyStaleHours), 0, 999999, "hours")
+				// 0 is Msg 12452; the stale threshold is 1 hour to 7 days
+				// (Msg 12453).
+				execCountRow = propsheet.Int("Custom: execution count", int64(qs.CapturePolicyExecCount), 1, math.MaxInt32, "")
+				compileCPURow = propsheet.Int("Custom: total compile CPU", qs.CapturePolicyCompileCPUMs, 1, math.MaxInt32, "ms")
+				execCPURow = propsheet.Int("Custom: total execution CPU", qs.CapturePolicyExecCPUMs, 1, math.MaxInt32, "ms")
+				staleHoursRow = propsheet.Int("Custom: stale threshold", int64(qs.CapturePolicyStaleHours), 1, 168, "hours")
 			}
 
 			flushCheck := propsheet.Check("Flush data to disk on Apply", false)
@@ -127,7 +139,7 @@ func pageDatabaseQueryStore(sc *db.ServerConn, dbName string) propPage {
 					if err != nil {
 						return err
 					}
-					interval, err := intervalRow.IntValue()
+					interval, err := strconv.Atoi(intervalItems[intervalRow.Selected()])
 					if err != nil {
 						return err
 					}

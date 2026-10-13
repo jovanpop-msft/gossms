@@ -105,11 +105,54 @@ func (r rebuildOptions) apply(ctx context.Context, idx *gosmo.Index) error {
 	if compressionDirty {
 		compression = gosmo.DataCompression(r.compression.Value())
 	}
-	return idx.Rebuild(ctx, gosmo.IndexRebuildOptions{
-		FillFactor:      int(fillFactor),
-		PadIndex:        new(r.pad.Checked()),
-		DataCompression: compression,
-	})
+	opts := gosmo.IndexRebuildOptions{FillFactor: int(fillFactor), DataCompression: compression}
+	// Only when edited: a rebuild for a fill-factor or compression edit has no
+	// reason to restate it.
+	if r.pad.Dirty() {
+		opts.PadIndex = new(r.pad.Checked())
+	}
+	return idx.Rebuild(ctx, opts)
+}
+
+// rowstoreOptionsRefusal names why idx takes none of the Options pages' rows,
+// "" when it takes them all. SQL Server refuses every one on a columnstore
+// index (Msgs 35327, 35328; NONE/ROW/PAGE compression 10799), and any ALTER
+// INDEX at all on a memory-optimized table's index (a hash index always is
+// one). gosmo refuses the same before sending; the page says so before the
+// user edits anything.
+func rowstoreOptionsRefusal(idx *gosmo.Index) string {
+	switch {
+	case idx.Type == gosmo.IndexTypeNonClusteredHash || (idx.Table() != nil && idx.Table().IsMemoryOptimized):
+		return "memory-optimized table"
+	case idx.Type.IsColumnStore():
+		return "columnstore"
+	}
+	return ""
+}
+
+// refusedOptionsForm is an Options page for an index rowstoreOptionsRefusal
+// refuses: each row the page would offer, shown "n/a", with the reason. withIgnoreDup
+// is false for Key Properties, whose page has no such row.
+func refusedOptionsForm(idx *gosmo.Index, section, refusal string, withIgnoreDup bool) *propsheet.Form {
+	na := "n/a (" + refusal + ")"
+	labels := []string{"Fill factor", "Pad index"}
+	if withIgnoreDup {
+		labels = append(labels, "Ignore duplicate keys")
+	}
+	labels = append(labels, "Allow row locks", "Allow page locks")
+	rows := []propsheet.Row{propsheet.Section(section)}
+	for _, l := range labels {
+		rows = append(rows, propsheet.Static(l, na))
+	}
+	why := "SQL Server refuses fill factor, pad index, ignore duplicate keys, the lock options and NONE/ROW/PAGE compression on a columnstore index."
+	if refusal != "columnstore" {
+		why = "SQL Server supports no ALTER INDEX on a memory-optimized table: these options are fixed when the table is created."
+	}
+	return propsheet.NewForm(append(rows,
+		propsheet.Section("Compression"),
+		propsheet.Static("Data compression", orDefault(string(idx.DataCompression), "NONE")),
+		propsheet.Note(why),
+	)...)
 }
 
 // applySetOptions issues one ALTER INDEX ... SET when any row changed,
@@ -222,6 +265,9 @@ func pageIndexOptions(sc *db.ServerConn, dbName, schema, table, name string) pro
 			// IgnoreDupKey nil so the option is never sent; Key Properties' Options page
 			// does the same.
 			constrained := idx.IsPrimaryKey || idx.IsUniqueConstraint
+			if refusal := rowstoreOptionsRefusal(idx); refusal != "" {
+				return refusedOptionsForm(idx, "Index options", refusal, !constrained), nil, nil
+			}
 
 			rebuild := newRebuildOptions(idx)
 			rowLocksRow := propsheet.Check("Allow row locks", idx.AllowRowLocks)

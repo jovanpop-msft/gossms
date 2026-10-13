@@ -354,13 +354,20 @@ func TestAutomaticProcessorAffinityOverridesTheGrid(t *testing.T) {
 }
 
 // configResponsesWithAffinity is configResponses with 'affinity mask' already
-// in use at mask, so a test can tell "left alone" from "already 0".
+// configured and in use at mask, so a test can tell "left alone" from
+// "already 0".
 func configResponsesWithAffinity(mask int64) []fakeResponse {
+	return configResponsesWith("affinity mask", mask, mask, true)
+}
+
+// configResponsesWith is configResponses with option name configured at
+// value, running at inUse, and dynamic or not.
+func configResponsesWith(name string, value, inUse int64, dynamic bool) []fakeResponse {
 	rs := configResponses()
 	for i := range rs {
 		for _, row := range rs[i].rows {
-			if len(row) > 3 && row[1] == "affinity mask" {
-				row[3] = mask // value_in_use
+			if len(row) > 6 && row[1] == name {
+				row[2], row[3], row[6] = value, inUse, dynamic // value, value_in_use, is_dynamic
 			}
 		}
 	}
@@ -588,4 +595,115 @@ func TestSpConfigurePageSendsEveryEditInOneBatch(t *testing.T) {
 	}
 	wantConfigWrites(t, inst.Statements(),
 		"max degree of parallelism=4", "cost threshold for parallelism=50", "affinity mask=2")
+}
+
+// TestProcessorAffinityWithCPU31IsLeftAloneAndStaysInRange. 'affinity mask' is
+// 32-bit: CPU 31 is its sign bit, so a mask holding it is stored negative.
+// Built as an int64 the page read it back as a different number from the one
+// it rebuilt, and wrote it on every Apply — a MAXDOP edit then failed with
+// Msg 8114, since CPU 31 came out as 2147483648. The fake server has 8 CPUs,
+// so bit 31 is also off the grid, which must keep it as read.
+func TestProcessorAffinityWithCPU31IsLeftAloneAndStaysInRange(t *testing.T) {
+	const cpu0and31 = -2147483647 // 0x80000001
+	sc, inst := newFakeConn(t, configResponsesWithAffinity(cpu0and31)...)
+	form, apply := loadPage(t, pageServerProcessors(sc), inst)
+	editText(t, form, "Max degree of parallelism", "4")
+	if err := apply(context.Background()); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	wantConfigWrites(t, inst.Statements(), "max degree of parallelism=4")
+
+	sc, inst = newFakeConn(t, configResponsesWithAffinity(cpu0and31)...)
+	form, apply = loadPage(t, pageServerProcessors(sc), inst)
+	toggleByName(t, toggleGrid(t, form), "Processor 1", affinityCol)
+	if err := apply(context.Background()); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	wantConfigWrites(t, inst.Statements(), "affinity mask=-2147483645") // 0x80000003
+}
+
+// noteUnder returns the text of the note directly under the row labelled
+// label, or "".
+func noteUnder(f *propsheet.Form, label string) string {
+	rows := f.Rows()
+	for i, r := range rows {
+		l, ok := r.(interface{ Label() string })
+		if !ok || l.Label() != label || i+1 >= len(rows) {
+			continue
+		}
+		if n, ok := rows[i+1].(*propsheet.NoteRow); ok {
+			return n.Text()
+		}
+	}
+	return ""
+}
+
+// TestSpConfigureRowsEditTheConfiguredValueNotTheRunningOne. win10cli had
+// 'scan for startup procs' configured 1 and running 0 (non-dynamic, so until
+// a restart). Seeded from the running value the row read unticked; unticking
+// it to keep it off was no edit, nothing was sent, and it came on at the next
+// restart. The row shows what is configured, says what is running, and sends
+// 0 when unticked.
+func TestSpConfigureRowsEditTheConfiguredValueNotTheRunningOne(t *testing.T) {
+	sc, inst := newFakeConn(t, configResponsesWith("scan for startup procs", 1, 0, false)...)
+	form, apply := loadPage(t, pageServerAdvanced(sc), inst)
+
+	if !checkRow(t, form, "Scan for startup procs").Checked() {
+		t.Error("the row shows the running value (off), not the configured one (on)")
+	}
+	if n := noteUnder(form, "Scan for startup procs"); !strings.Contains(n, "Running value: off") || !strings.Contains(n, "restart") {
+		t.Errorf("note under the row = %q, want the running value and that it waits for a restart", n)
+	}
+	if n := noteUnder(form, "Default trace enabled"); n != "" {
+		t.Errorf("an option whose values agree has a note: %q", n)
+	}
+
+	editCheck(t, form, "Scan for startup procs", false)
+	if err := apply(context.Background()); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	wantConfigWrites(t, inst.Statements(), "scan for startup procs=0")
+}
+
+// TestPendingIntOptionShowsBothValuesAndWritesNothingUntouched: the Int-row
+// counterpart, on a dynamic option (pending until RECONFIGURE), plus the
+// Advanced grid's two columns.
+func TestPendingIntOptionShowsBothValuesAndWritesNothingUntouched(t *testing.T) {
+	sc, inst := newFakeConn(t, configResponsesWith("cursor threshold", 100, -1, true)...)
+	form, apply := loadPage(t, pageServerAdvanced(sc), inst)
+
+	if v := textRow(t, form, "Cursor threshold").Value(); v != "100" {
+		t.Errorf("Cursor threshold shows %q, want the configured 100", v)
+	}
+	if n := noteUnder(form, "Cursor threshold"); !strings.Contains(n, "Running value: -1") || !strings.Contains(n, "RECONFIGURE") {
+		t.Errorf("note under the row = %q, want the running value and RECONFIGURE", n)
+	}
+	grid := firstGrid(t, form)
+	configured, running := grid.ColumnIndex("Configured"), grid.ColumnIndex("Running")
+	if configured < 0 || running < 0 {
+		t.Fatal("the options grid lacks a Configured or Running column")
+	}
+	found := false
+	for i := 0; ; i++ {
+		r := grid.Row(i)
+		if r == nil {
+			break
+		}
+		if r[0] == "cursor threshold" {
+			found = true
+			if r[configured] != "100" || r[running] != "-1" {
+				t.Errorf("grid row = %q, want configured 100 and running -1", r)
+			}
+		}
+	}
+	if !found {
+		t.Error("no cursor threshold row in the grid")
+	}
+
+	if err := apply(context.Background()); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	if stmts := inst.Statements(); len(stmts) != 0 {
+		t.Fatalf("an untouched page wrote:\n%s", strings.Join(stmts, "\n"))
+	}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"slices"
 	"strconv"
+	"strings"
 
 	gosmo "github.com/radix29/gosmo"
 	"github.com/radix29/gossms/internal/db"
@@ -107,13 +108,14 @@ func (e *fileEdit) reset() {
 // harmless but SIZE bites: MODIFY FILE treats it as a grow-to target and rejects a
 // value below the file's current size, so editing only the autogrowth of a file
 // that has since grown past its recorded size would fail with "MODIFY FILE failed.
-// Specified size is less than or equal to current size".
+// Specified size is less than or equal to current size". For the same reason a
+// smaller size is not sent here at all (Msg 5039): it is a shrink (see shrinks).
 func (e *fileEdit) modify() gosmo.FileModify {
 	var m gosmo.FileModify
 	if e.name != e.origName {
 		m.NewName = e.name
 	}
-	if e.sizeKB != e.origSizeKB {
+	if e.sizeKB > e.origSizeKB {
 		m.SizeKB = e.sizeKB
 	}
 	if e.isPercentGrowth != e.origIsPercentGrowth || e.growthKB != e.origGrowthKB || e.growthPercent != e.origGrowthPercent {
@@ -138,6 +140,13 @@ func (e *fileEdit) modify() gosmo.FileModify {
 		m.MaxSizeKB = e.maxSizeKB
 	}
 	return m
+}
+
+// shrinks reports whether an existing file's size was lowered: written as DBCC
+// SHRINKFILE (DatabaseFileInfo.Shrink), as SSMS does, since MODIFY FILE refuses
+// a smaller SIZE (review plan M5).
+func (e *fileEdit) shrinks() bool {
+	return !e.isNew && !e.removing && e.sizeKB < e.origSizeKB
 }
 
 // spec builds the CREATE-side description of a new file. Unlike modify, every
@@ -521,6 +530,20 @@ func pageDatabaseFiles(sc *db.ServerConn, dbName string) propPage {
 				propsheet.Note("A file added to a FILESTREAM filegroup is a FILESTREAM file: its path is a directory rather than a file, and it takes neither an initial size nor autogrowth, so those two are greyed. Choosing the filegroup is what makes it one — there is no file type to pick."),
 			)
 			f.SetCommit(commitCurrent)
+			f.SetApplyConfirm(func() string {
+				var names []string
+				for _, e := range edits.all() {
+					if e.shrinks() {
+						names = append(names, e.name)
+					}
+				}
+				if len(names) == 0 {
+					return ""
+				}
+				return "Lowering the size of " + strings.Join(names, ", ") + " shrinks the file (DBCC SHRINKFILE). " +
+					"It can be slow on a large file, moves pages and so fragments indexes, and stops short " +
+					"of the target where the file's data does not fit."
+			})
 
 			apply := func(ctx context.Context) error {
 				d, err := sc.Server.DatabaseByName(ctx, dbName)
@@ -545,6 +568,12 @@ func pageDatabaseFiles(sc *db.ServerConn, dbName string) propPage {
 						// NEWNAME, so the file still answers to its old name here.
 						if err := d.FileRef(e.origName).Alter(ctx, e.modify()); err != nil {
 							return err
+						}
+						// After the Alter, so a renamed file is shrunk by its new name.
+						if e.shrinks() {
+							if _, err := d.FileRef(e.name).Shrink(ctx, e.sizeKB); err != nil {
+								return err
+							}
 						}
 					}
 				}

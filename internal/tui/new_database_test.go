@@ -318,6 +318,8 @@ func TestNewDatabaseFilegroupsAddOnlyTheOnesStillListed(t *testing.T) {
 	form, apply := d.page(t, "Filegroups")
 	for _, name := range []string{"FG_Archive", "FG_Scratch", "FG_Current"} {
 		editText(t, form, "New filegroup name", name)
+		// A first file, or Read-only/Default below is refused (M3).
+		editText(t, form, "First file logical name", name+"_1")
 		clickButton(t, form, "Add")
 	}
 
@@ -330,6 +332,9 @@ func TestNewDatabaseFilegroupsAddOnlyTheOnesStillListed(t *testing.T) {
 	toggleByName(t, fg, "FG_Archive", 0)
 	toggleByName(t, fg, "FG_Current", 1)
 
+	if err := form.Validate(); err != nil {
+		t.Fatalf("validate: %v", err)
+	}
 	if err := apply(context.Background()); err != nil {
 		t.Fatalf("apply: %v", err)
 	}
@@ -369,6 +374,31 @@ func TestNewDatabaseFilegroupFirstFileLandsInItsOwnFilegroup(t *testing.T) {
 		"SIZE = 262144KB",
 		"TO FILEGROUP [FG_Archive]",
 	)
+}
+
+// A filegroup added without a first file is created empty, and Read-only or
+// Default on it is Msg 5050 — after the database was created (review plan
+// M3). The form refuses the tick; with a first file it passes.
+func TestNewDatabaseEmptyFilegroupCannotBeReadOnlyOrDefault(t *testing.T) {
+	for _, col := range []int{0, 1} {
+		d, _ := newDatabaseDialog(t)
+		form, _ := d.page(t, "Filegroups")
+		editText(t, form, "New filegroup name", "FG_Empty")
+		clickButton(t, form, "Add")
+		editText(t, form, "New filegroup name", "FG_Filed")
+		editText(t, form, "First file logical name", "AppDB_filed")
+		clickButton(t, form, "Add")
+
+		fg := toggleGrid(t, form)
+		toggleByName(t, fg, "FG_Filed", col)
+		if err := form.Validate(); err != nil {
+			t.Fatalf("column %d on FG_Filed, which has a first file, was refused: %v", col, err)
+		}
+		toggleByName(t, fg, "FG_Empty", col)
+		if err := form.Validate(); err == nil || !strings.Contains(err.Error(), "FG_Empty") {
+			t.Errorf("column %d on FG_Empty: Validate = %v, want a refusal naming it", col, err)
+		}
+	}
 }
 
 func TestNewDatabasePreflightRejectsANameThatExists(t *testing.T) {

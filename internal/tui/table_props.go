@@ -271,9 +271,17 @@ func pageTableChangeTracking(sc *db.ServerConn, dbName, schema, name string) pro
 				trackColsRow,
 				propsheet.Note("Table-level change tracking requires database-level change tracking to be enabled first (Database Properties > Change Tracking)."),
 			)
+			f.SetApplyConfirm(func() string {
+				if !changeTrackingReset(current.Enabled, current.TrackColumnsUpdated, enabledRow.Selected() == 1, trackColsRow.Selected() == 1) {
+					return ""
+				}
+				return changeTrackingResetWarning([]string{schema + "." + name})
+			})
 
 			apply := func(ctx context.Context) error {
-				if !enabledRow.Dirty() && !trackColsRow.Dirty() {
+				// Track columns changed on a table left untracked is nothing to
+				// write: a DISABLE there fails (Msg 4997, not enabled).
+				if !enabledRow.Dirty() && (!trackColsRow.Dirty() || !current.Enabled) {
 					return nil
 				}
 				d, err := sc.Server.DatabaseByName(ctx, dbName)

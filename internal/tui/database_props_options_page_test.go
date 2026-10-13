@@ -55,7 +55,7 @@ func TestEveryDatabaseOptionRowWritesTheOptionItIsLabelled(t *testing.T) {
 		"Numeric round-abort":          "NUMERIC_ROUNDABORT ON",
 		"Quoted identifier":            "QUOTED_IDENTIFIER ON",
 		"Recursive triggers":           "RECURSIVE_TRIGGERS ON",
-		"Read committed snapshot":      "READ_COMMITTED_SNAPSHOT ON WITH ROLLBACK IMMEDIATE", // needsExclusiveAccess
+		"Read committed snapshot":      "READ_COMMITTED_SNAPSHOT ON WITH ROLLBACK IMMEDIATE", // NeedsExclusiveAccess
 		"Allow snapshot isolation":     "ALLOW_SNAPSHOT_ISOLATION ON",
 		"Trustworthy":                  "TRUSTWORTHY ON",
 		"Containment type":             "CONTAINMENT = PARTIAL",
@@ -86,7 +86,17 @@ func TestEveryDatabaseOptionRowWritesTheOptionItIsLabelled(t *testing.T) {
 			if len(stmts) != 1 {
 				t.Fatalf("want exactly one statement, got %d: %q", len(stmts), stmts)
 			}
-			if got, want := stmts[0], "ALTER DATABASE [appdb] SET "+clause; got != want {
+			got, want := stmts[0], "ALTER DATABASE [appdb] SET "+clause
+			if label == "Containment type" {
+				// NeedsExclusiveAccess, and CONTAINMENT ignores WITH ROLLBACK
+				// IMMEDIATE: TerminationRollbackImmediate is gosmo's kill
+				// batch ahead of a bare SET (review plan M2).
+				if !strings.HasPrefix(got, "DECLARE @db int = DB_ID(N'appdb')") || !strings.HasSuffix(got, want+";") {
+					t.Errorf("got:  %s\nwant: the session kill batch, then %s;", got, want)
+				}
+				return
+			}
+			if got != want {
 				t.Errorf("got:  %s\nwant: %s", got, want)
 			}
 		})
@@ -256,5 +266,20 @@ func TestReadCommittedSnapshotAsksBeforeClosingConnections(t *testing.T) {
 	w := form.ApplyConfirm()
 	if !strings.Contains(w, "Read committed snapshot") || !strings.Contains(w, "rolled back") {
 		t.Errorf("apply warning = %q, want it to name the option and the rollback", w)
+	}
+}
+
+// Containment needs the database to itself too (review plan M2): on 17.0 it
+// failed Msg 5061 behind any other session. Its ALTER ignores WITH ROLLBACK
+// IMMEDIATE, so gosmo kills the sessions — and the question must say killed,
+// not rolled back.
+func TestContainmentAsksBeforeKillingSessions(t *testing.T) {
+	sc, inst := newFakeConn(t, optionsPageResponses()...)
+	form, _ := loadPage(t, pageDatabaseOptions(sc, "appdb"), inst)
+
+	editSelect(t, form, "Containment type", "PARTIAL")
+	w := form.ApplyConfirm()
+	if !strings.Contains(w, "Containment type") || !strings.Contains(w, "killed") {
+		t.Errorf("apply warning = %q, want it to name the option and the kill", w)
 	}
 }

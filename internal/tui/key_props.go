@@ -109,6 +109,9 @@ func pageKeyOptions(sc *db.ServerConn, dbName, schema, table string, name *strin
 				return nil, nil, err
 			}
 
+			if refusal := rowstoreOptionsRefusal(idx); refusal != "" {
+				return refusedOptionsForm(idx, "Key options", refusal, false), nil, nil
+			}
 			rebuild := newRebuildOptions(idx)
 			rowLocksRow := propsheet.Check("Allow row locks", idx.AllowRowLocks)
 			pageLocksRow := propsheet.Check("Allow page locks", idx.AllowPageLocks)

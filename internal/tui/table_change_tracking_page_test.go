@@ -111,3 +111,31 @@ func TestTableChangeTrackingUntouchedPageWritesNothing(t *testing.T) {
 		t.Errorf("an untouched page wrote:\n%s", strings.Join(stmts, "\n"))
 	}
 }
+
+// Changing Track columns updated on a tracked table resets its tracking
+// (gosmo disables and re-enables it, review plan M4), so Apply asks first;
+// turning tracking off is not that question.
+func TestTableChangeTrackingColumnsFlipAsksFirst(t *testing.T) {
+	_, _, form := loadTableChangeTrackingPage(t, trackedOn())
+
+	editSelect(t, form, "Track columns updated", "OFF")
+	if w := form.ApplyConfirm(); !strings.Contains(w, "Orders") || !strings.Contains(w, "reinitialise") {
+		t.Errorf("apply warning = %q, want it to name the table and the reset", w)
+	}
+	editSelect(t, form, "Table change tracking", "OFF")
+	if w := form.ApplyConfirm(); w != "" {
+		t.Errorf("disabling tracking asked the reset question: %q", w)
+	}
+}
+
+// Track columns changed on an untracked table, left untracked, writes nothing
+// — a DISABLE there fails.
+func TestTableChangeTrackingColumnsOnAnUntrackedTableWritesNothing(t *testing.T) {
+	inst, apply, form := loadTableChangeTrackingPage(t, trackedOff())
+
+	editSelect(t, form, "Track columns updated", "ON")
+	if err := apply(t.Context()); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	assertNoStatementsIn(t, inst, principalDatabase)
+}

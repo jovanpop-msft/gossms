@@ -235,3 +235,29 @@ func TestRemovingTwoFilegroupsRemovesBothTheOnesSelected(t *testing.T) {
 		t.Errorf("PRIMARY was removed — the second Remove resolved its row against the wrong list:\n%s", joined)
 	}
 }
+
+// A filegroup added here is created empty — the Files page lists only the
+// filegroups that existed at load — and Read-only or Default on an empty
+// filegroup is Msg 5050, which Apply hit after creating it (review plan M3).
+// The form refuses it instead; ticks on a filegroup with files still pass.
+func TestReadOnlyOrDefaultOnANewFilegroupIsRefused(t *testing.T) {
+	for _, col := range []int{0, 1} {
+		sc, inst := newFakeConn(t, filegroupsPageResponses()...)
+		form, _ := loadPage(t, pageDatabaseFilegroups(sc, "appdb"), inst)
+
+		textRow(t, form, "New filegroup name").Edit("REPORTING")
+		clickButton(t, form, "Add")
+		grid := toggleGrid(t, form)
+		if err := form.Validate(); err != nil {
+			t.Fatalf("adding an empty filegroup alone was refused: %v", err)
+		}
+		toggleByName(t, grid, "STAGING", col)
+		if err := form.Validate(); err != nil {
+			t.Fatalf("column %d on STAGING, which has a file, was refused: %v", col, err)
+		}
+		toggleByName(t, grid, "REPORTING", col)
+		if err := form.Validate(); err == nil || !strings.Contains(err.Error(), "REPORTING") {
+			t.Errorf("column %d on the new, empty REPORTING: Validate = %v, want a refusal naming it", col, err)
+		}
+	}
+}

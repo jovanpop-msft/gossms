@@ -52,7 +52,7 @@ func pageServerMemory(sc *db.ServerConn) propPage {
 			if memErr != nil {
 				rows = append(rows, deniedReadNote(viewServerStateAdvice))
 			}
-			return propsheet.NewForm(rows...), configApply(sc, intRows, nil), nil
+			return configForm(&intRows, nil, rows...), configApply(sc, intRows, nil), nil
 		},
 	}
 }

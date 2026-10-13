@@ -257,3 +257,35 @@ func TestChangeTrackingOffWithATableLeftTrackedIsRefused(t *testing.T) {
 		t.Errorf("wrote:\n%s", strings.Join(stmts, "\n"))
 	}
 }
+
+// Track columns updated on a tracked table has no ALTER of its own, so gosmo
+// disables and re-enables tracking — a reset every syncing client must
+// reinitialise from (review plan M4). Apply asks first, for that edit only.
+func TestChangeTrackingColumnsFlipOnATrackedTableAsksFirst(t *testing.T) {
+	sc, inst := newFakeConn(t, changeTrackingResponses()...)
+	form, _ := loadPage(t, pageDatabaseChangeTracking(sc, "appdb"), inst)
+	grid := toggleGrid(t, form)
+
+	toggleByName(t, grid, "sales.Regions", 0) // enabling: no reset
+	if w := form.ApplyConfirm(); w != "" {
+		t.Fatalf("enabling an untracked table asked: %q", w)
+	}
+	toggleByName(t, grid, "dbo.Orders", 1)
+	w := form.ApplyConfirm()
+	if !strings.Contains(w, "dbo.Orders") || !strings.Contains(w, "reinitialise") || strings.Contains(w, "Regions") {
+		t.Errorf("apply warning = %q, want it to name dbo.Orders alone and the reset", w)
+	}
+}
+
+// Ticking Track columns on a table left untracked writes nothing: the page
+// once sent DISABLE CHANGE_TRACKING for it, which fails on an untracked table.
+func TestChangeTrackingColumnsOnAnUntrackedTableWritesNothing(t *testing.T) {
+	sc, inst := newFakeConn(t, changeTrackingResponses()...)
+	form, apply := loadPage(t, pageDatabaseChangeTracking(sc, "appdb"), inst)
+
+	toggleByName(t, toggleGrid(t, form), "sales.Regions", 1)
+	if err := apply(context.Background()); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	assertNoStatementsIn(t, inst, "appdb")
+}

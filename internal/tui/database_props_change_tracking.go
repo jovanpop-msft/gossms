@@ -73,6 +73,15 @@ func pageDatabaseChangeTracking(sc *db.ServerConn, dbName string) propPage {
 				propsheet.Section("Tables using change tracking"),
 				tablesRow,
 			)
+			f.SetApplyConfirm(func() string {
+				var names []string
+				for i, v := range tablesRow.Values() {
+					if t := tables[i]; changeTrackingReset(t.Enabled, t.TrackColumnsUpdated, v[0], v[1]) {
+						names = append(names, text[i][0])
+					}
+				}
+				return changeTrackingResetWarning(names)
+			})
 
 			apply := func(ctx context.Context) error {
 				d, err := sc.Server.DatabaseByName(ctx, dbName)
@@ -97,7 +106,9 @@ func pageDatabaseChangeTracking(sc *db.ServerConn, dbName string) propPage {
 				setTables := func() error {
 					for i, v := range tablesRow.Values() {
 						t := tables[i]
-						if v[0] == t.Enabled && v[1] == t.TrackColumnsUpdated {
+						// Track columns ticked on a table left untracked is nothing to
+						// write: a DISABLE there fails (Msg 4997, not enabled).
+						if v[0] == t.Enabled && (v[1] == t.TrackColumnsUpdated || !v[0]) {
 							continue
 						}
 						if err := d.TableRef(t.Schema, t.Name).SetChangeTracking(ctx, v[0], v[1]); err != nil {
@@ -120,4 +131,23 @@ func pageDatabaseChangeTracking(sc *db.ServerConn, dbName string) propPage {
 			return f, apply, nil
 		},
 	}
+}
+
+// changeTrackingReset reports whether moving a table's change tracking from
+// (wasOn, wasCols) to (on, cols) resets it: Track columns updated changed on a
+// table tracked before and after. There is no ALTER for that, so gosmo's
+// Table.SetChangeTracking disables and re-enables tracking (review plan M4).
+func changeTrackingReset(wasOn, wasCols, on, cols bool) bool {
+	return wasOn && on && wasCols != cols
+}
+
+// changeTrackingResetWarning is the apply question for the tables
+// changeTrackingReset names, "" for none — both Change Tracking pages ask it.
+func changeTrackingResetWarning(tables []string) string {
+	if len(tables) == 0 {
+		return ""
+	}
+	return "Changing Track columns updated on " + strings.Join(tables, ", ") +
+		" disables and re-enables its change tracking. Its change history is discarded and " +
+		"CHANGE_TRACKING_MIN_VALID_VERSION moves, so every client syncing it must reinitialise."
 }

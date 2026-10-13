@@ -207,6 +207,70 @@ func TestIndexOptionsWritesNothingWhenUntouched(t *testing.T) {
 	assertNoStatementsIn(t, inst, idxDatabase)
 }
 
+// TestIndexOptionsPadIndexOnlyWhenEdited. A fill-factor edit rebuilds the
+// index, and the rebuild must not restate PAD_INDEX: it is one more option the
+// server can refuse for a reason the user did not touch.
+func TestIndexOptionsPadIndexOnlyWhenEdited(t *testing.T) {
+	inst, apply, form := loadIndexOptions(t, plainIndex())
+
+	editText(t, form, "Fill factor", "70")
+
+	if err := apply(context.Background()); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	assertOneStatementIn(t, inst, idxDatabase, "FILLFACTOR = 70")
+	if stmt := inst.StatementsIn(idxDatabase)[0]; strings.Contains(stmt, "PAD_INDEX") {
+		t.Errorf("a fill-factor-only edit names PAD_INDEX:\n%s", stmt)
+	}
+}
+
+// TestIndexOptionsColumnstoreOffersNothing. A columnstore index refuses every
+// row the page offers (Msgs 35327, 35328), so each shows n/a and there is
+// nothing to apply.
+func TestIndexOptionsColumnstoreOffersNothing(t *testing.T) {
+	for _, typeDesc := range []string{"CLUSTERED COLUMNSTORE", "NONCLUSTERED COLUMNSTORE"} {
+		t.Run(typeDesc, func(t *testing.T) {
+			idx := plainIndex()
+			idx.typeDesc = typeDesc
+			idx.compression = "COLUMNSTORE"
+			_, apply, form := loadIndexOptions(t, idx)
+
+			if apply != nil {
+				t.Error("a columnstore index's Options page has an apply")
+			}
+			for _, label := range []string{"Fill factor", "Pad index", "Ignore duplicate keys", "Allow row locks", "Allow page locks"} {
+				if v := staticValue(t, form, label); v != "n/a (columnstore)" {
+					t.Errorf("%s = %q, want n/a (columnstore)", label, v)
+				}
+			}
+			if v := staticValue(t, form, "Data compression"); v != "COLUMNSTORE" {
+				t.Errorf("Data compression = %q, want the server's COLUMNSTORE", v)
+			}
+		})
+	}
+}
+
+// TestIndexOptionsMemoryOptimizedOffersNothing. Every ALTER INDEX is refused
+// on a memory-optimized table's index, a hash one or not.
+func TestIndexOptionsMemoryOptimizedOffersNothing(t *testing.T) {
+	tableResp := idxTableResp()
+	tableResp.rows[0][6] = true // IsMemoryOptimized
+	sc, inst := newFakeConn(t,
+		dbByNameResp(idxDatabase, 5),
+		tableResp,
+		idxListResp("IX_Orders_CustomerID", 3, plainIndex()),
+		idxColumnsResp([]driver.Value{int64(3), "CustomerID", false, false}),
+	)
+	form, apply := loadPage(t, pageIndexOptions(sc, idxDatabase, idxSchema, idxTable, "IX_Orders_CustomerID"), inst)
+
+	if apply != nil {
+		t.Error("a memory-optimized table's index Options page has an apply")
+	}
+	if v := staticValue(t, form, "Allow row locks"); v != "n/a (memory-optimized table)" {
+		t.Errorf("Allow row locks = %q, want n/a (memory-optimized table)", v)
+	}
+}
+
 // -- Included Columns --------------------------------------------------------
 
 // idxColumnResp answers Table.Columns. Only the name and the type

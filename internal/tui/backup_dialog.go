@@ -511,7 +511,8 @@ func (d *BackupDialog) startBackup() {
 		err := srv.Backup(ctx, opts)
 		if err == nil && verify {
 			app.postProgress(task, -1, "Verifying backup...")
-			err = srv.VerifyBackup(ctx, dest)
+			// Init is always set, so the file holds this one backup: set 1.
+			err = srv.VerifyBackup(ctx, gosmo.VerifyOptions{Checksum: opts.Checksum}, dest)
 		}
 		app.postTaskDone(task, err)
 	})

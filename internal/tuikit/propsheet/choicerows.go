@@ -26,6 +26,7 @@ type CheckRow struct {
 	pageReadOnly bool
 	// disabled is SetEnabled's state: see TextRow.SetEnabled.
 	disabled bool
+	validate func(bool) error
 	x, y, w  int
 }
 
@@ -119,9 +120,20 @@ func (r *CheckRow) CopyText() string {
 	}
 	return "false"
 }
-func (r *CheckRow) Dirty() bool     { return r.box.Checked() != r.orig }
-func (r *CheckRow) Revert()         { r.box.SetChecked(r.orig) }
-func (r *CheckRow) Validate() error { return nil }
+func (r *CheckRow) Dirty() bool { return r.box.Checked() != r.orig }
+func (r *CheckRow) Revert()     { r.box.SetChecked(r.orig) }
+func (r *CheckRow) Validate() error {
+	if r.validate == nil {
+		return nil
+	}
+	return r.validate(r.box.Checked())
+}
+
+// SetValidate installs a validator run on the current state when the form
+// validates, for a combination with other rows the server would refuse. It
+// runs only while this row is dirty, so a rule spanning several rows goes on
+// each of them.
+func (r *CheckRow) SetValidate(fn func(bool) error) { r.validate = fn }
 
 // ---------------------------------------------------------------------------
 // SelectRow: editable dropdown, wraps widgets.DropDown

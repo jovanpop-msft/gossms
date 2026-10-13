@@ -23,7 +23,7 @@ func pageServerSecurity(sc *db.ServerConn) propPage {
 			var boolRows []configBoolRow
 			cfgBool := newConfigBoolEditor(configs, &boolRows)
 
-			f := propsheet.NewForm(
+			f := configForm(nil, &boolRows,
 				propsheet.Section("Server authentication"),
 				propsheet.Static("Authentication mode", sec.AuthenticationMode),
 				propsheet.Section("Options"),

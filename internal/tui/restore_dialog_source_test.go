@@ -228,6 +228,57 @@ func TestRestoreKeepsTheServerItStartedOn(t *testing.T) {
 	}
 }
 
+// M7: Verify checks the set being restored, not VERIFYONLY's default of set 1
+// — on a file appended to, the oldest backup — and asks for CHECKSUM exactly
+// when that set has checksums (the server refuses it on one without).
+func TestRestoreVerifiesTheSetBeingRestored(t *testing.T) {
+	finish := time.Date(2026, 9, 24, 10, 0, 0, 0, time.UTC)
+	for _, tc := range []struct {
+		name      string
+		checksums int64
+		want      string
+	}{
+		{"with checksums", 1, "WITH FILE = 2, CHECKSUM"},
+		{"without checksums", 0, "WITH FILE = 2"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			stop := errors.New("stop before the RESTORE")
+			names := []string{"BackupName", "BackupType", "Position", "DatabaseName", "ServerName",
+				"BackupFinishDate", "BackupSize", "HasBackupChecksums"}
+			sc, inst := newFakeConn(t,
+				fakeResponse{match: "RESTORE HEADERONLY", cols: len(names), colNames: names, rows: [][]driver.Value{
+					{"full", int64(1), int64(1), "AppDB", "SRV", finish, int64(1024), int64(1 - tc.checksums)},
+					{"full2", int64(1), int64(2), "AppDB", "SRV", finish, int64(1024), tc.checksums},
+				}},
+				fakeResponse{match: "RESTORE FILELISTONLY", err: stop},
+			)
+			app := newTestApp()
+			d := restoreFormWithOptions()
+			d.app, d.sc = app, sc
+			pickHistory(d, []*gosmo.BackupInfo{{DeviceName: `E:\b\app.bak`, Position: 2}}, 0)
+			d.cbVerify.SetChecked(true)
+			d.rbReloc.SetSelected(relocAuto)
+
+			d.beginRestore(d.sourceForRestore(), "AppDB_Copy")
+			deadline := time.Now().Add(5 * time.Second)
+			for !d.task.Done {
+				if time.Now().After(deadline) {
+					t.Fatal("the restore task never finished")
+				}
+				app.drainPending()
+				time.Sleep(time.Millisecond)
+			}
+			if !errors.Is(d.task.Err, stop) {
+				t.Fatalf("task error = %v, want the scripted file-list failure", d.task.Err)
+			}
+			stmts := inst.Statements()
+			if len(stmts) != 1 || !strings.Contains(stmts[0], "RESTORE VERIFYONLY") || !strings.HasSuffix(strings.TrimSpace(stmts[0]), tc.want) {
+				t.Errorf("verify = %q, want VERIFYONLY ending %q", stmts, tc.want)
+			}
+		})
+	}
+}
+
 // A log set picked from history restores with RESTORE LOG and no MOVE, even
 // onto a renamed target: the files were placed by the restore before it.
 // Its file list is not read either — nothing it could say goes into the

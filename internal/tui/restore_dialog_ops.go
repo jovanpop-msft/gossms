@@ -486,15 +486,24 @@ func (d *RestoreDialog) restoreRequest(src restoreSource, target string) restore
 // and default directories came from the second server while the RESTORE ran on
 // the first, giving MOVE clauses naming the wrong server's folders.
 func runRestore(ctx context.Context, app *App, srv *gosmo.Server, task *Task, req restoreRequest) error {
+	app.postProgress(task, -1, "Reading backup metadata...")
+	h, err := restoreSet(ctx, srv, req)
+	if err != nil {
+		return err
+	}
 	if req.verify {
 		app.postProgress(task, -1, "Verifying backup...")
-		if err := srv.VerifyBackup(ctx, req.src.targets()...); err != nil {
+		// The set being restored, not VERIFYONLY's default of set 1: on a file
+		// appended to, that is the oldest backup, so a damaged chosen set passed and a
+		// damaged set 1 failed a good restore. CHECKSUM only where the set has them:
+		// the server refuses it on a set taken without.
+		vopts := gosmo.VerifyOptions{FileNumber: h.SetNumber(), Checksum: h.HasChecksums}
+		if err := srv.VerifyBackup(ctx, vopts, req.src.targets()...); err != nil {
 			return err
 		}
 	}
 
-	app.postProgress(task, -1, "Reading backup metadata...")
-	ropts, err := buildRestoreOptions(ctx, srv, req)
+	ropts, err := restoreOptionsFor(ctx, srv, req, h)
 	if err != nil {
 		return err
 	}
@@ -515,12 +524,21 @@ func runRestore(ctx context.Context, app *App, srv *gosmo.Server, task *Task, re
 // Instance refused the statement outright; gosmo also puts the database back to
 // MULTI_USER, including after a cancelled restore.
 func buildRestoreOptions(ctx context.Context, srv *gosmo.Server, req restoreRequest) (gosmo.RestoreOptions, error) {
-	headers, err := srv.BackupHeaders(ctx, req.src.targets()...)
+	h, err := restoreSet(ctx, srv, req)
 	if err != nil {
 		return gosmo.RestoreOptions{}, err
 	}
+	return restoreOptionsFor(ctx, srv, req, h)
+}
+
+// restoreSet reads the header of the backup set req restores.
+func restoreSet(ctx context.Context, srv *gosmo.Server, req restoreRequest) (*gosmo.BackupHeader, error) {
+	headers, err := srv.BackupHeaders(ctx, req.src.targets()...)
+	if err != nil {
+		return nil, err
+	}
 	if len(headers) == 0 {
-		return gosmo.RestoreOptions{}, fmt.Errorf("no backup sets found on %s", sourceLabel(req.src.devices))
+		return nil, fmt.Errorf("no backup sets found on %s", sourceLabel(req.src.devices))
 	}
 	// The set actually being restored: a device can hold sets from more than one
 	// database, and its own name decides whether MOVE clauses are needed. A history
@@ -528,9 +546,13 @@ func buildRestoreOptions(ctx context.Context, srv *gosmo.Server, req restoreRequ
 	// longer has; restoring set 1 instead would restore a different backup.
 	h := gosmo.BackupSetAt(headers, req.fileNumber)
 	if h == nil {
-		return gosmo.RestoreOptions{}, fmt.Errorf("backup set %d is no longer on %s", req.fileNumber, sourceLabel(req.src.devices))
+		return nil, fmt.Errorf("backup set %d is no longer on %s", req.fileNumber, sourceLabel(req.src.devices))
 	}
+	return h, nil
+}
 
+// restoreOptionsFor is buildRestoreOptions for the set h restoreSet read.
+func restoreOptionsFor(ctx context.Context, srv *gosmo.Server, req restoreRequest, h *gosmo.BackupHeader) (gosmo.RestoreOptions, error) {
 	// Only a set that lays the files down takes MOVE clauses (FromHeader), so only its
 	// file list is worth reading.
 	var files []*gosmo.BackupFile
@@ -539,6 +561,7 @@ func buildRestoreOptions(ctx context.Context, srv *gosmo.Server, req restoreRequ
 		// one describes set 1, whose logical file names belong to a different database
 		// whenever backups were appended, and MOVE clauses naming files the restored set
 		// lacks fail the RESTORE.
+		var err error
 		if files, err = srv.BackupFileList(ctx, h.SetNumber(), req.src.targets()...); err != nil {
 			return gosmo.RestoreOptions{}, err
 		}

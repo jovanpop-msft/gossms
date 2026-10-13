@@ -304,3 +304,99 @@ func TestLoginGeneralScriptDoesNotCarryThePassword(t *testing.T) {
 		t.Errorf("script = %q, want the placeholder and not the password", script)
 	}
 }
+
+// loginPolicyResponses is loginGeneralResponses for a login whose
+// CHECK_POLICY, CHECK_EXPIRATION and IsMustChange are as given.
+func loginPolicyResponses(policy, expiration, mustChange bool) []fakeResponse {
+	resps := loginGeneralResponses("appuser", "SQL_LOGIN")
+	resps[1].rows[0][2] = int64(boolIdx(mustChange))
+	resps[1].rows[0][3] = policy
+	resps[1].rows[0][4] = expiration
+	return resps
+}
+
+// M1: on a login with CHECK_POLICY off, a new password with MUST_CHANGE and both
+// policy rows ticked is one statement. Sent as the password first, MUST_CHANGE
+// over the policy-off login was Msg 15122; the policy first works only by luck
+// of order, and fails the other way round on a must-change login.
+func TestLoginGeneralPolicyRidesInThePasswordStatement(t *testing.T) {
+	sc, inst := newFakeConn(t, loginPolicyResponses(false, false, false)...)
+	form, apply := loadPage(t, pageLoginGeneral(sc, new("appuser")), inst)
+
+	editText(t, form, "Password", "n3wSecret!")
+	editText(t, form, "Confirm password", "n3wSecret!")
+	editCheck(t, form, "Enforce password policy", true)
+	editCheck(t, form, "Enforce password expiration", true)
+	editCheck(t, form, "User must change password at next login", true)
+	if err := form.Validate(); err != nil {
+		t.Fatalf("validate: %v", err)
+	}
+	if err := apply(context.Background()); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	assertOneStatement(t, inst, "MUST_CHANGE, CHECK_POLICY = ON, CHECK_EXPIRATION = ON")
+}
+
+// M1: the combinations SQL Server refuses are refused before anything is sent.
+func TestLoginGeneralRefusesPolicyCombinationsTheServerRefuses(t *testing.T) {
+	for _, tc := range []struct {
+		name                        string
+		policy, expiration, mustChg bool
+		password                    string
+		edits                       map[string]bool
+		want                        string
+	}{
+		{"expiration without policy (15122)", true, true, false, "",
+			map[string]bool{"Enforce password policy": false}, "needs \"Enforce password policy\""},
+		{"must change without expiration", true, true, false, "n3wSecret!",
+			map[string]bool{"Enforce password expiration": false, "User must change password at next login": true}, "both password policy and expiration"},
+		// One row edited per case below: a validator runs only on a dirty row, so each
+		// row's own must catch it.
+		{"expiration ticked alone on a policy-off login", false, false, false, "",
+			map[string]bool{"Enforce password expiration": true}, "needs \"Enforce password policy\""},
+		{"must change ticked alone on a policy-off login", false, false, false, "n3wSecret!",
+			map[string]bool{"User must change password at next login": true}, "both password policy and expiration"},
+		{"policy off on a must-change login, no password (15128)", true, true, true, "",
+			map[string]bool{"Enforce password expiration": false, "User must change password at next login": false}, "15128"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sc, inst := newFakeConn(t, loginPolicyResponses(tc.policy, tc.expiration, tc.mustChg)...)
+			form, _ := loadPage(t, pageLoginGeneral(sc, new("appuser")), inst)
+			if tc.password != "" {
+				editText(t, form, "Password", tc.password)
+				editText(t, form, "Confirm password", tc.password)
+			}
+			for label, v := range tc.edits {
+				editCheck(t, form, label, v)
+			}
+			err := form.Validate()
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("validate = %v, want an error naming %q", err, tc.want)
+			}
+		})
+	}
+}
+
+// M1: turning the policy off on a must-change login is allowed with a new
+// password, which clears the flag; gosmo sequences it on the server in one
+// statement.
+func TestLoginGeneralPolicyOffOnAMustChangeLoginWithAPassword(t *testing.T) {
+	sc, inst := newFakeConn(t, loginPolicyResponses(true, true, true)...)
+	form, apply := loadPage(t, pageLoginGeneral(sc, new("appuser")), inst)
+
+	editText(t, form, "Password", "n3wSecret!")
+	editText(t, form, "Confirm password", "n3wSecret!")
+	editCheck(t, form, "User must change password at next login", false)
+	editCheck(t, form, "Enforce password expiration", false)
+	editCheck(t, form, "Enforce password policy", false)
+	if err := form.Validate(); err != nil {
+		t.Fatalf("validate: %v", err)
+	}
+	if err := apply(context.Background()); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	assertOneStatement(t, inst, "IsMustChange")
+	if stmt := inst.Statements()[0]; !strings.Contains(stmt, "CHECK_POLICY = OFF, CHECK_EXPIRATION = OFF") {
+		t.Errorf("wrote:\n%s\nwant both options off", stmt)
+	}
+}

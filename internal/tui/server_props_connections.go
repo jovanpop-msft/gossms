@@ -21,7 +21,7 @@ func pageServerConnections(sc *db.ServerConn) propPage {
 			cfgInt := newConfigEditor(configs, &intRows)
 			cfgBool := newConfigBoolEditor(configs, &boolRows)
 
-			f := propsheet.NewForm(
+			f := configForm(&intRows, &boolRows,
 				propsheet.Section("Connections"),
 				cfgInt("user connections", "Maximum concurrent connections", ""),
 				propsheet.Section("Remote server connections"),

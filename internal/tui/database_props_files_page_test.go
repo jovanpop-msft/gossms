@@ -377,3 +377,72 @@ func TestFilesPageGridShowsTheEditOnceMovedOff(t *testing.T) {
 		t.Errorf("the grid shows %q for the renamed file, want the new name", got)
 	}
 }
+
+// shrinkResponse answers DatabaseFileInfo.Shrink's DBCC SHRINKFILE row:
+// DbId, FileId, CurrentSize, MinimumSize, UsedPages, EstimatedPages (pages).
+func shrinkResponse() fakeResponse {
+	return fakeResponse{match: "DBCC SHRINKFILE", cols: 6, rows: [][]driver.Value{
+		{int64(7), int64(2), int64(2048), int64(128), int64(100), int64(100)},
+	}}
+}
+
+// A smaller size is a shrink, not MODIFY FILE — that is Msg 5039 below the
+// current size (review plan M5). The second file, renamed in the same edit
+// with its growth changed: the Alter carries the rename and the growth but no
+// SIZE, and the shrink that follows names the file by its new name. Apply asks
+// first, naming the file.
+func TestFilesPageShrinksALoweredSize(t *testing.T) {
+	sc, inst := newFakeConn(t, append(filesPageResponses(), shrinkResponse())...)
+	form, apply := loadPage(t, pageDatabaseFiles(sc, "appdb"), inst)
+
+	selectGridRow(t, plainGrid(t, form), 0, "appdb_log")
+	editText(t, form, "Initial size", "16")
+	editText(t, form, "Growth amount", "8")
+	editText(t, form, "Logical name", "appdb_log2")
+	form.Commit()
+
+	if w := form.ApplyConfirm(); !strings.Contains(w, "appdb_log2") || !strings.Contains(w, "SHRINKFILE") {
+		t.Errorf("apply warning = %q, want it to name the file and the shrink", w)
+	}
+	if err := apply(context.Background()); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	stmts := inst.Statements()
+	if len(stmts) != 1 {
+		t.Fatalf("want the one MODIFY FILE, got %d: %q", len(stmts), stmts)
+	}
+	for _, want := range []string{"NAME = [appdb_log]", "NEWNAME = [appdb_log2]", "FILEGROWTH = 8192KB"} {
+		if !strings.Contains(stmts[0], want) {
+			t.Errorf("the Alter lacks %s:\n%s", want, stmts[0])
+		}
+	}
+	if strings.Contains(strings.ReplaceAll(stmts[0], "MAXSIZE", ""), "SIZE") {
+		t.Errorf("the lowered size went into MODIFY FILE:\n%s", stmts[0])
+	}
+	shrinks := inst.Reads("DBCC SHRINKFILE")
+	if len(shrinks) != 1 || shrinks[0] != "DBCC SHRINKFILE (N'appdb_log2', 16)" {
+		t.Errorf("shrink reads = %q, want one DBCC SHRINKFILE (N'appdb_log2', 16)", shrinks)
+	}
+}
+
+// A larger size still grows through MODIFY FILE, with no shrink and no
+// question.
+func TestFilesPageGrowsARaisedSize(t *testing.T) {
+	sc, inst := newFakeConn(t, append(filesPageResponses(), shrinkResponse())...)
+	form, apply := loadPage(t, pageDatabaseFiles(sc, "appdb"), inst)
+
+	selectGridRow(t, plainGrid(t, form), 0, "appdb_log")
+	editText(t, form, "Initial size", "64")
+	form.Commit()
+
+	if w := form.ApplyConfirm(); w != "" {
+		t.Errorf("growing a file asked: %q", w)
+	}
+	if err := apply(context.Background()); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	assertOneStatement(t, inst, "SIZE = 65536KB")
+	if r := inst.Reads("DBCC SHRINKFILE"); len(r) != 0 {
+		t.Errorf("growing a file shrank it: %q", r)
+	}
+}

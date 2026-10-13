@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"strconv"
 
 	gosmo "github.com/radix29/gosmo"
 	"github.com/radix29/gossms/internal/db"
@@ -27,9 +28,15 @@ func pageServerDatabaseSettings(sc *db.ServerConn) propPage {
 
 			filestream := propsheet.Select("FILESTREAM access level", filestreamLevels, 0)
 			var filestreamCfg *gosmo.ConfigurationOption
+			var filestreamPending string
 			if c := findConfig(configs, "filestream access level"); c != nil {
 				filestreamCfg = c
-				filestream.SetSelected(int(c.ValueInUse))
+				filestream.SetSelected(int(c.Value))
+				running := strconv.FormatInt(c.ValueInUse, 10)
+				if c.ValueInUse >= 0 && c.ValueInUse < int64(len(filestreamLevels)) {
+					running = filestreamLevels[c.ValueInUse]
+				}
+				filestreamPending = pendingConfigNote(c, running)
 			} else {
 				filestream = propsheet.Select("FILESTREAM access level", []string{"N/A"}, 0)
 			}
@@ -57,9 +64,12 @@ func pageServerDatabaseSettings(sc *db.ServerConn) propPage {
 				cfgInt("recovery interval (min)", "Recovery interval", "min"),
 				propsheet.Section("FILESTREAM"),
 				filestream,
-				propsheet.Note("A fill factor of 0 uses the server default."),
 			)
-			f := propsheet.NewForm(rows...)
+			if filestreamPending != "" {
+				rows = append(rows, propsheet.Note(filestreamPending))
+			}
+			rows = append(rows, propsheet.Note("A fill factor of 0 uses the server default."))
+			f := configForm(&intRows, &boolRows, rows...)
 
 			apply := func(ctx context.Context) error {
 				changes, err := configChanges(intRows, boolRows)

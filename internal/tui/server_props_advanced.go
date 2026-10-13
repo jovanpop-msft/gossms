@@ -30,13 +30,13 @@ func pageServerAdvanced(sc *db.ServerConn) propPage {
 
 			rows := make([][]string, len(configs))
 			for i, c := range configs {
-				rows[i] = []string{c.Name, strconv.FormatInt(c.ValueInUse, 10), c.Description}
+				rows[i] = []string{c.Name, strconv.FormatInt(c.Value, 10), strconv.FormatInt(c.ValueInUse, 10), c.Description}
 			}
 			grid := controls.NewDataGrid()
-			grid.SetData([]string{"Option", "Value", "Description"}, rows)
+			grid.SetData([]string{"Option", "Configured", "Running", "Description"}, rows)
 			grid.SetCellCursor(true)
 
-			f := propsheet.NewForm(
+			f := configForm(&intRows, &boolRows,
 				propsheet.Section("Miscellaneous"),
 				cfgBool("optimize for ad hoc workloads", "Optimize for ad hoc workloads"),
 				cfgInt("blocked process threshold (s)", "Blocked process threshold", "sec"),

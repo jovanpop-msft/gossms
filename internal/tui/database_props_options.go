@@ -92,26 +92,27 @@ func databaseOptionRows(o *gosmo.DatabaseOptions) ([]propsheet.Row, []dbOptRow, 
 	return rows, tracked, userAccessRow
 }
 
-// needsExclusiveAccess reports whether setting opt needs the database to
-// itself. Such an ALTER waits, with nothing bounding it, for every other
-// session in the database to leave — a Properties dialog that appears to hang
-// — so the Options page applies it WITH ROLLBACK IMMEDIATE, after asking (see
-// exclusiveOptionWarning).
-func needsExclusiveAccess(opt gosmo.DatabaseOption) bool {
-	return opt == gosmo.DBOptReadCommittedSnapshot
-}
-
 // exclusiveOptionWarning is the Options page's Form.SetApplyConfirm function:
-// the question an Apply must be answered yes to when a pending edit is one
-// needsExclusiveAccess names. Same consequence, same wording, as renaming a
-// database (databaseOps' renameWarning).
+// the question an Apply must be answered yes to when a pending edit needs the
+// database to itself (gosmo's DatabaseOption.NeedsExclusiveAccess). Such an
+// ALTER waits for every other session in the database to leave — a dialog
+// that appears to hang, or Msg 5061 — so the page applies it with
+// TerminationRollbackImmediate. For READ_COMMITTED_SNAPSHOT that is WITH
+// ROLLBACK IMMEDIATE, worded as for renaming a database (databaseOps'
+// renameWarning); CONTAINMENT ignores that clause, so gosmo kills the
+// sessions instead, and the question says so.
 func exclusiveOptionWarning(tracked []dbOptRow) func() string {
 	return func() string {
 		for _, r := range tracked {
-			if needsExclusiveAccess(r.opt) && r.row.Dirty() {
-				return "Changing " + r.row.Label() + " needs exclusive access to the database. " +
-					"Existing connections to it will be closed and their transactions rolled back."
+			if !r.opt.NeedsExclusiveAccess() || !r.row.Dirty() {
+				continue
 			}
+			if r.opt == gosmo.DBOptContainment {
+				return "Changing " + r.row.Label() + " needs exclusive access to the database. " +
+					"Every other session in it will be killed (this needs ALTER ANY CONNECTION)."
+			}
+			return "Changing " + r.row.Label() + " needs exclusive access to the database. " +
+				"Existing connections to it will be closed and their transactions rolled back."
 		}
 		return ""
 	}
@@ -127,7 +128,7 @@ func applyTrackedOptions(ctx context.Context, d *gosmo.Database, tracked []dbOpt
 			continue
 		}
 		term := gosmo.TerminationNone
-		if needsExclusiveAccess(r.opt) {
+		if r.opt.NeedsExclusiveAccess() {
 			term = exclusive
 		}
 		value := r.items[r.row.Selected()]

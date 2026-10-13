@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 
 	gosmo "github.com/radix29/gosmo"
@@ -120,6 +121,20 @@ func pageDatabaseFilegroups(sc *db.ServerConn, dbName string) propPage {
 				text, values := rowsFor()
 				fgRow.SetRows(text, values)
 			}
+			// Read-only and Default on a filegroup with no file are Msg 5050
+			// ("Cannot change the properties of empty filegroup"), and a new
+			// one is always empty: the Files page lists only the filegroups
+			// that existed at load. Refused here, or Apply creates the
+			// filegroup and then fails on the toggle (review plan M3).
+			fgRow.ValidateFn = func() error {
+				syncToggles()
+				for _, e := range visible() {
+					if e.fileCount == 0 && (e.isReadOnly != e.origReadOnly || e.isDefault && !e.origIsDefault) {
+						return emptyFilegroupToggleError(e.name)
+					}
+				}
+				return nil
+			}
 
 			f := propsheet.NewForm(
 				propsheet.Section("Filegroups"),
@@ -165,4 +180,11 @@ func pageDatabaseFilegroups(sc *db.ServerConn, dbName string) propPage {
 			return f, apply, nil
 		},
 	}
+}
+
+// emptyFilegroupToggleError is both Filegroups pages' refusal of Read-only or
+// Default on a filegroup with no file — see pageDatabaseFilegroups'
+// ValidateFn.
+func emptyFilegroupToggleError(name string) error {
+	return fmt.Errorf("filegroup %s has no files: add one before setting Read-only or Default", name)
 }

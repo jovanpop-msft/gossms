@@ -267,6 +267,17 @@ func buildNewDatabaseFilegroupsPage(sc *db.ServerConn, pf *ndbPrefetch, dbName, 
 		text, values := rowsFor()
 		fgRow.SetRows(text, values)
 	}
+	// A filegroup without a first file is created empty, where Read-only and
+	// Default are Msg 5050 — after the database exists (review plan M3).
+	fgRow.ValidateFn = func() error {
+		syncToggles()
+		for _, e := range edits.all() {
+			if e.fileName == "" && (e.isReadOnly || e.isDefault) {
+				return emptyFilegroupToggleError(e.name)
+			}
+		}
+		return nil
+	}
 
 	f := propsheet.NewForm(
 		propsheet.Section("Filegroups"),

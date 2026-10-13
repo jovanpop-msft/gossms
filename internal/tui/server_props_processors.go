@@ -9,9 +9,21 @@ import (
 	"github.com/radix29/gossms/internal/tuikit/propsheet"
 )
 
+// 'affinity mask' and 'affinity I/O mask' are 32-bit options
+// (-2147483648…2147483647), so the page works on them as uint32: CPU 31 is the
+// sign bit. Built as an int64, CPU 31 became 2147483648, which sp_configure
+// refuses (Msg 8114) — and a mask already holding CPU 31 read back negative,
+// never equal to the rebuilt one, so every Apply of the page sent it.
+
+// affinityMask is the uint32 form of an affinity option's stored value.
+func affinityMask(v int64) uint32 { return uint32(v) }
+
+// affinityValue is the value sp_configure takes for mask.
+func affinityValue(mask uint32) int64 { return int64(int32(mask)) }
+
 // affinityBits unpacks the low cpuCount bits of mask into a per-CPU bool
 // slice (bit i = CPU i). Pure and unit-tested — see server_props_test.go.
-func affinityBits(mask int64, cpuCount int) []bool {
+func affinityBits(mask uint32, cpuCount int) []bool {
 	bits := make([]bool, cpuCount)
 	for i := range cpuCount {
 		bits[i] = mask&(1<<uint(i)) != 0
@@ -20,8 +32,8 @@ func affinityBits(mask int64, cpuCount int) []bool {
 }
 
 // bitsToAffinity is affinityBits' inverse.
-func bitsToAffinity(bits []bool) int64 {
-	var mask int64
+func bitsToAffinity(bits []bool) uint32 {
+	var mask uint32
 	for i, b := range bits {
 		if b {
 			mask |= 1 << uint(i)
@@ -34,11 +46,11 @@ func bitsToAffinity(bits []bool) int64 {
 // page falls back to when the per-CPU grid cannot be built. 0 is how SQL
 // Server stores "automatic", and printing it as a number reads as a mask that
 // pins the instance to no CPU at all.
-func affinityMaskText(mask int64) string {
+func affinityMaskText(mask uint32) string {
 	if mask == 0 {
 		return "Automatic"
 	}
-	return "0x" + strconv.FormatInt(mask, 16)
+	return "0x" + strconv.FormatUint(uint64(mask), 16)
 }
 
 // numaNodeOf renders logical CPU i's NUMA node from a
@@ -86,12 +98,25 @@ func pageServerProcessors(sc *db.ServerConn) propPage {
 			// CPUs; a 64-CPU server needs 'affinity64 mask' too, which
 			// this page doesn't yet edit.
 			cpuCount := min(info.LogicalCPUCount, 32)
-			affMask, ioMask := int64(0), int64(0)
-			if c := findConfig(configs, "affinity mask"); c != nil {
-				affMask = c.ValueInUse
-			}
-			if c := findConfig(configs, "affinity I/O mask"); c != nil {
-				ioMask = c.ValueInUse
+			// Seeded from the configured value, as every sp_configure row is
+			// (pendingConfigNote); affinity mask is dynamic, the I/O mask is not.
+			var affMask, ioMask uint32
+			var pending []propsheet.Row
+			for _, m := range []struct {
+				name, label string
+				mask        *uint32
+			}{
+				{"affinity mask", "Processor affinity mask", &affMask},
+				{"affinity I/O mask", "I/O affinity mask", &ioMask},
+			} {
+				c := findConfig(configs, m.name)
+				if c == nil {
+					continue
+				}
+				*m.mask = affinityMask(c.Value)
+				if n := pendingConfigNote(c, affinityMaskText(affinityMask(c.ValueInUse))); n != "" {
+					pending = append(pending, propsheet.Note(m.label+" — "+n))
+				}
 			}
 			cpuAff := affinityBits(affMask, cpuCount)
 			ioAff := affinityBits(ioMask, cpuCount)
@@ -132,6 +157,7 @@ func pageServerProcessors(sc *db.ServerConn) propPage {
 				propsheet.Section("Processor affinity"),
 			}
 			rows = append(rows, affinityRows...)
+			rows = append(rows, pending...)
 			rows = append(rows, []propsheet.Row{
 				propsheet.Section("Threads"),
 				cfgInt("max worker threads", "Maximum worker threads", ""),
@@ -144,7 +170,7 @@ func pageServerProcessors(sc *db.ServerConn) propPage {
 			if procErr != nil {
 				rows = append(rows, deniedReadNote(viewServerStateAdvice))
 			}
-			f := propsheet.NewForm(rows...)
+			f := configForm(&intRows, &boolRows, rows...)
 
 			apply := func(ctx context.Context) error {
 				changes, err := configChanges(intRows, boolRows)
@@ -154,22 +180,28 @@ func pageServerProcessors(sc *db.ServerConn) propPage {
 				if affinityEditable {
 					newCPUAff := make([]bool, cpuCount)
 					newIOAff := make([]bool, cpuCount)
+					allCPUs := make([]bool, cpuCount)
 					for i, v := range affinityGrid.Values() {
 						newCPUAff[i], newIOAff[i] = v[0], v[1]
+						allCPUs[i] = true
 					}
-					wantAffMask := bitsToAffinity(newCPUAff)
+					// Bits past the grid's last CPU are kept as read: the grid
+					// cannot show them, so rebuilding the mask from it alone
+					// differed from the stored one and rewrote it on every Apply.
+					offGrid := ^bitsToAffinity(allCPUs)
+					wantAffMask := bitsToAffinity(newCPUAff) | affMask&offGrid
 					if autoAffinity.Checked() {
 						wantAffMask = 0
 					}
 					if wantAffMask != affMask {
-						changes = append(changes, gosmo.ConfigChange{Name: "affinity mask", Value: wantAffMask})
+						changes = append(changes, gosmo.ConfigChange{Name: "affinity mask", Value: affinityValue(wantAffMask)})
 					}
-					wantIOMask := bitsToAffinity(newIOAff)
+					wantIOMask := bitsToAffinity(newIOAff) | ioMask&offGrid
 					if autoIOAffinity.Checked() {
 						wantIOMask = 0
 					}
 					if wantIOMask != ioMask {
-						changes = append(changes, gosmo.ConfigChange{Name: "affinity I/O mask", Value: wantIOMask})
+						changes = append(changes, gosmo.ConfigChange{Name: "affinity I/O mask", Value: affinityValue(wantIOMask)})
 					}
 				}
 				return sc.Server.ApplyConfiguration(ctx, changes, gosmo.ConfigApplyOptions{})

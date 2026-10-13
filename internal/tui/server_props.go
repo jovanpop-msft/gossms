@@ -53,21 +53,71 @@ func configValue(configs []*gosmo.ConfigurationOption, name string) string {
 
 // configRow pairs an editable Int row with the sys.configurations option
 // name it edits, so a page's apply closure can write back only the ones
-// that changed.
+// that changed. pending is the option's pendingConfigNote ("" when its
+// configured and running values agree), which configForm sets under the row.
 type configRow struct {
-	name string
-	row  *propsheet.TextRow
+	name    string
+	row     *propsheet.TextRow
+	pending string
 }
 
 // configBoolRow is configRow's Check-row counterpart, for 0/1 options.
 type configBoolRow struct {
-	name string
-	row  *propsheet.CheckRow
+	name    string
+	row     *propsheet.CheckRow
+	pending string
+}
+
+// pendingConfigNote explains an option whose configured value (what the rows
+// are seeded from) is not yet the running one, or returns "" when the two
+// agree. running is the running value as the page renders it.
+//
+// The rows edit sys.configurations.value, not value_in_use. Seeded from the
+// running value, a non-dynamic option configured 1 and running 0 read as off;
+// unticking it "to keep it off" was not an edit, so nothing was sent and it
+// came on at the next restart — with no way to send 0 from the dialog at all.
+func pendingConfigNote(c *gosmo.ConfigurationOption, running string) string {
+	if c == nil || c.Value == c.ValueInUse {
+		return ""
+	}
+	if c.IsDynamic {
+		// Not "takes effect at RECONFIGURE" alone: the server substitutes its
+		// own value for some — win10cli runs min server memory 0 at 16.
+		return "Running value: " + running + " — the server installs the value above at RECONFIGURE (Apply runs one) unless it substitutes its own."
+	}
+	return "Running value: " + running + " — the value above takes effect after the service restarts."
+}
+
+// configForm is propsheet.NewForm with each tracked row's pendingConfigNote
+// set directly under it. The slices are passed by pointer because the rows
+// passed with them are built — and the slices filled — while this call's
+// arguments are evaluated; either may be nil.
+func configForm(intRows *[]configRow, boolRows *[]configBoolRow, rows ...propsheet.Row) *propsheet.Form {
+	notes := map[propsheet.Row]string{}
+	if intRows != nil {
+		for _, cr := range *intRows {
+			notes[cr.row] = cr.pending
+		}
+	}
+	if boolRows != nil {
+		for _, cr := range *boolRows {
+			notes[cr.row] = cr.pending
+		}
+	}
+	out := make([]propsheet.Row, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, r)
+		if n := notes[r]; n != "" {
+			out = append(out, propsheet.Note(n))
+		}
+	}
+	return propsheet.NewForm(out...)
 }
 
 // newConfigEditor returns a builder that creates an editable Int row for
 // a named sp_configure option (range-validated against the option's own
-// Minimum/Maximum), appending it to *tracked so the page's apply closure
+// Minimum/Maximum) and seeded from its configured value (see
+// pendingConfigNote), appending it to *tracked so the page's apply closure
 // can find it later. An option missing on this server/edition renders as
 // a disabled "N/A" row instead.
 func newConfigEditor(configs []*gosmo.ConfigurationOption, tracked *[]configRow) func(name, label, unit string) *propsheet.TextRow {
@@ -78,8 +128,9 @@ func newConfigEditor(configs []*gosmo.ConfigurationOption, tracked *[]configRow)
 			row.SetEnabled(false)
 			return row
 		}
-		row := propsheet.Int(label, c.ValueInUse, c.Minimum, c.Maximum, unit)
-		*tracked = append(*tracked, configRow{name: name, row: row})
+		row := propsheet.Int(label, c.Value, c.Minimum, c.Maximum, unit)
+		*tracked = append(*tracked, configRow{name: name, row: row,
+			pending: pendingConfigNote(c, strconv.FormatInt(c.ValueInUse, 10))})
 		return row
 	}
 }
@@ -103,8 +154,13 @@ func newConfigBoolEditor(configs []*gosmo.ConfigurationOption, tracked *[]config
 			row.SetEnabled(false)
 			return row
 		}
-		row := propsheet.Check(label, c.ValueInUse != 0)
-		*tracked = append(*tracked, configBoolRow{name: name, row: row})
+		row := propsheet.Check(label, c.Value != 0)
+		running := "on"
+		if c.ValueInUse == 0 {
+			running = "off"
+		}
+		*tracked = append(*tracked, configBoolRow{name: name, row: row,
+			pending: pendingConfigNote(c, running)})
 		return row
 	}
 }
