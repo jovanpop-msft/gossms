@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	gosmo "github.com/radix29/gosmo"
 	"github.com/radix29/gossms/internal/db"
 	"github.com/radix29/gossms/internal/tuikit/dialogs"
 )
@@ -94,7 +95,7 @@ func (d *PropertiesDialog) ShowDependencies(app *App, sc *db.ServerConn, dbName,
 				d.ShowProperties(title, []PropertyRow{{Key: "Error", Value: err.Error()}})
 				return
 			}
-			d.ShowProperties(title, rows)
+			d.ShowPropertiesFitted(title, rows)
 		})
 	})
 }
@@ -122,13 +123,24 @@ func fetchDependencyRows(ctx context.Context, sc *db.ServerConn, dbName, schema,
 		rows = append(rows, PropertyRow{Key: "Depends On", Value: "(none)"})
 	}
 	for _, dep := range deps {
-		rows = append(rows, PropertyRow{Key: "Depends On", Value: fmt.Sprintf("%s.%s (%s)", dep.Schema, dep.Name, dep.TypeDesc)})
+		rows = append(rows, PropertyRow{Key: "Depends On", Value: dependencyLabel(dep)})
 	}
 	if len(dependents) == 0 {
 		rows = append(rows, PropertyRow{Key: "Used By", Value: "(none)"})
 	}
 	for _, dep := range dependents {
-		rows = append(rows, PropertyRow{Key: "Used By", Value: fmt.Sprintf("%s.%s (%s)", dep.Schema, dep.Name, dep.TypeDesc)})
+		rows = append(rows, PropertyRow{Key: "Used By", Value: dependencyLabel(dep)})
 	}
 	return rows, nil
+}
+
+// dependencyLabel is one Dependencies row's value. A caller-dependent edge says
+// so: it was matched by name (an unqualified EXEC, resolved the way the module's
+// owner would), so a caller with another default schema may reach a different
+// object, or none.
+func dependencyLabel(dep *gosmo.Dependency) string {
+	if dep.IsCallerDependent {
+		return fmt.Sprintf("%s.%s (%s, caller-dependent)", dep.Schema, dep.Name, dep.TypeDesc)
+	}
+	return fmt.Sprintf("%s.%s (%s)", dep.Schema, dep.Name, dep.TypeDesc)
 }

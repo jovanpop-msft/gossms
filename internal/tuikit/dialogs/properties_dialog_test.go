@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/gdamore/tcell/v3"
+
+	"github.com/radix29/gossms/internal/tuikit/core"
 )
 
 func newTestPropertiesDialog(n int) *PropertiesDialog {
@@ -139,5 +141,23 @@ func TestPropertiesDialogWheelDoesNotScrollPastEnd(t *testing.T) {
 	d.HandleMouse(tcell.NewEventMouse(inner.X+1, inner.Y+3, tcell.WheelDown, tcell.ModNone))
 	if d.scroll != 0 {
 		t.Errorf("scroll = %d, want 0 (all rows already fit, nothing to scroll)", d.scroll)
+	}
+}
+
+// ShowPropertiesFitted widens the dialog until the longest value is drawn whole,
+// and keeps the default width when everything already fits.
+func TestPropertiesDialogFittedShowsTheLongestValueWhole(t *testing.T) {
+	scr := &sizedScreen{w: 200, h: 50}
+	d := NewPropertiesDialog(scr)
+	long := "dbo.a_rather_long_procedure_name (SQL_STORED_PROCEDURE, caller-dependent)"
+	d.ShowPropertiesFitted("Deps", []PropertyRow{{Key: "Depends On", Value: "dbo.t (USER_TABLE)"}, {Key: "Depends On", Value: long}})
+	inner := d.InnerRect()
+	if got, want := inner.W-d.keyW-4, core.DisplayWidth(long); got < want {
+		t.Errorf("value column = %d wide, want at least %d (dialog width %d)", got, want, d.Rect().W)
+	}
+
+	d.ShowPropertiesFitted("Short", []PropertyRow{{Key: "K", Value: "V"}})
+	if got := d.Rect().W; got != propsDefaultW {
+		t.Errorf("dialog width = %d for short rows, want the default %d", got, propsDefaultW)
 	}
 }

@@ -82,6 +82,23 @@ func (d *PropertiesDialog) ShowPropertiesSized(title string, rows []PropertyRow,
 	d.ModalDialog.Show()
 }
 
+// ShowPropertiesFitted is ShowProperties widened (never narrowed) until the
+// longest Value shows whole, for rows whose values are names a clip would make
+// ambiguous: a cut "dbo.p (SQL_STORED_PROCEDURE, caller-dependent)" reads as an
+// ordinary reference. recentre clamps the width to the terminal.
+func (d *PropertiesDialog) ShowPropertiesFitted(title string, rows []PropertyRow) {
+	keyW, valW := propsKeyW, 0
+	for _, r := range rows {
+		if !r.Section {
+			keyW = max(keyW, core.DisplayWidth(r.Key))
+			valW = max(valW, core.DisplayWidth(r.Value))
+		}
+	}
+	// Border (2), the key column's leading space and " | " (4), one space after
+	// the value: Draw puts the value at inner.X+keyW+4.
+	d.ShowPropertiesSized(title, rows, max(propsDefaultW, keyW+valW+7), propsDefaultH)
+}
+
 // propsDataH is how many rows fit between the header and the button row. Five
 // inner lines go to chrome (blank, column header, separator, button row, blank
 // below), so a naive inner.H-3 draws the last two rows under the separator and

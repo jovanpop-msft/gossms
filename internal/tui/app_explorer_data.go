@@ -24,7 +24,7 @@ const childFetchTimeout = 30 * time.Second
 // A drop, rename, offline or failover can wait minutes on another session's
 // lock, or for WITH ROLLBACK IMMEDIATE to roll back killed transactions. At 30s
 // the statement would be abandoned mid-flight, leaving gosmo's repair pass
-// (e.g. back to MULTI_USER) on an expired context.
+// (e.g. back to the access mode the database had) on an expired context.
 //
 // Bounded because a dead connection must still report; nothing on screen is
 // blocked meanwhile. Writes the user waits for in a dialog take no deadline

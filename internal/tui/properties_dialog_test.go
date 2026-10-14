@@ -4,6 +4,8 @@ import (
 	"context"
 	"testing"
 	"time"
+
+	gosmo "github.com/radix29/gosmo"
 )
 
 // Object Dependencies and the About box share one PropertiesDialog instance, so
@@ -37,5 +39,23 @@ func TestShowGenericPropertiesSupersedesTheDependencyFetch(t *testing.T) {
 				t.Error("the dependency fetch's token is still current; its rows would overwrite what is shown now")
 			}
 		})
+	}
+}
+
+// An unqualified EXEC target is matched by name, not by the catalog, so its row
+// must not read like a resolved reference: another caller's default schema can
+// reach a different object.
+func TestDependencyLabelMarksACallerDependentEdge(t *testing.T) {
+	for _, c := range []struct {
+		dep  gosmo.Dependency
+		want string
+	}{
+		{gosmo.Dependency{Schema: "dbo", Name: "parent", TypeDesc: "USER_TABLE"}, "dbo.parent (USER_TABLE)"},
+		{gosmo.Dependency{Schema: "dbo", Name: "dep_b", TypeDesc: "SQL_STORED_PROCEDURE", IsCallerDependent: true},
+			"dbo.dep_b (SQL_STORED_PROCEDURE, caller-dependent)"},
+	} {
+		if got := dependencyLabel(&c.dep); got != c.want {
+			t.Errorf("dependencyLabel(%+v) = %q, want %q", c.dep, got, c.want)
+		}
 	}
 }

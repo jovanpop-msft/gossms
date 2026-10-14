@@ -62,7 +62,15 @@ work; close an item by deleting it when fixed.
 
 ### Bugs and suspected defects
 
-None open.
+- **B24 — A failed forced restore can open a RESTRICTED_USER database.**
+  Found doing H7 (`docs/review-plan-2026-10-13.md`), out of its scope.
+  gosmo's `buildRestoreStatement` (`restore.go`, `CloseExistingConnections`)
+  still releases with a hard-coded `SET MULTI_USER` after the RESTORE
+  whenever the database is still online — so a refused RESTORE over a
+  database left `RESTRICTED_USER` puts it back `MULTI_USER`. The fix is H7's
+  (`captureAccessMode`/`releaseAccessMode`, `server.go`), but what a
+  *successful* RESTORE should leave (the backup's mode, or the one before) is
+  unprobed; check that live first.
 
 ### Verification gaps
 

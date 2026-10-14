@@ -97,7 +97,7 @@ var objectOps = map[NodeType]objectOp{
 		},
 		// MODIFY NAME needs exclusive access, which the tree's metadata connections
 		// deny, so the rename always closes connections and always asks first.
-		renameWarning: "Renaming a database needs exclusive access to it. Existing connections will be closed and their transactions rolled back. Continue?",
+		renameWarning: "Renaming a database needs exclusive access to it. Existing connections will be closed and their transactions rolled back; its user access mode is kept. Continue?",
 		rename: func(ctx context.Context, sc *db.ServerConn, n nodeData, newName string) error {
 			return dbOf(sc, n).Rename(ctx, newName, true)
 		},
