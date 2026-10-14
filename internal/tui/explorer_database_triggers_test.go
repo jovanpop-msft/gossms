@@ -116,11 +116,11 @@ func dbTriggerRows() fakeResponse {
 	when := time.Date(2026, 3, 4, 5, 6, 7, 0, time.UTC)
 	return fakeResponse{
 		match: "tr.parent_class = 0",
-		cols:  6,
+		cols:  9,
 		rows: [][]driver.Value{
-			{"aaa_first", false, when, when, jsonNames("CREATE_TABLE"), "CREATE TRIGGER [aaa_first] ON DATABASE ..."},
-			{"ddl_audit", true, when, when, jsonNames("CREATE_TABLE", "ALTER_TABLE"), "CREATE TRIGGER [ddl_audit] ON DATABASE ..."},
-			{"clr_guard", false, when, when, jsonNames("DROP_TABLE"), nil},
+			{"aaa_first", false, when, when, jsonNames("CREATE_TABLE"), "CREATE TRIGGER [aaa_first] ON DATABASE ...", true, true, false},
+			{"ddl_audit", true, when, when, jsonNames("CREATE_TABLE", "ALTER_TABLE"), "CREATE TRIGGER [ddl_audit] ON DATABASE ...", true, true, false},
+			{"clr_guard", false, when, when, jsonNames("DROP_TABLE"), nil, false, false, true},
 		},
 	}
 }

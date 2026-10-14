@@ -235,11 +235,11 @@ func TestSystemDataTypesLoader(t *testing.T) {
 // the name alone says nothing about it.
 func TestUserDefinedDataTypesLoaderLabelsTheBaseType(t *testing.T) {
 	sc := newFamilyConn(t, fakeResponse{
-		match: "t.is_table_type = 0 AND t.is_assembly_type = 0", cols: 11,
+		match: "t.is_table_type = 0 AND t.is_assembly_type = 0", cols: 13,
 		rows: [][]driver.Value{
 			{"Phone", "dbo", int64(257), "varchar", int64(25), int64(0), int64(0),
-				"SQL_Latin1_General_CP1_CI_AS", true, "", ""},
-			{"Money", "sales", int64(258), "decimal", int64(9), int64(19), int64(4), "", false, "", ""},
+				"SQL_Latin1_General_CP1_CI_AS", true, "", "", "", ""},
+			{"Money", "sales", int64(258), "decimal", int64(9), int64(19), int64(4), "", false, "", "", "", ""},
 		}})
 	children := loadFamily(t, sc, NodeUserDefinedDataTypes)
 	want := []string{"dbo.Phone (varchar(25), null)", "sales.Money (decimal(19,4), not null)"}

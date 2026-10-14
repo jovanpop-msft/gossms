@@ -25,18 +25,18 @@ func serverTriggerPropResponses(definition driver.Value) []fakeResponse {
 		{
 			match: "FROM   sys.server_triggers",
 			arg:   serverTriggerUnderTest,
-			cols:  6,
+			cols:  9,
 			rows: [][]driver.Value{
-				{serverTriggerUnderTest, true, when, when, jsonNames("CREATE_DATABASE", "ALTER_DATABASE"), definition},
+				{serverTriggerUnderTest, true, when, when, jsonNames("CREATE_DATABASE", "ALTER_DATABASE"), definition, true, true, false},
 			},
 		},
 		{
 			match: "FROM   sys.server_triggers",
-			cols:  6,
+			cols:  9,
 			rows: [][]driver.Value{
-				{"aaa_first", false, when, when, jsonNames("LOGON"), "CREATE TRIGGER [aaa_first] ON ALL SERVER ..."},
-				{serverTriggerUnderTest, true, when, when, jsonNames("CREATE_DATABASE", "ALTER_DATABASE"), definition},
-				{"zzz_last", false, when, when, jsonNames("DROP_DATABASE"), "CREATE TRIGGER [zzz_last] ON ALL SERVER ..."},
+				{"aaa_first", false, when, when, jsonNames("LOGON"), "CREATE TRIGGER [aaa_first] ON ALL SERVER ...", true, true, false},
+				{serverTriggerUnderTest, true, when, when, jsonNames("CREATE_DATABASE", "ALTER_DATABASE"), definition, true, true, false},
+				{"zzz_last", false, when, when, jsonNames("DROP_DATABASE"), "CREATE TRIGGER [zzz_last] ON ALL SERVER ...", true, true, false},
 			},
 		},
 	}

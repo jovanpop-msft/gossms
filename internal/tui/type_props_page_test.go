@@ -38,13 +38,22 @@ func newTypePropConn(t *testing.T, responses ...fakeResponse) (*db.ServerConn, *
 // Alias types
 // ============================================================
 
+// schemaIfBound is the schema read beside a bound rule or default name: dbo
+// for a name, "" for none.
+func schemaIfBound(name driver.Value) driver.Value {
+	if s, ok := name.(string); ok && s != "" {
+		return "dbo"
+	}
+	return ""
+}
+
 func aliasTypeResponse(rule, def driver.Value) fakeResponse {
 	return fakeResponse{
 		match: "t.is_user_defined = 1 AND t.is_table_type = 0",
-		cols:  11,
+		cols:  13,
 		rows: [][]driver.Value{{
 			"Phone", "dbo", int64(257), "varchar", int64(25), int64(0), int64(0),
-			"SQL_Latin1_General_CP1_CI_AS", true, rule, def,
+			"SQL_Latin1_General_CP1_CI_AS", true, schemaIfBound(rule), rule, schemaIfBound(def), def,
 		}},
 	}
 }
@@ -96,11 +105,11 @@ func tableTypeResponses() []fakeResponse {
 		{match: "FROM   sys.table_types tt", cols: 5, rows: [][]driver.Value{
 			{"IdList", "dbo", int64(258), int64(9999), false},
 		}},
-		{match: "FROM   sys.columns c", cols: 37, rows: [][]driver.Value{
+		{match: "FROM   sys.columns c", cols: 41, rows: [][]driver.Value{
 			{"Id", int64(1), "int", int64(4), int64(10), int64(0),
-				false, false, false, nil, nil, nil, false, nil, nil, nil, false, "sys", false, false, false, false, false, "", int64(0), false, false, int64(0), false, "", "", "", "", "", false, int64(0), ""},
+				false, false, false, nil, nil, nil, false, nil, nil, nil, false, "sys", false, false, false, false, false, "", int64(0), false, false, int64(0), false, "", "", "", "", "", false, int64(0), "", "", "", "", ""},
 			{"Label", int64(2), "nvarchar", int64(100), int64(0), int64(0),
-				true, false, false, nil, nil, nil, false, "SQL_Latin1_General_CP1_CI_AS", nil, nil, false, "sys", false, false, false, false, false, "", int64(0), false, false, int64(0), false, "", "", "", "", "", false, int64(0), ""},
+				true, false, false, nil, nil, nil, false, "SQL_Latin1_General_CP1_CI_AS", nil, nil, false, "sys", false, false, false, false, false, "", int64(0), false, false, int64(0), false, "", "", "", "", "", false, int64(0), "", "", "", "", ""},
 		}},
 	}
 }

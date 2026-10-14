@@ -99,11 +99,11 @@ func serverTriggerRows() fakeResponse {
 	when := time.Date(2026, 3, 4, 5, 6, 7, 0, time.UTC)
 	return fakeResponse{
 		match: "FROM   sys.server_triggers",
-		cols:  6,
+		cols:  9,
 		rows: [][]driver.Value{
-			{"aaa_first", false, when, when, jsonNames("CREATE_DATABASE"), "CREATE TRIGGER [aaa_first] ON ALL SERVER ..."},
-			{"ddl_audit", true, when, when, jsonNames("CREATE_DATABASE", "ALTER_DATABASE"), "CREATE TRIGGER [ddl_audit] ON ALL SERVER ..."},
-			{"logon_guard", false, when, when, jsonNames("LOGON"), nil},
+			{"aaa_first", false, when, when, jsonNames("CREATE_DATABASE"), "CREATE TRIGGER [aaa_first] ON ALL SERVER ...", true, true, false},
+			{"ddl_audit", true, when, when, jsonNames("CREATE_DATABASE", "ALTER_DATABASE"), "CREATE TRIGGER [ddl_audit] ON ALL SERVER ...", true, true, false},
+			{"logon_guard", false, when, when, jsonNames("LOGON"), nil, false, false, true},
 		},
 	}
 }
