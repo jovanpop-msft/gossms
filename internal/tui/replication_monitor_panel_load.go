@@ -458,7 +458,7 @@ func (p *ReplicationMonitorPanel) summary() string {
 		auto = "refreshed every " + r.label
 	}
 	var s strings.Builder
-	fmt.Fprintf(&s, "%d publications · read %s · %s", len(p.snap.pubs), p.updated.Format("15:04:05"), auto)
+	fmt.Fprintf(&s, "%d publication%s · read %s · %s", len(p.snap.pubs), pluralSuffix(len(p.snap.pubs)), p.updated.Format("15:04:05"), auto)
 	for _, f := range p.snap.failed {
 		fmt.Fprintf(&s, " · could not read %s: %v", f.db, displayError(f.err))
 	}
@@ -707,7 +707,7 @@ func (p *ReplicationMonitorPanel) applyActions(rows []rmActionRow, err error, ke
 	} else {
 		p.actionsGrid.SetData(rmActionColumns, cells)
 	}
-	status := fmt.Sprintf("%d actions", len(rows))
+	status := fmt.Sprintf("%d action%s", len(rows), pluralSuffix(len(rows)))
 	if errs > 0 {
 		status += fmt.Sprintf(", %d with error details (Show Value on the cell for all of it)", errs)
 	}

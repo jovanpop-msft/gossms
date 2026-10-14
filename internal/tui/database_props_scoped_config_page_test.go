@@ -45,22 +45,22 @@ var scopedConfigOptions = []struct {
 // switching one ON is a real edit in every case.
 func scopedConfigResponses() []fakeResponse {
 	rows := [][]driver.Value{
-		{int64(1), "MAXDOP", "0", "", true},
+		{int64(1), "MAXDOP", "0", "", true, "int", ""},
 		// An option the page has no editor for. It belongs in the read-only
 		// grid and nowhere else, and it is here so a test that walked the
 		// scripted list instead of the page's own rows would notice.
-		{int64(99), "XTP_PROCEDURE_EXECUTION_STATISTICS", "0", "", true},
+		{int64(99), "XTP_PROCEDURE_EXECUTION_STATISTICS", "0", "", true, "bit", ""},
 	}
 	for _, o := range scopedConfigOptions {
 		if o.isBool {
-			rows = append(rows, []driver.Value{int64(len(rows) + 1), o.option, "0", "", true})
+			rows = append(rows, []driver.Value{int64(len(rows) + 1), o.option, "0", "", true, "bit", ""})
 		}
 	}
 	return []fakeResponse{
 		{match: "FROM sys.databases", arg: "appdb", cols: 10, rows: [][]driver.Value{
 			{"appdb", int64(5), "ONLINE", "FULL", int64(160), "SQL_Latin1_General_CP1_CI_AS", "SQL_Latin1_General_CP1_CI_AS", false, time.Now(), int64(0)},
 		}},
-		{match: "FROM   sys.database_scoped_configurations", cols: 5, rows: rows},
+		{match: "FROM   sys.database_scoped_configurations", cols: 7, rows: rows},
 	}
 }
 
