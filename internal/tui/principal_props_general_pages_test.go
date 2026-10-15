@@ -65,6 +65,17 @@ func TestRoleGeneralRenamesLastAndUnderTheOldName(t *testing.T) {
 	}
 }
 
+// TestRoleGeneralCountsEveryClassOfSecurable. The count once read tables and
+// views only, so a role holding nothing but EXECUTE on procedures said 0
+// (review plan 2026-10-15 § P3). The fixture holds a schema grant and two
+// permissions on one procedure: two securables.
+func TestRoleGeneralCountsEveryClassOfSecurable(t *testing.T) {
+	_, _, form, _ := loadRoleGeneralPage(t, principalRole)
+	if got := staticValue(t, form, "Explicit securables"); got != "2" {
+		t.Errorf("Explicit securables = %q, want 2", got)
+	}
+}
+
 // TestRoleGeneralOffersEveryPrincipalAsAnOwner. The owner list is users and
 // roles together; a page that offered only one kind silently narrows what the
 // user may transfer to.

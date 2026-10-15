@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql/driver"
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -95,5 +96,14 @@ func TestJobsWithoutSchedulesReportsCancellation(t *testing.T) {
 	cancel()
 	if _, _, err := agentReportDetail(ctx, sc, "Jobs Without Schedules"); !errors.Is(err, context.Canceled) {
 		t.Fatalf("err = %v, want context.Canceled", err)
+	}
+}
+
+// A run's step-0 outcome row has the same run_date/run_time as its first
+// step, so without instance_id the two came back in either order.
+func TestAgentJobHistoryQueryBreaksTiesByInstanceID(t *testing.T) {
+	q := agentJobHistoryQuery("Nightly")
+	if !strings.Contains(q, "ORDER  BY h.run_date DESC, h.run_time DESC, h.instance_id DESC;") {
+		t.Errorf("agentJobHistoryQuery does not order by instance_id last:\n%s", q)
 	}
 }

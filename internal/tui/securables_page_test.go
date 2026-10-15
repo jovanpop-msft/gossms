@@ -24,20 +24,21 @@ import (
 
 const secDatabase = "appdb"
 
-// securableResponses scripts a principal holding permissions on three
-// securables of three kinds — the database, a schema, and a table — so no one
-// row's routing can stand in for another's, and the table (the one most of
-// these act on) is last.
+// securableResponses scripts a principal holding permissions on four
+// securables of four kinds — the database, a schema, a procedure and a table —
+// so no one row's routing can stand in for another's, and the table (the one
+// most of these act on) is last.
 func securableResponses() []fakeResponse {
 	return []fakeResponse{
 		dbByNameResp(secDatabase, 5),
-		{match: "dp.class_desc IN ('DATABASE','SCHEMA','OBJECT_OR_COLUMN')", db: secDatabase, cols: 6, rows: [][]driver.Value{
+		{match: "dp.class_desc IN ('DATABASE','SCHEMA','OBJECT_OR_COLUMN','TYPE','CERTIFICATE')", db: secDatabase, cols: 6, rows: [][]driver.Value{
 			{"DATABASE", "CONNECT", "GRANT", "", "", ""},
 			{"SCHEMA", "SELECT", "GRANT", "sales", "", ""},
-			{"OBJECT_OR_COLUMN", "SELECT", "GRANT", "sales", "Orders", "USER_TABLE"},
+			{"OBJECT_OR_COLUMN", "EXECUTE", "GRANT", "sales", "PlaceOrder", "P"},
+			{"OBJECT_OR_COLUMN", "SELECT", "GRANT", "sales", "Orders", "U"},
 		}},
 		{match: "dp.minor_id > 0", db: secDatabase, cols: 9, rows: nil},
-		{match: "x.qualified LIKE", db: secDatabase, cols: 4, rows: nil},
+		{match: "x.qualified LIKE", db: secDatabase, cols: 3, rows: nil},
 	}
 }
 
@@ -64,20 +65,21 @@ func loadSecurablesPage(t *testing.T) (*fakeInstance, *App, propApply, *propshee
 	principal := "appwriter"
 	form, apply := loadPage(t, pageDatabasePrincipalSecurables(d, sc, secDatabase, &principal), inst)
 	secs, _, _ := securableGrids(t, form)
-	if secs.Row(2) == nil {
-		t.Fatal("the securables grid has fewer than three rows — the fake is under-scripted, not the page wrong")
+	if secs.Row(3) == nil {
+		t.Fatal("the securables grid has fewer than four rows — the fake is under-scripted, not the page wrong")
 	}
 	return inst, app, apply, form
 }
 
 // TestSecurablesRouteEachKindToItsOwnScope is applySecurable's switch, seen
-// from the page. The three securables carry three different ON clauses, and
-// picking the wrong one writes a valid statement about the wrong object.
+// from the page. The securables carry different ON clauses, and picking the
+// wrong one writes a valid statement about the wrong object.
 func TestSecurablesRouteEachKindToItsOwnScope(t *testing.T) {
 	for _, tc := range []struct{ row, permission, want string }{
 		{"[sales].[Orders]", "UPDATE", "GRANT UPDATE ON [sales].[Orders] TO [appwriter]"},
 		{"[sales]", "EXECUTE", "GRANT EXECUTE ON SCHEMA::[sales] TO [appwriter]"},
 		{"(database)", "ALTER ANY SCHEMA", "GRANT ALTER ANY SCHEMA TO [appwriter]"},
+		{"[sales].[PlaceOrder]", "VIEW DEFINITION", "GRANT VIEW DEFINITION ON [sales].[PlaceOrder] TO [appwriter]"},
 	} {
 		t.Run(tc.row, func(t *testing.T) {
 			inst, _, apply, form := loadSecurablesPage(t)
@@ -162,4 +164,33 @@ func TestSecurablesWriteNothingWhenUntouched(t *testing.T) {
 	if stmts := inst.StatementsIn(secDatabase); len(stmts) != 0 {
 		t.Errorf("an untouched page wrote:\n%s", strings.Join(stmts, "\n"))
 	}
+}
+
+// TestSecurablesListAndRevokeAProcedureGrant. The page once read tables and
+// views only, so a principal's EXECUTE on a procedure was neither listed nor
+// revocable here (review plan 2026-10-15 § P3). Listed with the procedure's
+// own catalog, it shows as granted and revokes against the procedure.
+func TestSecurablesListAndRevokeAProcedureGrant(t *testing.T) {
+	inst, _, apply, form := loadSecurablesPage(t)
+
+	secs, perms, _ := securableGrids(t, form)
+	selectGridRow(t, secs, 0, "[sales].[PlaceOrder]")
+	if got := secs.Row(secs.SelectedRow())[1]; got != "PROCEDURE" {
+		t.Errorf("the procedure's Type column reads %q", got)
+	}
+	row := permRowIndex(t, perms, "EXECUTE")
+	if got := perms.Grid.Row(row)[1]; got != "Grant" {
+		t.Errorf("EXECUTE on the procedure reads %q, want Grant", got)
+	}
+	for i := 0; perms.Grid.Row(i) != nil; i++ {
+		if perms.Grid.Row(i)[0] == "SELECT" {
+			t.Error("a procedure offers SELECT, which the server refuses on one")
+		}
+	}
+	cyclePermTo(t, perms, row, "(none)")
+
+	if err := apply(context.Background()); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	assertOneStatementIn(t, inst, secDatabase, "REVOKE EXECUTE ON [sales].[PlaceOrder] FROM [appwriter]")
 }

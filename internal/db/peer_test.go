@@ -82,8 +82,49 @@ func TestPeerOptionsDropTheDatabase(t *testing.T) {
 	}
 	// Everything else must survive, or the peer authenticates differently from
 	// its parent.
-	if opts.User != "sa" || opts.Password != "pw" || opts.Port != 1433 || !opts.TrustServerCertificate {
+	if opts.User != "sa" || opts.Password != "pw" || !opts.TrustServerCertificate {
 		t.Errorf("peer options lost credentials or transport settings: %+v", opts)
+	}
+	// Another host is another instance: the parent's port is not its port.
+	if opts.Port != 0 {
+		t.Errorf("peer options carry the parent's port %d to another host", opts.Port)
+	}
+}
+
+// P6: the parent's port belongs to the parent's instance. Carried to another
+// one, "HOSTA\SQL2017,50110" opening "HOSTB\PROD" dialled HOSTB:50110 and
+// bypassed SQL Browser. Kept only for the parent's own instance spelled
+// without its port, which is what the catalog reports.
+func TestParentPeerOptionsKeepThePortOnlyForTheSameInstance(t *testing.T) {
+	cases := []struct {
+		name, parent string
+		parentPort   int
+		peer         string
+		wantPort     int
+	}{
+		{"named instance on another host", `hosta\SQL2017,50110`, 0, `HOSTB\PROD`, 0},
+		{"Port field, named instance on another host", `hosta\SQL2017`, 50110, `HOSTB\PROD`, 0},
+		{"another named instance on the same host", `hosta\SQL2017,50110`, 0, `HOSTA\SQL2016`, 0},
+		{"default instance on the same host as a named parent", `hosta\SQL2017,50110`, 0, `HOSTA`, 0},
+		// Pinned: a default instance on another host dials 1433 (or its own
+		// saved connection), not the parent's port, even when that is 1433.
+		{"default instance on another host", "ubusql1,1433", 0, "ubusql2", 0},
+		{"default instance on another host, custom port", "ubusql1,14330", 0, "ubusql2", 0},
+		{"same default instance without its port", "ubusql1,14330", 0, "UBUSQL1", 14330},
+		{"same named instance without its port", `win10cli\SQL2017,55253`, 0, `WIN10CLI\sql2017`, 55253},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			sc := &ServerConn{Opts: config.Connection{Server: tc.parent, Port: tc.parentPort, User: "sa", Password: "pw"}}
+			opts := sc.parentPeerOptions(tc.peer)
+			if opts.Server != tc.peer || opts.Port != tc.wantPort {
+				t.Errorf("parent %q port %d → peer %q: got %q port %d, want port %d",
+					tc.parent, tc.parentPort, tc.peer, opts.Server, opts.Port, tc.wantPort)
+			}
+			if opts.User != "sa" || opts.Password != "pw" {
+				t.Errorf("peer options lost the parent's credentials: %+v", opts)
+			}
+		})
 	}
 }
 
@@ -167,7 +208,7 @@ func TestPeerOptionsFallBackToTheParent(t *testing.T) {
 
 	opts := parent.peerOptions("ubusql3")
 
-	if opts.User != "sa" || opts.Password != "parent-pw" || opts.Port != 1433 || !opts.TrustServerCertificate {
+	if opts.User != "sa" || opts.Password != "parent-pw" || !opts.TrustServerCertificate {
 		t.Errorf("a resolver miss did not fall back to the parent's settings: %+v", opts)
 	}
 	if opts.Server != "ubusql3" || opts.Database != "" {
@@ -238,8 +279,10 @@ func TestParentPeerOptionsIgnoreTheResolver(t *testing.T) {
 }
 
 // A resolver answer equal to the parent derivation costs no second attempt.
+// The parent carries no port: one would be its own instance's, which the
+// derivation clears for another host.
 func TestParentPeerOptionsEqualTheResolverWhenItAgrees(t *testing.T) {
-	opts := config.Connection{Server: "ubusql1", Port: 1433, User: "sa", Password: "pw"}
+	opts := config.Connection{Server: "ubusql1", User: "sa", Password: "pw"}
 	parent := &ServerConn{Opts: opts}
 	parent.SetPeerCredentials(func(string) (config.Connection, bool) {
 		return opts, true

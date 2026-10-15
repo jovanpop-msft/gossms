@@ -242,6 +242,9 @@ func yesNo(b bool) string {
 // (Object Explorer, database node) — the same backupset/backupmediafamily
 // join gosmo.Server.BackupHistory runs, but as literal T-SQL opened
 // in a query window, so the result set is live and re-runnable.
+// backupmediafamily has one row per media family *and* per mirror, so
+// bmf.mirror = 0 keeps a MIRROR TO backup from listing once per copy;
+// the tiebreakers keep a striped set's devices together, in order.
 func backupHistoryQuery(dbName string) string {
 	return fmt.Sprintf(`SELECT bs.database_name          AS [Database],
        bs.backup_start_date      AS [Start Date],
@@ -261,8 +264,8 @@ func backupHistoryQuery(dbName string) string {
        bs.user_name              AS [User],
        bs.server_name            AS [Server]
 FROM   msdb.dbo.backupset bs
-JOIN   msdb.dbo.backupmediafamily bmf ON bmf.media_set_id = bs.media_set_id
+JOIN   msdb.dbo.backupmediafamily bmf ON bmf.media_set_id = bs.media_set_id AND bmf.mirror = 0
 WHERE  bs.database_name = %s
-ORDER  BY bs.backup_finish_date DESC;
+ORDER  BY bs.backup_finish_date DESC, bs.backup_set_id DESC, bmf.family_sequence_number;
 `, gosmo.QuoteLiteral(dbName))
 }

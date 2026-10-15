@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -14,8 +15,11 @@ import (
 // buildFileSpec builds a gosmo.DatabaseFileSpec from a Data/Log file section's
 // four rows, or nil if all were left blank: the server's bare CREATE DATABASE
 // default for that file (one file at the default path/size). A blank field when
-// a sibling is set falls back to defaultName/defaultDir+ext, the identity SQL
-// Server would have chosen.
+// a sibling is set falls back to defaultName and defaultDir/name+ext, the
+// identity SQL Server would have chosen. With defaultDir unknown (the server
+// reports no default path) Path stays empty: gosmo places the file from its own
+// connect-time copy of the default, or refuses before sending. A bare file name
+// would reach the server, which takes it as relative and fails (Msg 5105).
 func buildFileSpec(nameRow, pathRow *propsheet.TextRow, sizeRow, growthRow *propsheet.TextRow, defaultName, defaultDir, ext string) *gosmo.DatabaseFileSpec {
 	name := strings.TrimSpace(nameRow.Value())
 	path := strings.TrimSpace(pathRow.Value())
@@ -27,8 +31,8 @@ func buildFileSpec(nameRow, pathRow *propsheet.TextRow, sizeRow, growthRow *prop
 	if name == "" {
 		name = defaultName
 	}
-	if path == "" {
-		path = defaultDir + name + ext
+	if path == "" && defaultDir != "" {
+		path = gosmo.JoinServerPath(defaultDir, name+ext)
 	}
 	return &gosmo.DatabaseFileSpec{Name: name, Path: path, SizeKB: sizeMB * 1024, GrowthKB: growthMB * 1024}
 }
@@ -275,6 +279,10 @@ func buildNewDatabaseFilegroupsPage(sc *db.ServerConn, pf *ndbPrefetch, dbName, 
 			if e.fileName == "" && (e.isReadOnly || e.isDefault) {
 				return emptyFilegroupToggleError(e.name)
 			}
+			// Caught here, not by AddFile: by then the database exists.
+			if e.fileName != "" && e.filePath == "" && pf.defaultDataPath == "" {
+				return fmt.Errorf("filegroup %s: give its first file a path — the server reports no default data directory", e.name)
+			}
 		}
 		return nil
 	}
@@ -304,7 +312,7 @@ func buildNewDatabaseFilegroupsPage(sc *db.ServerConn, pf *ndbPrefetch, dbName, 
 			if e.fileName != "" {
 				path := e.filePath
 				if path == "" {
-					path = pf.defaultDataPath + e.fileName + ".ndf"
+					path = gosmo.JoinServerPath(pf.defaultDataPath, e.fileName+".ndf")
 				}
 				spec := gosmo.DatabaseFileSpec{
 					Name: e.fileName, FileGroup: e.name, Path: path,

@@ -22,20 +22,20 @@ var securableColumnColumns = []string{"Column", "State"}
 
 // securable identifies one thing a database principal's Securables page can
 // grant or deny permissions on — the page a user and a database role share:
-// a table, a view, a schema, or the database itself.
+// the database itself, or any securable below it gosmo has a class for.
 type securable struct {
-	Type   string // "TABLE", "VIEW", "SCHEMA", "DATABASE"
-	Schema string // empty for DATABASE
+	Type   gosmo.SecurableClass
+	Schema string // empty for a class that is not schema-scoped
 	Name   string // empty for DATABASE
 }
 
-func (s securable) key() string { return s.Type + "\x00" + s.Schema + "\x00" + s.Name }
+func (s securable) key() string { return string(s.Type) + "\x00" + s.Schema + "\x00" + s.Name }
 
 func (s securable) label() string {
 	switch s.Type {
-	case "DATABASE":
+	case gosmo.SecurableDatabase:
 		return "(database)"
-	case "SCHEMA":
+	case gosmo.SecurableSchema, gosmo.SecurableCertificate:
 		return gosmo.QuoteName(s.Name)
 	default:
 		return gosmo.QuoteName(s.Schema) + "." + gosmo.QuoteName(s.Name)
@@ -43,21 +43,22 @@ func (s securable) label() string {
 }
 
 // hasColumns reports whether this securable's columns can carry permissions of
-// their own — only tables and views can.
-func (s securable) hasColumns() bool { return s.Type == "TABLE" || s.Type == "VIEW" }
+// their own — tables, views and table-valued functions can.
+func (s securable) hasColumns() bool { return s.Type.HasColumns() }
 
 // catalog returns every permission name grantable on this securable's type.
 // A view's differs from a table's: it has no VIEW CHANGE TRACKING.
-func (s securable) catalog() []string {
-	return gosmo.SecurableClass(s.Type).PermissionNames()
-}
+func (s securable) catalog() []string { return s.Type.PermissionNames() }
+
+// columnCatalog returns every permission name grantable on one of this
+// securable's columns: a multi-statement table function's lacks UPDATE.
+func (s securable) columnCatalog() []string { return s.Type.ColumnPermissionNames() }
 
 // gosmo is the securable as ApplyPermission addresses it, narrowed to columns
-// when they are given. Type is spelled as gosmo's SecurableClass values for
-// these four classes are; the database's own name stays off it, since the
+// when they are given. The database's own name stays off it, since the
 // receiver already names the database.
 func (s securable) gosmo(columns []string) gosmo.Securable {
-	sec := gosmo.Securable{Class: gosmo.SecurableClass(s.Type), Schema: s.Schema, Name: s.Name, Columns: columns}
+	sec := gosmo.Securable{Class: s.Type, Schema: s.Schema, Name: s.Name, Columns: columns}
 	if sec.Class == gosmo.SecurableDatabase {
 		sec.Name, sec.Schema = "", ""
 	}
@@ -257,13 +258,13 @@ func buildSecurablesMatrix(
 	securableRows := func() [][]string {
 		visibleSecurables = visibleSecurables[:0]
 		for _, s := range securables {
-			if matchesFilter(securableFilter, s.label(), s.Type) {
+			if matchesFilter(securableFilter, s.label(), string(s.Type)) {
 				visibleSecurables = append(visibleSecurables, s)
 			}
 		}
 		rows := make([][]string, len(visibleSecurables))
 		for i, s := range visibleSecurables {
-			rows[i] = []string{s.label(), s.Type}
+			rows[i] = []string{s.label(), string(s.Type)}
 		}
 		return rows
 	}
@@ -348,9 +349,18 @@ func buildSecurablesMatrix(
 		resetGrid(permGrid, permissionStateColumns, permRowsFor(selectedEdits), 0)
 		permSection.SetTitle("Permissions for " + selectedSec.label())
 		if selectedSec.hasColumns() {
+			// The column permissions offered are the securable's own: a
+			// multi-statement table function refuses UPDATE (col). The
+			// permission picked last stays picked when this one has it too.
+			names := selectedSec.columnCatalog()
+			picked := colPermSelect.Value()
+			colPermSelect.SetItems(names)
+			if i := slices.Index(names, picked); i >= 0 {
+				colPermSelect.SetSelected(i)
+			}
 			colHint.Set("Click Load Columns to edit per-column grants on " + selectedSec.label() + ".")
 		} else {
-			colHint.Set(selectedSec.Type + " securables have no columns.")
+			colHint.Set(string(selectedSec.Type) + " securables have no columns.")
 		}
 	}
 	securableGrid.OnSelectRow = loadSecurable
@@ -363,11 +373,11 @@ func buildSecurablesMatrix(
 	var loadColsBusy bool
 	loadColsBtn := widgets.NewButton("Load Columns", func() {
 		if selected < 0 || !selectedSec.hasColumns() {
-			colHint.Set("Select a table or view above first — only those have columns.")
+			colHint.Set("Select a table, view or table-valued function above first — only those have columns.")
 			return
 		}
 		sec := selectedSec
-		perm := gosmo.ColumnPermissionNames()[colPermSelect.Selected()]
+		perm := colPermSelect.Value()
 		colHint.Set("Loading columns for " + sec.label() + "...")
 
 		var cols []*gosmo.Column
@@ -411,7 +421,7 @@ func buildSecurablesMatrix(
 	var available []securable
 	setCandidates := func(found []securable, term string) {
 		available = available[:0]
-		if dbSec := (securable{Type: "DATABASE"}); matchesFilter(term, dbSec.label(), dbSec.Type) {
+		if dbSec := (securable{Type: gosmo.SecurableDatabase}); matchesFilter(term, dbSec.label(), string(dbSec.Type)) {
 			available = append(available, dbSec)
 		}
 		truncated := len(found) > securableSearchLimit
@@ -579,7 +589,7 @@ func buildSecurablesMatrix(
 		propsheet.Buttons(loadColsBtn),
 		colHint,
 		colsRow,
-		propsheet.Note(permStateCycleNote+" Tab switches between the grids, and the filter boxes narrow them as you type. \"Search to add\" looks names up on the server — type part of a table, view or schema name, then pick it from the dropdown and click Add to give it its own row. For a table or view, Load Columns fetches its columns so single-column grants can be edited below; a column DENY overrides an object-level GRANT."),
+		propsheet.Note(permStateCycleNote+" Tab switches between the grids, and the filter boxes narrow them as you type. \"Search to add\" looks names up on the server — type part of the name of a schema, object, type or certificate, then pick it from the dropdown and click Add to give it its own row. For a table, view or table-valued function, Load Columns fetches its columns so single-column grants can be edited below; a column DENY overrides an object-level GRANT."),
 	)
 
 	// Both loops walk a stable order rather than ranging their map: map order

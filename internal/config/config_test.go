@@ -1184,6 +1184,41 @@ func TestRemoveConnection(t *testing.T) {
 	}
 }
 
+// Older configs can hold entries with distinct custom names that generate the
+// same name; saving over them must remove every one, or a stale duplicate stays
+// in Recent Connections.
+func TestAddOrUpdateReplacesEveryLegacyDuplicate(t *testing.T) {
+	c := &Config{}
+	c.Connections = []Connection{
+		{Name: "prod (old)", Server: "srv", User: "sa", Database: "Sales"},
+		{Name: "other", Server: "elsewhere", User: "sa"},
+		{Name: "prod (older)", Server: "srv", User: "sa", Database: "Sales"},
+	}
+	conn := Connection{Server: "srv", User: "sa", Database: "Sales"}
+	c.AddOrUpdate(conn)
+
+	var names []string
+	for _, existing := range c.Connections {
+		names = append(names, existing.Name)
+	}
+	if want := []string{"other", conn.GeneratedName()}; !slices.Equal(names, want) {
+		t.Errorf("connections after saving over two legacy duplicates = %q, want %q", names, want)
+	}
+
+	// RemoveConnection likewise takes every copy in one call.
+	c.Connections = append(c.Connections,
+		Connection{Name: "a", Server: "x", User: "u"},
+		Connection{Name: "b", Server: "x", User: "u"})
+	if !c.RemoveConnection(Connection{Server: "x", User: "u"}.GeneratedName()) {
+		t.Fatal("RemoveConnection found neither legacy copy")
+	}
+	for _, existing := range c.Connections {
+		if existing.Server == "x" {
+			t.Errorf("RemoveConnection left a copy behind: %+v", existing)
+		}
+	}
+}
+
 // T58: the UI goroutine snapshots with BeginSave and adopts with EndSave while
 // Run writes the file elsewhere. A connection added and a setting changed in
 // between must stay in memory and reach the file on the next save — neither

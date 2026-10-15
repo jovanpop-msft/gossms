@@ -92,8 +92,11 @@ func databaseSchemaResponses() []fakeResponse {
 // the editable permission matrices are permissions_pages_test.go's.
 func principalPermissionResponses() []fakeResponse {
 	return []fakeResponse{
-		{match: "AND    dp.class_desc IN ('DATABASE','SCHEMA','OBJECT_OR_COLUMN')", cols: 6, rows: [][]driver.Value{
+		{match: "AND    dp.class_desc IN ('DATABASE','SCHEMA','OBJECT_OR_COLUMN','TYPE','CERTIFICATE')", cols: 6, rows: [][]driver.Value{
 			{"SCHEMA", "SELECT", "GRANT", principalSchema, "", ""},
+			// Two permissions on one procedure: one securable.
+			{"OBJECT_OR_COLUMN", "EXECUTE", "GRANT", principalSchema, "usp_load", "P"},
+			{"OBJECT_OR_COLUMN", "VIEW DEFINITION", "GRANT", principalSchema, "usp_load", "P"},
 		}},
 		{match: "dp.class_desc = 'SCHEMA' AND dp.major_id = SCHEMA_ID(@p1)", cols: 5, rows: [][]driver.Value{
 			{"reporting", "SQL_USER", "dbo", "SELECT", "GRANT"},

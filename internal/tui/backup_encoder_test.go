@@ -264,6 +264,18 @@ func TestBackupHistoryQueryNamesEverySetType(t *testing.T) {
 	}
 }
 
+// backupmediafamily has a row per mirror; without bmf.mirror = 0 a MIRROR TO
+// backup listed once per copy, which read as two backups.
+func TestBackupHistoryQuerySkipsMirrors(t *testing.T) {
+	q := backupHistoryQuery("AppDB")
+	if !strings.Contains(q, "bmf.media_set_id = bs.media_set_id AND bmf.mirror = 0") {
+		t.Errorf("backupHistoryQuery joins every mirror of a media set:\n%s", q)
+	}
+	if !strings.Contains(q, "bs.backup_set_id DESC, bmf.family_sequence_number;") {
+		t.Errorf("backupHistoryQuery does not keep a striped set's devices together:\n%s", q)
+	}
+}
+
 // sqlServerProductName turns a backup header's version major into the name
 // the Inspect view shows. The mapping is not arithmetic — SQL Server skipped
 // major 11's usual naming and there is no 2010 — so it is a table, and a

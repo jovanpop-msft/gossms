@@ -248,8 +248,29 @@ func (sc *ServerConn) peerOptions(server string) config.Connection {
 
 // parentPeerOptions is sc's own options retargeted at server — Peer's fallback
 // when a resolver answer won't connect.
+//
+// The parent's port is kept only for the parent's own instance under another
+// spelling (same host and instance name, e.g. the catalog's portless "HOST" for
+// "host,14330"). For any other instance it is another listener's port:
+// "HOSTA\SQL2017,50110" opening peer "HOSTB\PROD" dialled HOSTB:50110 and
+// bypassed SQL Browser. With Port cleared a named instance resolves through
+// Browser and a default instance dials 1433. A different host is a different
+// instance even when the default instance on both happens to share a port; a
+// replica on a non-default port needs a saved connection.
 func (sc *ServerConn) parentPeerOptions(server string) config.Connection {
-	return retargetAt(sc.Opts, server)
+	opts := retargetAt(sc.Opts, server)
+	if !sameInstanceApartFromPort(sc.Opts.Server, server) {
+		opts.Port = 0
+	}
+	return opts
+}
+
+// sameInstanceApartFromPort reports whether a and b name one host and one
+// instance name (case-insensitive), ignoring any port either carries.
+func sameInstanceApartFromPort(a, b string) bool {
+	hostA, instA, _ := gosmo.ParseServerAddress(strings.TrimSpace(a))
+	hostB, instB, _ := gosmo.ParseServerAddress(strings.TrimSpace(b))
+	return strings.EqualFold(hostA, hostB) && strings.EqualFold(instA, instB)
 }
 
 // retargetAt points a saved connection at server with no database; see

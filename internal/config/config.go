@@ -846,13 +846,16 @@ func (c *Config) RemoveConnection(name string) bool {
 }
 
 // removeConnection is RemoveConnection on a list.
+//
+// Every match goes: older configs can hold entries with distinct custom names
+// that generate the same name, and stopping at the first left a stale
+// duplicate in Recent Connections.
 func removeConnection(list []Connection, name string) ([]Connection, bool) {
-	for i, existing := range list {
-		if existing.Name == name || existing.GeneratedName() == name {
-			return slices.Delete(list, i, i+1), true
-		}
-	}
-	return list, false
+	n := len(list)
+	list = slices.DeleteFunc(list, func(existing Connection) bool {
+		return existing.Name == name || existing.GeneratedName() == name
+	})
+	return list, len(list) != n
 }
 
 // MatchByServer returns saved connections whose Server has the given

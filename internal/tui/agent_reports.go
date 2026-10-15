@@ -194,7 +194,9 @@ func dashIfZero(t time.Time) string {
 }
 
 // agentJobHistoryQuery builds the read-only T-SQL for a job's "View History",
-// run in a new query window (like backupHistoryQuery).
+// run in a new query window (like backupHistoryQuery). A run's step-0
+// outcome row shares its first step's run_date/run_time, so instance_id
+// breaks the tie (as gosmo's Job.History does) and the outcome row stays first.
 func agentJobHistoryQuery(jobName string) string {
 	return fmt.Sprintf(`SELECT h.run_date                 AS [Run Date],
        h.run_time                 AS [Run Time],
@@ -212,6 +214,6 @@ func agentJobHistoryQuery(jobName string) string {
 FROM   msdb.dbo.sysjobhistory h
 JOIN   msdb.dbo.sysjobs j ON j.job_id = h.job_id
 WHERE  j.name = %s
-ORDER  BY h.run_date DESC, h.run_time DESC;
+ORDER  BY h.run_date DESC, h.run_time DESC, h.instance_id DESC;
 `, gosmo.QuoteLiteral(jobName))
 }

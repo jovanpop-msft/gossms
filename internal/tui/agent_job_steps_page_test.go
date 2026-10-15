@@ -51,7 +51,9 @@ func loadJobStepsPage(t *testing.T, first ...fakeResponse) (*fakeInstance, propA
 	t.Helper()
 	job := jobRow(agentJobName, "Database Maintenance", "appuser", true, 0, 0, "")
 	responses := append(first, agentJobResponses(job)...)
-	responses = append(responses, jobStepsResponse(), agentDatabaseListResponse())
+	responses = append(responses, jobStepsResponse(), agentDatabaseListResponse(),
+		// A reorder reads the start step (step 1) to carry it with its step.
+		fakeResponse{match: "SELECT start_step_id FROM msdb.dbo.sysjobs", cols: 1, rows: [][]driver.Value{{int64(1)}}})
 	sc, inst := newFakeConn(t, responses...)
 	dialog, _ := newFakeDialog(t)
 	name := agentJobName
@@ -262,6 +264,11 @@ func TestJobStepsMoveUpReordersOnTheServer(t *testing.T) {
 		if !strings.Contains(batch[add:], want) {
 			t.Errorf("the re-inserted step lost %s:\n%s", want, batch)
 		}
+	}
+	// The job started at Check integrity, now step 2; msdb would leave the
+	// start at 1, which is Rebuild indexes after the move.
+	if !strings.Contains(batch, "sp_update_job @job_name = N'Nightly reindex', @start_step_id = 2") {
+		t.Errorf("the job's start step does not follow Check integrity to step 2:\n%s", batch)
 	}
 }
 

@@ -12,12 +12,18 @@
 //
 // -live-replica is spelled as sys.availability_replicas.replica_server_name, as
 // Peer receives it. Skipped without the flags.
+//
+// Run it a second time with a parent dialled by port and a peer that is another
+// named instance on the same host (-live-primary 'HOST\A,55253' -live-replica
+// 'HOST\B'): the fallback must drop the parent's port and resolve B through
+// Browser. Keeping the port connects to A again, which the name check catches.
 package db
 
 import (
 	"context"
 	"database/sql"
 	"flag"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -63,7 +69,17 @@ func liveOpts(server, user, password string) config.Connection {
 // through Peer, which is what's under test.
 func liveReplicaExec(t *testing.T, stmt string) {
 	t.Helper()
-	db, err := sql.Open("sqlserver", "sqlserver://"+*liveUser+":"+*livePassword+"@"+*liveReplica+"?TrustServerCertificate=true")
+	// A named instance is the URL's path ("HOST\INSTANCE" pasted into the host
+	// is "invalid URL format"); a port stays on the host.
+	host, instance, _ := strings.Cut(*liveReplica, `\`)
+	if inst, port, ok := strings.Cut(instance, ","); ok {
+		instance, host = inst, host+":"+port
+	} else if h, port, ok := strings.Cut(host, ","); ok {
+		host = h + ":" + port
+	}
+	dsn := url.URL{Scheme: "sqlserver", User: url.UserPassword(*liveUser, *livePassword),
+		Host: host, Path: instance, RawQuery: "TrustServerCertificate=true"}
+	db, err := sql.Open("sqlserver", dsn.String())
 	if err != nil {
 		t.Fatalf("open %s: %v", *liveReplica, err)
 	}

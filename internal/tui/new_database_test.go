@@ -197,7 +197,9 @@ func TestNewDatabaseDerivesTheRestOfAPartlyFilledFileSection(t *testing.T) {
 		t.Fatalf("apply: %v", err)
 	}
 	stmt := inst.Statements()[0]
-	assertStatementHas(t, stmt, "ON PRIMARY", "NAME = [AppDB]", "AppDB.mdf", "SIZE = 524288KB")
+	// The fake's default data path, C:\Data, has no trailing separator: a
+	// concatenation glued it onto the file name as C:\DataAppDB.mdf.
+	assertStatementHas(t, stmt, "ON PRIMARY", "NAME = [AppDB]", `FILENAME = N'C:\Data\AppDB.mdf'`, "SIZE = 524288KB")
 	// The log section was left entirely blank, so it stays the server's.
 	assertStatementLacks(t, stmt, "LOG ON")
 }
@@ -374,6 +376,54 @@ func TestNewDatabaseFilegroupFirstFileLandsInItsOwnFilegroup(t *testing.T) {
 		"SIZE = 262144KB",
 		"TO FILEGROUP [FG_Archive]",
 	)
+}
+
+// A first file with no path goes in the default data directory, joined with
+// its separator rather than glued on.
+func TestNewDatabaseFilegroupFirstFileDefaultsToTheDataDirectory(t *testing.T) {
+	d, inst := newDatabaseDialog(t)
+	general, _ := d.page(t, "General")
+	editText(t, general, "Database name", newDatabaseName)
+
+	form, apply := d.page(t, "Filegroups")
+	editText(t, form, "New filegroup name", "FG_Archive")
+	editText(t, form, "First file logical name", "AppDB_archive")
+	clickButton(t, form, "Add")
+
+	if err := apply(context.Background()); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	assertStatementHas(t, onlyStatementWith(t, inst, "ADD FILE ("), `FILENAME = N'C:\Data\AppDB_archive.ndf'`)
+}
+
+// With no default data or log directory reported (SERVERPROPERTY NULL), a
+// file the user left without a path used to be sent as a bare file name,
+// which the server takes as relative and fails (Msg 5105). CREATE DATABASE
+// cannot omit FILENAME either (Msg 1036), so it is refused before anything is
+// sent — on Filegroups at Validate, since by apply the database exists.
+func TestNewDatabaseWithNoDefaultDirectoryRefusesAnUnpathedFile(t *testing.T) {
+	info := serverInfoResponse()
+	info.rows[0][10], info.rows[0][11] = nil, nil
+	sc, inst := newFakeConnFrom(t, append([]fakeResponse{info, sysInfoResponse()}, newDatabaseResponses()...))
+	d, _ := newDatabaseDialogOn(t, sc, inst)
+
+	general, apply := d.page(t, "General")
+	editText(t, general, "Database name", newDatabaseName)
+	editFileField(t, general, "Data file", "Initial size", "512")
+	if err := apply(context.Background()); err == nil || !strings.Contains(err.Error(), "no default data directory") {
+		t.Errorf("apply = %v, want a refusal naming the missing default directory", err)
+	}
+	if got := inst.Statements(); len(got) != 0 {
+		t.Errorf("statements sent = %q, want none", got)
+	}
+
+	form, _ := d.page(t, "Filegroups")
+	editText(t, form, "New filegroup name", "FG_Archive")
+	editText(t, form, "First file logical name", "AppDB_archive")
+	clickButton(t, form, "Add")
+	if err := form.Validate(); err == nil || !strings.Contains(err.Error(), "FG_Archive") {
+		t.Errorf("Validate = %v, want a refusal naming FG_Archive", err)
+	}
 }
 
 // A filegroup added without a first file is created empty, and Read-only or
