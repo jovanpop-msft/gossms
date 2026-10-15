@@ -127,10 +127,7 @@ func loadDefaultsChildren(l loaderCtx, node *explorerNode) ([]*explorerNode, err
 func loadPlanGuidesChildren(l loaderCtx, node *explorerNode) ([]*explorerNode, error) {
 	return listDatabaseChildren(l, node, (*gosmo.Database).PlanGuides,
 		func(g *gosmo.PlanGuide) *explorerNode {
-			label := g.Name
-			if g.IsDisabled {
-				label += " (Disabled)"
-			}
+			label := disabledLabel(g.Name, !g.IsDisabled)
 			n := l.node(label, NodePlanGuide, "", g.Name, node.data.DBName)
 			n.data.CreateDate = g.CreateDate
 			n.data.IsEnabled = !g.IsDisabled

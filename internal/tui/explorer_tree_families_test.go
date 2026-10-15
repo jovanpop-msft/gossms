@@ -379,6 +379,26 @@ func TestPlanGuidesLoaderLabelsTheDisabledOnes(t *testing.T) {
 	}
 }
 
+func TestSecurityPoliciesLoaderLabelsTheDisabledOnes(t *testing.T) {
+	sc := newFamilyConn(t,
+		fakeResponse{
+			match: "FROM   sys.security_policies", cols: 6,
+			rows: [][]driver.Value{
+				{"RlsOn", "sec", int64(1), true, false, true},
+				{"RlsOff", "sec", int64(2), false, false, true},
+			}},
+		fakeResponse{match: "FROM   sys.security_predicates", cols: 6})
+	children := loadFamily(t, sc, NodeSecurityPolicies)
+	want := []string{"sec.RlsOn", "sec.RlsOff (Disabled)"}
+	if got := labelsOfNodes(children); !slices.Equal(got, want) {
+		t.Fatalf("children = %v, want %v", got, want)
+	}
+	assertCarriesDatabase(t, children, NodeSecurityPolicy)
+	if children[1].data.Name != "RlsOff" || children[1].data.IsEnabled {
+		t.Errorf("Name = %q, IsEnabled = %v; want RlsOff, false", children[1].data.Name, children[1].data.IsEnabled)
+	}
+}
+
 func TestExternalResourceLoaders(t *testing.T) {
 	sc := newFamilyConn(t,
 		fakeResponse{

@@ -114,18 +114,3 @@ func TestMissingIndexScriptKeepsABracketInAName(t *testing.T) {
 		}
 	}
 }
-
-func TestUnbracket(t *testing.T) {
-	for _, tc := range []struct{ in, want string }{
-		{"[a]]b]", "a]b"}, {"[[x]", "[x"}, {"bare", "bare"}, {"[a]b]", "[a]b]"}, {"[]", ""}, {"[", "["},
-	} {
-		if got := unbracket(tc.in); got != tc.want {
-			t.Errorf("unbracket(%q) = %q, want %q", tc.in, got, tc.want)
-		}
-	}
-	for _, name := range []string{"a]b", "]]", "[y]", ""} {
-		if got := unbracket(bracket(name)); got != name {
-			t.Errorf("unbracket(bracket(%q)) = %q", name, got)
-		}
-	}
-}

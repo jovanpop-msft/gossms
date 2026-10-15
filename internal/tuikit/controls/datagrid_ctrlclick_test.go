@@ -1,6 +1,7 @@
 package controls
 
 import (
+	"fmt"
 	"slices"
 	"testing"
 
@@ -98,6 +99,40 @@ func TestCtrlClickKeepsAShiftSelectedRun(t *testing.T) {
 
 	clickGridRow(g, 4, tcell.ModCtrl)
 	wantRows(t, g, []int{0, 1, 2, 4}, "Ctrl+click after a Shift-selected run")
+}
+
+// A Ctrl+click inside a folded-in run unpicks that one row and leaves the rest
+// of the run; picking it again restores it. The run is held as a range with the
+// Ctrl+clicked rows toggled against it, so rows inside and outside it take
+// different paths through rowMarked, SelectedRows and the row count.
+func TestCtrlClickUnpicksAndRepicksInsideAShiftSelectedRun(t *testing.T) {
+	g := newMarkSelectGrid()
+	clickGridRow(g, 1, tcell.ModNone)
+	clickGridRow(g, 3, tcell.ModShift)
+	for _, step := range []struct {
+		row  int
+		want []int
+	}{
+		{2, []int{1, 3}},
+		{0, []int{0, 1, 3}},
+		{2, []int{0, 1, 2, 3}},
+		{1, []int{0, 2, 3}},
+		{3, []int{0, 2}},
+		{0, []int{2}},
+		{2, []int{}},
+	} {
+		clickGridRow(g, step.row, tcell.ModCtrl)
+		what := fmt.Sprintf("Ctrl+click on row %d", step.row)
+		wantRows(t, g, step.want, what)
+		if n := g.selectedRowCount(); n != len(step.want) {
+			t.Fatalf("%s: selectedRowCount() = %d, want %d", what, n, len(step.want))
+		}
+		for r := range g.rows.Len() {
+			if got, want := g.rowMarked(r), slices.Contains(step.want, r); got != want {
+				t.Fatalf("%s: rowMarked(%d) = %v, want %v", what, r, got, want)
+			}
+		}
+	}
 }
 
 // TestAnythingButACtrlClickDropsTheMarkedRows covers the three gestures that

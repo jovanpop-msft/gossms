@@ -88,7 +88,7 @@ func (d *DetachDatabaseDialog) fetchPrefetch(ctx context.Context, sc *db.ServerC
 			pf.files = sortDatabaseFiles(files)
 		}
 	}
-	if sessions, err := sc.Server.ActiveSessions(ctx, false); err == nil {
+	if sessions, err := sc.Server.ActiveSessions(ctx, gosmo.UserSessionsOnly); err == nil {
 		pf.sessions = 0
 		for _, s := range sessions {
 			if s.DatabaseName == d.dbName {

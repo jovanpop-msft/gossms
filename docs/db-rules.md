@@ -120,7 +120,8 @@ Object Explorer filters, query execution. Each is a bug that shipped.
   for text a person reads (completion) — a bare `User` column is the USER
   function and returns `dbo` in every row; `UnquoteName` for a name the server
   hands back quoted (`[a]]b]`). `internal/showplan` stays driver-free, so it
-  has its own `bracket`/`unbracket` pair.
+  imports the stdlib-only `github.com/radix29/gosmo/tsql` (`tsql.QuoteName`,
+  `tsql.UnquoteName`), never the gosmo root package.
 - **A typed secret never reaches Script Changes in clear — gosmo redacts it.**
   Pass the real password, secret or key source to gosmo on both Apply and
   Script; under `gosmo.WithScript` its exec chokepoint captures

@@ -34,3 +34,41 @@ func benchmarkColWidths(b *testing.B, cols []string, rows [][]string) {
 		g.computeColWidths()
 	}
 }
+
+// constRows is a RowSource of n identical rows that holds none of them: the
+// selection benchmarks measure the selection, not a million-row slice.
+type constRows int
+
+func (n constRows) Len() int       { return int(n) }
+func (constRows) Row(int) []string { return []string{"42", "name"} }
+
+// newBigBlockGrid is a read-only cell-cursor grid of n rows with all of them
+// Shift-selected — the state a Ctrl+click then folds into a discontiguous
+// selection.
+func newBigBlockGrid(n int) *DataGrid {
+	g := newTestDataGrid()
+	g.SetSource([]string{"id", "name"}, constRows(n))
+	g.SetCellCursor(true)
+	g.selAnchorRow, g.selRow, g.blockSelecting = 0, n-1, true
+	return g
+}
+
+// A Ctrl+click after selecting every row of a large result runs on the UI
+// goroutine. It used to copy the whole run into a map first.
+func BenchmarkMarkRowAfterSelectAll(b *testing.B) {
+	g := newBigBlockGrid(1_000_000)
+	for b.Loop() {
+		g.ClearMarkedRows() // back to the Shift-selected run, so each click is the first
+		g.markRow(500_000)
+	}
+}
+
+// Copy, and the context menu's row count, read selectedRows after such a
+// Ctrl+click: it used to sort the map's million keys.
+func BenchmarkSelectedRowsAfterCtrlClick(b *testing.B) {
+	g := newBigBlockGrid(1_000_000)
+	g.markRow(500_000)
+	for b.Loop() {
+		g.selectedRows()
+	}
+}

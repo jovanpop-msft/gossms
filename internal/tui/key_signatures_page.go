@@ -69,8 +69,8 @@ func moduleTypeText(typeDesc string) string {
 // moduleSigner is what gosmo signs and unsigns: a procedure, function or DML
 // trigger handle.
 type moduleSigner interface {
-	AddSignature(ctx context.Context, by gosmo.Signer, counter bool) error
-	DropSignature(ctx context.Context, by gosmo.Signer, counter bool) error
+	AddSignature(ctx context.Context, by gosmo.Signer, kind gosmo.SignatureKind) error
+	DropSignature(ctx context.Context, by gosmo.Signer, kind gosmo.SignatureKind) error
 }
 
 // signableRef returns the handle for the module e names, picked by its
@@ -257,7 +257,11 @@ func buildKeySignaturesForm(s *keySigner, signed []*gosmo.ModuleSignature, mods 
 		signer := gosmo.Signer{Kind: s.kind, Name: s.name}
 		for _, e := range edits.all() {
 			if e.removing {
-				if err := e.signableRef(ref).DropSignature(ctx, signer, e.counter); err != nil {
+				kind := gosmo.PlainSignature
+				if e.counter {
+					kind = gosmo.CounterSignature
+				}
+				if err := e.signableRef(ref).DropSignature(ctx, signer, kind); err != nil {
 					return err
 				}
 			}
@@ -272,7 +276,7 @@ func buildKeySignaturesForm(s *keySigner, signed []*gosmo.ModuleSignature, mods 
 			if byPassword {
 				signer.Password = passField.Value()
 			}
-			if err := e.signableRef(ref).AddSignature(ctx, signer, false); err != nil {
+			if err := e.signableRef(ref).AddSignature(ctx, signer, gosmo.PlainSignature); err != nil {
 				return err
 			}
 		}

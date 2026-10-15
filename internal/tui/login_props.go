@@ -681,7 +681,7 @@ func pageLoginStatus(sc *db.ServerConn, loginName *string) propPage {
 				badPasswordTime = formatSQLDate(det.BadPasswordTime)
 			}
 
-			sessions, err := sc.Server.ActiveSessions(ctx, true)
+			sessions, err := sc.Server.ActiveSessions(ctx, gosmo.AllSessions)
 			if err != nil {
 				return nil, nil, err
 			}

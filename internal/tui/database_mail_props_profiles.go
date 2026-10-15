@@ -473,19 +473,23 @@ func mailGrantWrites(sc *db.ServerConn, orig, cur mailGrants, profiles []string)
 		for _, prof := range profiles {
 			o, c := orig.get(p, prof), cur.get(p, prof)
 			ref := sc.Server.MailProfileRef(prof)
+			def := gosmo.MailNotDefaultProfile
+			if c.isDefault {
+				def = gosmo.MailDefaultProfile
+			}
 			switch {
 			case o == c:
 			case o.granted && !c.granted:
 				revokes = append(revokes, func(ctx context.Context) error { return ref.Revoke(ctx, p) })
 			case !o.granted:
-				w := func(ctx context.Context) error { return ref.Grant(ctx, p, c.isDefault) }
+				w := func(ctx context.Context) error { return ref.Grant(ctx, p, def) }
 				if c.isDefault {
 					ons = append(ons, w)
 				} else {
 					offs = append(offs, w)
 				}
 			default:
-				w := func(ctx context.Context) error { return ref.SetGrantDefault(ctx, p, c.isDefault) }
+				w := func(ctx context.Context) error { return ref.SetGrantDefault(ctx, p, def) }
 				if c.isDefault {
 					ons = append(ons, w)
 				} else {

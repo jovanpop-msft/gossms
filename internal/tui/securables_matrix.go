@@ -32,14 +32,15 @@ type securable struct {
 func (s securable) key() string { return string(s.Type) + "\x00" + s.Schema + "\x00" + s.Name }
 
 func (s securable) label() string {
-	switch s.Type {
-	case gosmo.SecurableDatabase:
+	if s.Type == gosmo.SecurableDatabase {
 		return "(database)"
-	case gosmo.SecurableSchema, gosmo.SecurableCertificate:
-		return gosmo.QuoteName(s.Name)
-	default:
+	}
+	// gosmo owns which classes live in a schema: a class added there later
+	// labels by its own rule, not as [].[name].
+	if s.Type.SchemaScoped() {
 		return gosmo.QuoteName(s.Schema) + "." + gosmo.QuoteName(s.Name)
 	}
+	return gosmo.QuoteName(s.Name)
 }
 
 // hasColumns reports whether this securable's columns can carry permissions of

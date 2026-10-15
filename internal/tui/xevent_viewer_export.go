@@ -306,13 +306,9 @@ func (v *XEventViewer) insertScript() string {
 			case types[j] == "bigint" || types[j] == "decimal(20,0)" || types[j] == "float":
 				b.WriteString(val.Display())
 			case types[j] == "datetime2(6)":
-				b.WriteString("'")
-				b.WriteString(val.Display())
-				b.WriteString("'")
+				b.WriteString(gosmo.QuoteAnsiLiteral(val.Display()))
 			default:
-				b.WriteString("N'")
-				b.WriteString(strings.ReplaceAll(val.Display(), "'", "''"))
-				b.WriteString("'")
+				b.WriteString(gosmo.QuoteLiteral(val.Display()))
 			}
 		}
 		b.WriteString(")")

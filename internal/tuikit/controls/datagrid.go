@@ -1,6 +1,7 @@
 package controls
 
 import (
+	"maps"
 	"slices"
 	"strconv"
 	"time"
@@ -139,15 +140,21 @@ type DataGrid struct {
 	blockSelecting             bool
 	selAnchorRow, selAnchorCol int
 
-	// markedRows is the discontiguous selection Ctrl+click builds — the rows
-	// picked out one at a time, which no anchor/cursor rectangle can describe.
-	// marking says the grid is in that mode, and is not the same as len()>0: a
-	// Ctrl+click that unpicks the last row leaves an empty selection, which is
-	// a selection of nothing rather than a fall back to the cursor's row.
-	// Cleared by anything that is not a Ctrl+click, as a file manager's list
-	// does — a plain or Shift+click, an arrow key, a new row set.
-	markedRows map[int]bool
-	marking    bool
+	// markLo..markHi and markFlips are the discontiguous selection Ctrl+click
+	// builds — the rows picked out one at a time, which no anchor/cursor
+	// rectangle can describe. A row is marked when it is inside the inclusive
+	// base run markLo..markHi (empty when markLo > markHi) XOR in markFlips. The
+	// base run is the selection the first Ctrl+click folded in; storing it as a
+	// run, not as a set of its rows, keeps that click O(1) after a Shift-select
+	// of a million-row result, where a set cost a ~300 ms stall and ~80 MB.
+	// marking says the grid is in that mode, and is not the same as "some row
+	// is marked": a Ctrl+click that unpicks the last row leaves an empty
+	// selection, which is a selection of nothing rather than a fall back to the
+	// cursor's row. Cleared by anything that is not a Ctrl+click, as a file
+	// manager's list does — a plain or Shift+click, an arrow key, a new row set.
+	markLo, markHi int
+	markFlips      map[int]struct{}
+	marking        bool
 
 	// mouseDragging distinguishes a fresh Button1 press (arm a new selection
 	// anchor) from a continued drag (keep the anchor, move the cursor).
@@ -502,15 +509,26 @@ func (g *DataGrid) SelectedRows() []int { return g.selectedRows() }
 
 func (g *DataGrid) selectedRows() []int {
 	if g.marking {
-		rows := make([]int, 0, len(g.markedRows))
-		for r := range g.markedRows {
+		// Merge the run with the sorted flips: a flip inside the run unmarks its
+		// row, one outside marks it. Flips are as many as Ctrl+clicks, so only
+		// they are sorted, never the run.
+		flips := slices.Sorted(maps.Keys(g.markFlips))
+		rows := make([]int, 0, g.selectedRowCount())
+		i := 0
+		for ; i < len(flips) && flips[i] < g.markLo; i++ {
+			rows = append(rows, flips[i])
+		}
+		for r := g.markLo; r <= g.markHi; r++ {
+			if i < len(flips) && flips[i] == r {
+				i++
+				continue
+			}
 			rows = append(rows, r)
 		}
-		slices.Sort(rows)
-		return rows
+		return append(rows, flips[i:]...)
 	}
-	r0, _, r1, _ := g.selectionBounds()
-	if r0 < 0 || r1 < r0 {
+	r0, r1, ok := g.selectedRun()
+	if !ok {
 		return nil
 	}
 	rows := make([]int, 0, r1-r0+1)
@@ -520,10 +538,39 @@ func (g *DataGrid) selectedRows() []int {
 	return rows
 }
 
+// selectedRun is the inclusive row run the anchor/cursor rectangle spans,
+// ok false when it spans none.
+func (g *DataGrid) selectedRun() (r0, r1 int, ok bool) {
+	r0, _, r1, _ = g.selectionBounds()
+	return r0, r1, r0 >= 0 && r1 >= r0
+}
+
+// selectedRowCount is len(selectedRows()) without building the slice — what
+// the context menu asks, on every open, of a selection that may hold a
+// million rows.
+func (g *DataGrid) selectedRowCount() int {
+	if g.marking {
+		n := max(0, g.markHi-g.markLo+1)
+		for r := range g.markFlips {
+			if g.inMarkRun(r) {
+				n--
+			} else {
+				n++
+			}
+		}
+		return n
+	}
+	r0, r1, ok := g.selectedRun()
+	if !ok {
+		return 0
+	}
+	return r1 - r0 + 1
+}
+
 // ClearMarkedRows drops any Ctrl+click selection, leaving the cursor where it
 // is.
 func (g *DataGrid) ClearMarkedRows() {
-	g.markedRows, g.marking = nil, false
+	g.markFlips, g.marking = nil, false
 }
 
 // markRow adds the clicked row to the discontiguous selection, or removes it if
@@ -534,21 +581,31 @@ func (g *DataGrid) ClearMarkedRows() {
 // it would deselect a row the user can see is selected.
 func (g *DataGrid) markRow(row int) {
 	if !g.marking {
-		g.markedRows = map[int]bool{}
-		for _, r := range g.selectedRows() {
-			g.markedRows[r] = true
+		r0, r1, ok := g.selectedRun()
+		if !ok {
+			r0, r1 = 0, -1
 		}
-		g.marking = true
+		g.markLo, g.markHi, g.markFlips, g.marking = r0, r1, map[int]struct{}{}, true
 	}
-	if g.markedRows[row] {
-		delete(g.markedRows, row)
+	if _, in := g.markFlips[row]; in {
+		delete(g.markFlips, row)
 		return
 	}
-	g.markedRows[row] = true
+	g.markFlips[row] = struct{}{}
 }
 
+// inMarkRun reports whether row is inside the base run of a discontiguous
+// selection — marked unless flipped.
+func (g *DataGrid) inMarkRun(row int) bool { return row >= g.markLo && row <= g.markHi }
+
 // rowMarked reports whether row is in a discontiguous selection.
-func (g *DataGrid) rowMarked(row int) bool { return g.marking && g.markedRows[row] }
+func (g *DataGrid) rowMarked(row int) bool {
+	if !g.marking {
+		return false
+	}
+	_, flipped := g.markFlips[row]
+	return g.inMarkRun(row) != flipped
+}
 
 // CellCursorEnabled reports whether cell-cursor mode is on.
 func (g *DataGrid) CellCursorEnabled() bool { return g.cellCursor }

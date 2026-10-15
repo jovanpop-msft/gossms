@@ -232,10 +232,7 @@ func loadProgrammabilityChildren(l loaderCtx, node *explorerNode) ([]*explorerNo
 func loadDatabaseTriggersChildren(l loaderCtx, node *explorerNode) ([]*explorerNode, error) {
 	return listDatabaseChildren(l, node, (*gosmo.Database).DatabaseTriggers,
 		func(t *gosmo.DatabaseTrigger) *explorerNode {
-			label := t.Name
-			if !t.IsEnabled {
-				label += " (Disabled)"
-			}
+			label := disabledLabel(t.Name, t.IsEnabled)
 			n := l.node(label, NodeDatabaseTrigger, "", t.Name, node.data.DBName)
 			n.data.CreateDate = t.CreateDate
 			n.data.IsEnabled = t.IsEnabled
@@ -289,10 +286,7 @@ func loadDatabaseAuditSpecificationsChildren(l loaderCtx, node *explorerNode) ([
 			return dbObj.DatabaseAuditSpecifications(l.ctx)
 		},
 		func(spec *gosmo.DatabaseAuditSpecification) *explorerNode {
-			label := spec.Name
-			if !spec.IsEnabled {
-				label += " (Disabled)"
-			}
+			label := disabledLabel(spec.Name, spec.IsEnabled)
 			n := l.node(label, NodeDatabaseAuditSpecification, "", spec.Name, node.data.DBName)
 			n.data.CreateDate = spec.CreateDate
 			n.data.IsEnabled = spec.IsEnabled
@@ -410,10 +404,7 @@ func certificateLabel(c *gosmo.Certificate, now time.Time) string {
 func loadSecurityPoliciesChildren(l loaderCtx, node *explorerNode) ([]*explorerNode, error) {
 	return listDatabaseChildren(l, node, (*gosmo.Database).SecurityPolicies,
 		func(p *gosmo.SecurityPolicy) *explorerNode {
-			label := p.Schema + "." + p.Name
-			if !p.IsEnabled {
-				label += " (Disabled)"
-			}
+			label := disabledLabel(p.Schema+"."+p.Name, p.IsEnabled)
 			n := l.node(label, NodeSecurityPolicy, p.Schema, p.Name, node.data.DBName)
 			n.data.IsEnabled = p.IsEnabled
 			return n

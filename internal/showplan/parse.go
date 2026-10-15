@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"unicode/utf16"
+
+	"github.com/radix29/gosmo/tsql"
 )
 
 // Parse decodes a ShowPlanXML document, UTF-8 or UTF-16 with BOM.
@@ -276,25 +278,9 @@ func (n *Node) setScalar(section, s string) {
 	}
 }
 
-// unbracket undoes the server's [bracket] quoting of one name part in plan
-// XML, un-doubling "]]": "[a]]b]" is "a]b". A bare name comes back unchanged.
-// It mirrors gosmo.UnquoteName (this package does not import gosmo).
-// strings.Trim(s, "[]") is wrong: it leaves "]]" doubled and strips a bracket
-// that is part of the name.
-func unbracket(name string) string {
-	if len(name) < 2 || name[0] != '[' || name[len(name)-1] != ']' {
-		return name
-	}
-	inner := name[1 : len(name)-1]
-	if strings.Count(inner, "]]")*2 != strings.Count(inner, "]") {
-		return name // an undoubled ']' inside: not one quoted part
-	}
-	return strings.ReplaceAll(inner, "]]", "]")
-}
-
 // objectFrom builds an Object from <Object>, stripping [brackets].
 func objectFrom(el xml.StartElement) Object {
-	unb := func(name string) string { return unbracket(attrOf(el, name)) }
+	unb := func(name string) string { return tsql.UnquoteName(attrOf(el, name)) }
 	return Object{
 		Database:  unb("Database"),
 		Schema:    unb("Schema"),
@@ -320,9 +306,9 @@ func decodeColumnList(dec *xml.Decoder) ([]string, error) {
 			if t.Name.Local == "ColumnReference" {
 				col := attrOf(t, "Column")
 				if col != "" {
-					if q := unbracket(attrOf(t, "Alias")); q != "" {
+					if q := tsql.UnquoteName(attrOf(t, "Alias")); q != "" {
 						col = q + "." + col
-					} else if q := unbracket(attrOf(t, "Table")); q != "" {
+					} else if q := tsql.UnquoteName(attrOf(t, "Table")); q != "" {
 						col = q + "." + col
 					}
 					cols = append(cols, col)
@@ -434,15 +420,15 @@ func decodeMissingIndexes(dec *xml.Decoder) ([]MissingIndex, error) {
 				cur = &out[len(out)-1]
 			case "MissingIndex":
 				if cur != nil {
-					cur.Database = unbracket(attrOf(t, "Database"))
-					cur.Schema = unbracket(attrOf(t, "Schema"))
-					cur.Table = unbracket(attrOf(t, "Table"))
+					cur.Database = tsql.UnquoteName(attrOf(t, "Database"))
+					cur.Schema = tsql.UnquoteName(attrOf(t, "Schema"))
+					cur.Table = tsql.UnquoteName(attrOf(t, "Table"))
 				}
 			case "ColumnGroup":
 				usage = attrOf(t, "Usage")
 			case "Column":
 				if cur != nil {
-					name := unbracket(attrOf(t, "Name"))
+					name := tsql.UnquoteName(attrOf(t, "Name"))
 					switch usage {
 					case "INCLUDE":
 						cur.Include = append(cur.Include, name)

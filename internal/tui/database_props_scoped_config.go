@@ -104,7 +104,7 @@ func applyScopedConfigRows(ctx context.Context, d *gosmo.Database, intRows []sco
 		if err != nil {
 			return err
 		}
-		if err := d.SetDatabaseScopedConfig(ctx, r.name, strconv.FormatInt(v, 10), false); err != nil {
+		if err := d.SetDatabaseScopedConfig(ctx, r.name, strconv.FormatInt(v, 10), gosmo.ScopedConfigPrimary); err != nil {
 			return err
 		}
 	}
@@ -113,7 +113,7 @@ func applyScopedConfigRows(ctx context.Context, d *gosmo.Database, intRows []sco
 			continue
 		}
 		value := onOff[r.row.Selected()]
-		if err := d.SetDatabaseScopedConfig(ctx, r.name, value, false); err != nil {
+		if err := d.SetDatabaseScopedConfig(ctx, r.name, value, gosmo.ScopedConfigPrimary); err != nil {
 			return err
 		}
 	}

@@ -202,8 +202,11 @@ func (d *RegenerateMasterKeyDialog) buildPages(pf *masterKeyPrefetch) {
 		if err != nil {
 			return err
 		}
-		return d.sc.Server.DatabaseRef(d.dbName).MasterKeyRef().Regenerate(ctx,
-			newPass.Value(), force.Checked(), open)
+		mode := gosmo.MasterKeyRegenerate
+		if force.Checked() {
+			mode = gosmo.MasterKeyForceRegenerate
+		}
+		return d.sc.Server.DatabaseRef(d.dbName).MasterKeyRef().Regenerate(ctx, newPass.Value(), mode, open)
 	}
 }
 

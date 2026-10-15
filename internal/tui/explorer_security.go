@@ -64,10 +64,7 @@ func loadCryptographicProvidersChildren(l loaderCtx, node *explorerNode) ([]*exp
 		func(p *gosmo.CryptographicProvider) *explorerNode {
 			// A disabled provider decrypts nothing, and nothing else in the
 			// row says so — the same label the Audits folder uses.
-			label := p.Name
-			if !p.IsEnabled {
-				label += " (Disabled)"
-			}
+			label := disabledLabel(p.Name, p.IsEnabled)
 			n := l.node(label, NodeCryptographicProvider, "", p.Name, "")
 			n.data.IsEnabled = p.IsEnabled
 			return n
@@ -79,10 +76,7 @@ func loadAuditsChildren(l loaderCtx, node *explorerNode) ([]*explorerNode, error
 		func(a *gosmo.ServerAudit) *explorerNode {
 			// A disabled audit records nothing, and nothing else in the row
 			// says so — the same label the Triggers folder uses.
-			label := a.Name
-			if !a.IsEnabled {
-				label += " (Disabled)"
-			}
+			label := disabledLabel(a.Name, a.IsEnabled)
 			n := l.node(label, NodeAudit, "", a.Name, "")
 			n.data.CreateDate = a.CreateDate
 			n.data.IsEnabled = a.IsEnabled
@@ -96,10 +90,7 @@ func loadServerAuditSpecificationsChildren(l loaderCtx, node *explorerNode) ([]*
 			return l.sc.Server.ServerAuditSpecifications(l.ctx)
 		},
 		func(spec *gosmo.ServerAuditSpecification) *explorerNode {
-			label := spec.Name
-			if !spec.IsEnabled {
-				label += " (Disabled)"
-			}
+			label := disabledLabel(spec.Name, spec.IsEnabled)
 			n := l.node(label, NodeServerAuditSpecification, "", spec.Name, "")
 			n.data.CreateDate = spec.CreateDate
 			n.data.IsEnabled = spec.IsEnabled

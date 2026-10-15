@@ -272,14 +272,14 @@ func pageFullTextIndexColumns(sc *db.ServerConn, dbName, schema, table string, f
 			return f, func(ctx context.Context) error {
 				for _, e := range ed.edits.all() {
 					if e.removing && !e.isNew {
-						if err := ref.DropColumn(ctx, e.spec.Name, false); err != nil {
+						if err := ref.DropColumn(ctx, e.spec.Name, gosmo.FullTextRepopulate); err != nil {
 							return err
 						}
 					}
 				}
 				for _, e := range ed.edits.all() {
 					if e.isNew {
-						if err := ref.AddColumn(ctx, e.spec, false); err != nil {
+						if err := ref.AddColumn(ctx, e.spec, gosmo.FullTextRepopulate); err != nil {
 							return err
 						}
 					}

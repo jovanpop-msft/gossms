@@ -127,10 +127,7 @@ func loadServerTriggersChildren(l loaderCtx, node *explorerNode) ([]*explorerNod
 			// A disabled DDL trigger is inert, and nothing else in the row
 			// says so — the security policies folder labels its own the same
 			// way.
-			label := t.Name
-			if !t.IsEnabled {
-				label += " (Disabled)"
-			}
+			label := disabledLabel(t.Name, t.IsEnabled)
 			n := l.node(label, NodeServerTrigger, "", t.Name, "")
 			n.data.CreateDate = t.CreateDate
 			n.data.IsEnabled = t.IsEnabled

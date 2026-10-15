@@ -93,13 +93,13 @@ var objectOps = map[NodeType]objectOp{
 		warning: "Existing connections to it will be closed.",
 		typed:   true,
 		drop: func(ctx context.Context, sc *db.ServerConn, n nodeData) error {
-			return dbOf(sc, n).Drop(ctx, true)
+			return dbOf(sc, n).Drop(ctx, gosmo.TerminationRollbackImmediate)
 		},
 		// MODIFY NAME needs exclusive access, which the tree's metadata connections
 		// deny, so the rename always closes connections and always asks first.
 		renameWarning: "Renaming a database needs exclusive access to it. Existing connections will be closed and their transactions rolled back; its user access mode is kept. Continue?",
 		rename: func(ctx context.Context, sc *db.ServerConn, n nodeData, newName string) error {
-			return dbOf(sc, n).Rename(ctx, newName, true)
+			return dbOf(sc, n).Rename(ctx, newName, gosmo.TerminationRollbackImmediate)
 		},
 	},
 	// A snapshot's drop deletes its sparse files, not the source, so no typed
@@ -121,7 +121,11 @@ var objectOps = map[NodeType]objectOp{
 		// decision, not a retry.
 		dropOption: "Also drop the foreign keys that reference it",
 		dropWithOption: func(ctx context.Context, sc *db.ServerConn, n nodeData, cascade bool) error {
-			return dbOf(sc, n).TableRef(n.Schema, n.Name).Drop(ctx, cascade)
+			mode := gosmo.DropTableOnly
+			if cascade {
+				mode = gosmo.DropTableCascade
+			}
+			return dbOf(sc, n).TableRef(n.Schema, n.Name).Drop(ctx, mode)
 		},
 		rename:   renameIn((*gosmo.Database).TableRef),
 		transfer: transferIn((*gosmo.Database).TableRef),
@@ -572,7 +576,11 @@ var objectOps = map[NodeType]objectOp{
 		// no other command here can undo.
 		dropOption: "Also delete the backup file on the server",
 		dropWithOption: func(ctx context.Context, sc *db.ServerConn, n nodeData, deleteFile bool) error {
-			return sc.Server.BackupDeviceRef(n.Name).Drop(ctx, deleteFile)
+			file := gosmo.KeepDeviceFile
+			if deleteFile {
+				file = gosmo.DeleteDeviceFile
+			}
+			return sc.Server.BackupDeviceRef(n.Name).Drop(ctx, file)
 		},
 	},
 	NodeDatabaseTrigger: {

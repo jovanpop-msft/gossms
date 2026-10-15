@@ -221,3 +221,30 @@ func TestSecurableLabelQuotesEachPart(t *testing.T) {
 		}
 	}
 }
+
+// Every class labels by gosmo's SchemaScoped: two-part when it lives in a
+// schema, the bare name otherwise.
+func TestSecurableLabelCoversEveryClass(t *testing.T) {
+	for _, tc := range []struct {
+		class gosmo.SecurableClass
+		want  string
+	}{
+		{gosmo.SecurableServer, "[n]"},
+		{gosmo.SecurableDatabase, "(database)"},
+		{gosmo.SecurableSchema, "[n]"},
+		{gosmo.SecurableCertificate, "[n]"},
+		{gosmo.SecurableTable, "[s].[n]"},
+		{gosmo.SecurableView, "[s].[n]"},
+		{gosmo.SecurableProcedure, "[s].[n]"},
+		{gosmo.SecurableScalarFunction, "[s].[n]"},
+		{gosmo.SecurableInlineFunction, "[s].[n]"},
+		{gosmo.SecurableTableFunction, "[s].[n]"},
+		{gosmo.SecurableSequence, "[s].[n]"},
+		{gosmo.SecurableSynonym, "[s].[n]"},
+		{gosmo.SecurableUserType, "[s].[n]"},
+	} {
+		if got := (securable{Type: tc.class, Schema: "s", Name: "n"}).label(); got != tc.want {
+			t.Errorf("label(%s) = %q, want %q", tc.class, got, tc.want)
+		}
+	}
+}

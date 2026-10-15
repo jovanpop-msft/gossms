@@ -559,11 +559,14 @@ func (p *ReplicationMonitorPanel) loadSessions(keep bool) {
 		return
 	}
 	agent := row.agent
-	hours, errorsOnly := rmWindows[p.windowIdx].hours, p.errorsOnly
+	hours, filter := rmWindows[p.windowIdx].hours, gosmo.AllReplSessions
+	if p.errorsOnly {
+		filter = gosmo.FailedReplSessions
+	}
 	ctx, seq := p.sessionRead.BeginTimeout(p.conn.Server.Context(), rmReadTimeout)
 	p.sessionsGrid.SetStatus("Reading…")
 	p.app.safegoRepair("reading a replication agent's sessions", func() { paneReadPanicked(&p.sessionRead, seq, p.sessionsGrid) }, func() {
-		sessions, err := agent.Sessions(ctx, hours, errorsOnly)
+		sessions, err := agent.Sessions(ctx, hours, filter)
 		p.app.postAndWake(func() {
 			if !p.sessionRead.Done(seq) {
 				return

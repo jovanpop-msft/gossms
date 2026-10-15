@@ -407,6 +407,16 @@ func errExplorerNode(err error) *explorerNode {
 	return &explorerNode{label: label, data: nodeData{Type: NodeError}}
 }
 
+// disabledLabel is an explorer node's label with the " (Disabled)" suffix
+// every enable-able object carries when it is off — a disabled trigger, audit,
+// policy or queue does nothing, and nothing else in the row says so.
+func disabledLabel(name string, enabled bool) string {
+	if enabled {
+		return name
+	}
+	return name + " (Disabled)"
+}
+
 // fqn brackets a schema-qualified SQL Server identifier for use in
 // generated T-SQL ("SELECT TOP 1000 * FROM "+fqn(schema, name)). schema=""
 // (e.g. a server-level object) omits the schema part entirely rather than

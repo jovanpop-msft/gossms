@@ -71,11 +71,8 @@ func loadContractsChildren(l loaderCtx, node *explorerNode) ([]*explorerNode, er
 func loadBrokerQueuesChildren(l loaderCtx, node *explorerNode) ([]*explorerNode, error) {
 	return listDatabaseChildren(l, node, (*gosmo.Database).BrokerQueues,
 		func(q *gosmo.BrokerQueue) *explorerNode {
-			label := q.Schema + "." + q.Name
 			enabled := q.IsEnqueueEnabled || q.IsReceiveEnabled
-			if !enabled {
-				label += " (Disabled)"
-			}
+			label := disabledLabel(q.Schema+"."+q.Name, enabled)
 			n := l.node(label, NodeBrokerQueue, q.Schema, q.Name, node.data.DBName)
 			n.data.CreateDate = q.CreateDate
 			n.data.IsEnabled = enabled

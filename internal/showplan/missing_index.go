@@ -3,6 +3,8 @@ package showplan
 import (
 	"fmt"
 	"strings"
+
+	"github.com/radix29/gosmo/tsql"
 )
 
 // missingIndexNamePlaceholder is SSMS's template token for a name to choose.
@@ -35,7 +37,7 @@ func (m MissingIndex) Script() string {
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "/*\nThe Query Processor estimates that implementing the following index could improve the query cost by %.4f%%.\n*/\n\n/*\n", m.Impact)
 	if m.Database != "" {
-		fmt.Fprintf(&sb, "USE %s\nGO\n", bracket(m.Database))
+		fmt.Fprintf(&sb, "USE %s\nGO\n", tsql.QuoteName(m.Database))
 	}
 	fmt.Fprintf(&sb, "CREATE NONCLUSTERED INDEX [%s]\nON %s (%s)\n",
 		missingIndexNamePlaceholder, m.qualifiedTable(), bracketList(m.Keys()))
@@ -50,9 +52,9 @@ func (m MissingIndex) Script() string {
 // three-part name, so the database goes in the USE.
 func (m MissingIndex) qualifiedTable() string {
 	if m.Schema == "" {
-		return bracket(m.Table)
+		return tsql.QuoteName(m.Table)
 	}
-	return bracket(m.Schema) + "." + bracket(m.Table)
+	return tsql.QuoteName(m.Schema) + "." + tsql.QuoteName(m.Table)
 }
 
 // MissingIndexScript joins one statement's suggestions into one script, in
@@ -68,14 +70,7 @@ func MissingIndexScript(indexes []MissingIndex) string {
 func bracketList(cols []string) string {
 	out := make([]string, len(cols))
 	for i, c := range cols {
-		out[i] = bracket(c)
+		out[i] = tsql.QuoteName(c)
 	}
 	return strings.Join(out, ",")
-}
-
-// bracket quotes an identifier like QUOTENAME, doubling ']' so names containing
-// it (legal, copied from the XML) still parse. Not gosmo.QuoteName, to keep
-// this package free of the mssql driver; unbracket (parse.go) is its inverse.
-func bracket(name string) string {
-	return "[" + strings.ReplaceAll(name, "]", "]]") + "]"
 }

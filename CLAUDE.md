@@ -12,7 +12,7 @@ Studio in Go 1.27: one build for Linux/macOS/Windows, no CGO, no build tags.
 
 - Module `github.com/radix29/gossms`. Depends on `github.com/radix29/gosmo`
   (the author's own SMO-style library, sibling checkout `~/go/gosmo`) and
-  `github.com/gdamore/tcell/v3` (`v3.5.0`).
+  `github.com/gdamore/tcell/v3` (`go.mod` holds the version).
 - `go.mod`'s `replace github.com/radix29/gosmo => ../gosmo` is deliberately
   **active** during development, so `HEAD` may depend on untagged gosmo code.
   It is commented out only to tag a release, against an already-pushed gosmo tag.

@@ -38,9 +38,13 @@ func TestEveryResetPathClearsTheView(t *testing.T) {
 		g.SetSelectedCell(12, 5)
 		g.SetScroll(10, 4)
 		g.SetColumnWidth(0, 25)
-		// Ctrl+click's discontiguous selection, set directly — there is no
-		// exported way in, and the mouse route is another test's subject.
-		g.markedRows = map[int]bool{0: true, 12: true}
+		// Ctrl+click's discontiguous selection, rows 12 (the cursor, folded in)
+		// and 0, made directly — there is no exported way in, and the mouse
+		// route is another test's subject.
+		g.markRow(0)
+		if n := len(g.SelectedRows()); n != 2 {
+			t.Fatalf("setup marked %d rows, want 2", n)
+		}
 		if g.scrollCol == 0 || g.scrollRow == 0 || g.selCol == 0 {
 			t.Fatalf("setup left the view at the origin: scroll=(%d,%d) sel=(%d,%d)",
 				g.scrollRow, g.scrollCol, g.selRow, g.selCol)

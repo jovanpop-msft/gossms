@@ -79,7 +79,7 @@ func (g *DataGrid) cellContextMenuItems() []MenuItem {
 	if g.OnCopyRequest != nil {
 		items = append(items, MenuItem{Label: "Copy", Action: func() { g.requestCopy(g.selectedCellsText()) }})
 	}
-	if !g.blockSelecting && len(g.selectedRows()) <= 1 {
+	if !g.blockSelecting && g.selectedRowCount() <= 1 {
 		items = append(items, MenuItem{Label: showValueMenuItem, Action: g.openViewer})
 	}
 	if g.OnMenuItems != nil && !g.browseOnly {

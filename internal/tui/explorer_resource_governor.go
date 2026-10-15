@@ -70,7 +70,7 @@ func resourceGovernorState(ctx context.Context, sc *db.ServerConn) rgState {
 		return rgState{label: resourceGovernorRootLabel + " (unknown)", enabled: true}
 	}
 	if !rg.IsEnabled {
-		return rgState{label: resourceGovernorRootLabel + " (Disabled)"}
+		return rgState{label: disabledLabel(resourceGovernorRootLabel, false)}
 	}
 	if st, err := sc.Server.ResourceGovernorStatus(ctx); err == nil && st.IsReconfigurationPending {
 		return rgState{label: resourceGovernorRootLabel + " (Reconfiguration pending)", enabled: true, pending: true}
