@@ -3,7 +3,10 @@ package query
 import (
 	"context"
 	"slices"
+	"strings"
 	"testing"
+
+	mssql "github.com/microsoft/go-mssqldb"
 )
 
 // The script reaches the server split by the editor's GO rule, each batch sent
@@ -34,5 +37,72 @@ func TestExecuteRunsGoBatchesByTheEditorsRule(t *testing.T) {
 			t.Errorf("script %q: messages %q, want %q among them", tt.script, messageTexts(res), tt.notice)
 		}
 		s.Close()
+	}
+}
+
+// divideByZero is the error SQL Server raises for select 1/0 on the first line
+// of its batch: LineNo counts from the batch, not the script.
+func divideByZero(proc string, line int32) fakeMsg {
+	return fakeMsg{kind: msgError, err: mssql.Error{
+		Number: 8134, Class: 16, State: 1, LineNo: line, ProcName: proc,
+		Message: "Divide by zero error encountered.",
+	}}
+}
+
+// An error's "Line N" is the script's line, as SSMS shows it: the batch's own
+// line plus the lines before the batch, plus the selection's start for an
+// executed selection. An error inside a procedure keeps the procedure's line.
+func TestErrorLineCountsFromTheScript(t *testing.T) {
+	script := "print 'a';\nselect 1\nGO\nselect 1/0;\nGO\n\nexec p\nGO 2\nselect 1/0"
+	tests := []struct {
+		name   string
+		offset int
+		want   []string
+		lines  []int
+	}{
+		{"whole script", 0,
+			[]string{"Msg 8134, Level 16, State 1, Line 4", "Msg 8134, Level 16, State 1, Procedure p, Line 3",
+				"Msg 8134, Level 16, State 1, Procedure p, Line 3", "Msg 8134, Level 16, State 1, Line 9"},
+			[]int{4, 0, 0, 9}},
+		{"selection from editor line 11", 10,
+			[]string{"Msg 8134, Level 16, State 1, Line 14", "Msg 8134, Level 16, State 1, Procedure p, Line 3",
+				"Msg 8134, Level 16, State 1, Procedure p, Line 3", "Msg 8134, Level 16, State 1, Line 19"},
+			[]int{14, 0, 0, 19}},
+	}
+	for _, tt := range tests {
+		s, _, _ := openFakeSession(t,
+			nil,
+			[]fakeMsg{divideByZero("", 1)},
+			[]fakeMsg{divideByZero("p", 3)}, // GO 2: the batch runs twice
+			[]fakeMsg{divideByZero("p", 3)},
+			[]fakeMsg{divideByZero("", 1)},
+		)
+		res := s.Execute(context.Background(), script, WithLineOffset(tt.offset))
+		var headers []string
+		var lines []int
+		for _, m := range res.Messages {
+			if strings.HasPrefix(m.Text, "Msg ") {
+				headers = append(headers, m.Text)
+				lines = append(lines, m.Line)
+			} else if m.IsError && m.Line != lines[len(lines)-1] {
+				t.Errorf("%s: message %q has Line %d, its header %d", tt.name, m.Text, m.Line, lines[len(lines)-1])
+			}
+		}
+		if !slices.Equal(headers, tt.want) {
+			t.Errorf("%s: headers\n got %q\nwant %q", tt.name, headers, tt.want)
+		}
+		if !slices.Equal(lines, tt.lines) {
+			t.Errorf("%s: Message.Line = %v, want %v", tt.name, lines, tt.lines)
+		}
+		s.Close()
+	}
+}
+
+// ErrorMessages has no script to count in: the server's line, and no Line to
+// jump to.
+func TestErrorMessagesKeepsTheServersLine(t *testing.T) {
+	msgs := ErrorMessages(divideByZero("", 2).err)
+	if msgs[0].Text != "Msg 8134, Level 16, State 1, Line 2" || msgs[0].Line != 0 {
+		t.Errorf("ErrorMessages = %+v, want the server's Line 2 and no Line", msgs)
 	}
 }

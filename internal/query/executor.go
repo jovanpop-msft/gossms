@@ -71,6 +71,13 @@ func (rs ResultSet) Row(i int) []string { return rs.Rows[i] }
 type Message struct {
 	Text    string
 	IsError bool
+
+	// Line is the 1-based script line a SQL Server error points at, its "Line N"
+	// header counted from the script's start (see WithLineOffset), and so where
+	// go-to-line jumps. 0 when there is none: not an error, an error raised inside
+	// a procedure, function or trigger (its line is in that module), or one from
+	// ErrorMessages, which has no script to count in.
+	Line int
 }
 
 // Result is everything one Execute call produced, across all GO batches.
@@ -94,6 +101,10 @@ type Result struct {
 	// progress is the caller's live row counter (see WithProgress), carried on
 	// Result as the run-scoped state runBatch/scanNext share.
 	progress *Progress
+
+	// lineOffset is the 0-based editor line the script starts on (see
+	// WithLineOffset), run-scoped like progress.
+	lineOffset int
 
 	// PlanXML holds one <ShowPlanXML> document per captured statement/batch, in
 	// execution order. Execute never fills it.
@@ -133,14 +144,38 @@ func (r *Result) addError(err error) {
 	r.Messages = append(r.Messages, ErrorMessages(err)...)
 }
 
+// addBatchError records an error raised by a batch starting on 0-based script
+// line firstLine (lineOffset included).
+func (r *Result) addBatchError(err error, firstLine int) {
+	r.Messages = append(r.Messages, batchErrorMessages(err, firstLine)...)
+}
+
 // ErrorMessages formats err as SSMS's Messages pane shows a failed batch: a SQL
 // Server error becomes a "Msg 208, Level 16, State 1, Line 4" line plus the
-// text; anything else one message.
+// text; anything else one message. The line is the server's, counted from the
+// batch's start; a batch run by Execute reports script lines instead.
 func ErrorMessages(err error) []Message {
+	return batchErrorMessages(err, -1)
+}
+
+// batchErrorMessages is ErrorMessages for an error raised by a batch starting on
+// 0-based script line firstLine, or -1 for no script. SQL Server counts "Line N"
+// from the batch's first line, so firstLine is added to make it the script line,
+// as SSMS does since 2016, so the header matches the editor's line numbers.
+//
+// Not for an error raised inside a module (ProcName set): its line counts from the
+// procedure, function or trigger's own text, and stays as the server sent it. Nor
+// for Line 0, which points at no line.
+func batchErrorMessages(err error, firstLine int) []Message {
 	if se, ok := gosmo.AsSQLError(err); ok {
-		msgs := []Message{{Text: se.Header(), IsError: true}}
+		line := 0
+		if firstLine >= 0 && se.ProcName == "" && se.LineNo > 0 {
+			se.LineNo += int32(firstLine)
+			line = int(se.LineNo)
+		}
+		msgs := []Message{{Text: se.Header(), IsError: true, Line: line}}
 		if se.Message != "" {
-			msgs = append(msgs, Message{Text: se.Message, IsError: true})
+			msgs = append(msgs, Message{Text: se.Message, IsError: true, Line: line})
 		}
 		return msgs
 	}
@@ -202,6 +237,13 @@ type Option func(*Result)
 // RowSink count too.
 func WithProgress(prog *Progress) Option {
 	return func(res *Result) { res.progress = prog }
+}
+
+// WithLineOffset says the script starts on 0-based editor line n, as an executed
+// selection does, so error lines count from the editor's first line, not the
+// script's.
+func WithLineOffset(n int) Option {
+	return func(res *Result) { res.lineOffset = n }
 }
 
 // Execute runs script against db, SSMS-style. A non-empty database is switched
@@ -294,7 +336,7 @@ func runScript(ctx context.Context, conn *sql.Conn, script string, capture planC
 			if ctx.Err() != nil {
 				return true, nil
 			}
-			runBatch(ctx, conn, b.Text, res, sink)
+			runBatch(ctx, conn, b.Text, res.lineOffset+b.StartLine, res, sink)
 		}
 		if b.Count > 1 {
 			res.addNotice(fmt.Sprintf("Batch execution completed %d times.", b.Count))
@@ -313,12 +355,13 @@ func currentDatabase(ctx context.Context, conn *sql.Conn) (string, error) {
 
 // runBatch executes one GO batch and drains the sqlexp message stream into res.
 // SQL errors are messages, not early returns: later statements may still
-// produce output.
-func runBatch(ctx context.Context, conn *sql.Conn, sqlText string, res *Result, sink RowSink) {
+// produce output. firstLine is the 0-based editor line the batch starts on, which
+// the batch's SQL errors count their lines from (batchErrorMessages).
+func runBatch(ctx context.Context, conn *sql.Conn, sqlText string, firstLine int, res *Result, sink RowSink) {
 	retmsg := &sqlexp.ReturnMessage{}
 	rows, err := conn.QueryContext(ctx, sqlText, retmsg)
 	if err != nil {
-		res.addError(err)
+		res.addBatchError(err, firstLine)
 		return
 	}
 	defer rows.Close()
@@ -328,7 +371,7 @@ func runBatch(ctx context.Context, conn *sql.Conn, sqlText string, res *Result, 
 		case sqlexp.MsgNotice:
 			res.addNotice(m.Message.String())
 		case sqlexp.MsgError:
-			res.addError(m.Error)
+			res.addBatchError(m.Error, firstLine)
 		case sqlexp.MsgRowsAffected:
 			if m.Count == 1 {
 				res.addNotice("(1 row affected)")
@@ -359,7 +402,7 @@ func runBatch(ctx context.Context, conn *sql.Conn, sqlText string, res *Result, 
 		}
 	}
 	if err := rows.Err(); err != nil && ctx.Err() == nil {
-		res.addError(err)
+		res.addBatchError(err, firstLine)
 	}
 }
 

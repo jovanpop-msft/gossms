@@ -462,3 +462,144 @@ func TestProbeUmaskMatchesAnOrdinaryCreate(t *testing.T) {
 		t.Errorf("0666 less the probed umask = %04o, os.WriteFile gave %04o", got, want)
 	}
 }
+
+// ageFile backdates path's modification time by d.
+func ageFile(t *testing.T, path string, d time.Duration) {
+	t.Helper()
+	old := time.Now().Add(-d)
+	if err := os.Chtimes(path, old, old); err != nil {
+		t.Fatalf("Chtimes: %v", err)
+	}
+}
+
+// Only the target's own temp files past StaleTempAge go: a fresh one may be a
+// save in progress in another process, and anything else in the folder is
+// someone's file.
+func TestRemoveStaleTempsRemovesOnlyOldTempsOfThatFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+	files := map[string]struct {
+		age  time.Duration
+		gone bool
+	}{
+		"config.json.tmp123456":   {time.Hour, true},
+		"config.json.tmp987":      {StaleTempAge + time.Minute, true},
+		"config.json.tmp555":      {time.Second, false}, // in progress
+		"config.json.tmpnotes":    {time.Hour, false},   // not CreateTemp's digits
+		"config.json.tmp":         {time.Hour, false},
+		"other.json.tmp123":       {time.Hour, false}, // another file's
+		"config.json":             {time.Hour, false},
+		"config.json.corrupt-1":   {time.Hour, false},
+		"xconfig.json.tmp1234567": {time.Hour, false},
+	}
+	for name, f := range files {
+		p := filepath.Join(dir, name)
+		if err := os.WriteFile(p, []byte(name), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		ageFile(t, p, f.age)
+	}
+
+	RemoveStaleTemps(path)
+
+	for name, f := range files {
+		_, err := os.Stat(filepath.Join(dir, name))
+		if gone := errors.Is(err, fs.ErrNotExist); gone != f.gone {
+			t.Errorf("%s: removed = %v, want %v", name, gone, f.gone)
+		}
+	}
+}
+
+// A save sweeps the leftovers of an earlier one the process died in.
+func TestWriteAtomicSweepsAnEarlierSavesStaleTemp(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "query.sql")
+	stale := filepath.Join(dir, "query.sql.tmp4242")
+	if err := os.WriteFile(stale, []byte("select 1"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ageFile(t, stale, time.Hour)
+
+	if err := WriteAtomic(path, []byte("select 2"), 0o644); err != nil {
+		t.Fatalf("WriteAtomic: %v", err)
+	}
+	if _, err := os.Stat(stale); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("the stale temp file is still there (err %v)", err)
+	}
+}
+
+// corruptCopies lists the KeepCorrupt copies of path, by name.
+func corruptCopies(t *testing.T, path string) map[string]string {
+	t.Helper()
+	entries, err := os.ReadDir(filepath.Dir(path))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]string{}
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), filepath.Base(path)+".corrupt") {
+			data, err := os.ReadFile(filepath.Join(filepath.Dir(path), e.Name()))
+			if err != nil {
+				t.Fatal(err)
+			}
+			got[e.Name()] = string(data)
+		}
+	}
+	return got
+}
+
+// A second corruption must not replace the first one's copy, even within the
+// same second.
+func TestKeepCorruptKeepsEachCorruptionInItsOwnCopy(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	now := time.Date(2026, 10, 15, 10, 30, 5, 0, time.Local)
+
+	first, err := KeepCorrupt(path, []byte("{first"), now)
+	if err != nil {
+		t.Fatalf("KeepCorrupt: %v", err)
+	}
+	if want := path + ".corrupt-20261015_103005"; first != want {
+		t.Errorf("copy = %s, want %s", first, want)
+	}
+	second, err := KeepCorrupt(path, []byte("{second"), now)
+	if err != nil {
+		t.Fatalf("KeepCorrupt: %v", err)
+	}
+	if second == first {
+		t.Fatalf("the second corruption reused %s", first)
+	}
+	got := corruptCopies(t, path)
+	if len(got) != 2 || got[filepath.Base(first)] != "{first" || got[filepath.Base(second)] != "{second" {
+		t.Errorf("copies = %v, want both corruptions kept", got)
+	}
+}
+
+// The same broken bytes re-read (Load, then each Save) are kept once, and a
+// copy under the old fixed .corrupt name counts.
+func TestKeepCorruptReusesACopyOfTheSameBytes(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	legacy := path + ".corrupt"
+	if err := os.WriteFile(legacy, []byte("{old"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := KeepCorrupt(path, []byte("{old"), time.Now()); err != nil || got != legacy {
+		t.Errorf("KeepCorrupt = %s, %v; want the existing %s", got, err, legacy)
+	}
+	a, err := KeepCorrupt(path, []byte("{new"), time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b, err := KeepCorrupt(path, []byte("{new"), time.Now().Add(time.Hour)); err != nil || b != a {
+		t.Errorf("KeepCorrupt again = %s, %v; want %s reused", b, err, a)
+	}
+	if got := corruptCopies(t, path); len(got) != 2 {
+		t.Errorf("copies = %v, want the legacy one and one new", got)
+	}
+}
+
+func TestKeepCorruptReportsACopyItCouldNotMake(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "missing", "config.json")
+	if _, err := KeepCorrupt(path, []byte("{x"), time.Now()); err == nil {
+		t.Error("KeepCorrupt into a folder that doesn't exist reported success")
+	}
+}

@@ -261,3 +261,28 @@ func TestReadOnlyOrDefaultOnANewFilegroupIsRefused(t *testing.T) {
 		}
 	}
 }
+
+// PRIMARY's Read-only is Msg 5047 on every server, and Apply reached it after
+// whatever else the page had to write (review plan R6). The form refuses it
+// first, and nothing is sent; Read-only elsewhere still passes.
+func TestReadOnlyOnPrimaryIsRefused(t *testing.T) {
+	sc, inst := newFakeConn(t, filegroupsPageResponses()...)
+	form, _ := loadPage(t, pageDatabaseFilegroups(sc, "appdb"), inst)
+	grid := toggleGrid(t, form)
+
+	toggleByName(t, grid, "STAGING", 0)
+	if err := form.Validate(); err != nil {
+		t.Fatalf("Read-only on STAGING was refused: %v", err)
+	}
+	toggleByName(t, grid, "PRIMARY", 0)
+	if err := form.Validate(); err == nil || !strings.Contains(err.Error(), "PRIMARY") {
+		t.Errorf("Read-only on PRIMARY: Validate = %v, want a refusal naming it", err)
+	}
+	toggleByName(t, grid, "PRIMARY", 0) // back off: nothing left to refuse
+	if err := form.Validate(); err != nil {
+		t.Errorf("PRIMARY back to read-write still refused: %v", err)
+	}
+	if stmts := inst.Statements(); len(stmts) != 0 {
+		t.Errorf("wrote:\n%s", strings.Join(stmts, "\n"))
+	}
+}

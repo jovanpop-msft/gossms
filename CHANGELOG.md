@@ -6,6 +6,12 @@ entries start with v0.0.2 onward.
 
 ## [Unreleased]
 
+### Added
+
+- **Windows on ARM release binary.** `windows/arm64` is back among the release
+  targets, with the same embedded icon and version info as the amd64 build
+  (`go-winres` now generates a `.syso` for both architectures).
+
 ## [0.0.15] - 2026-10-13
 
 ### Added

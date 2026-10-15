@@ -227,15 +227,15 @@ func (r *SelectRow) Layout(x, y, w int) {
 	want := selectControlWidth
 	if r.fitItems {
 		for _, it := range r.dd.Items() {
-			want = max(want, core.DisplayWidth(it)+1) // +1: the arrow's cell
+			want = max(want, core.DisplayWidth(it)+2) // +2: the gap and the arrow's cell
 		}
 	}
 	// The label, a space and the brackets take the rest of the row. A narrower row
 	// narrows the control, as TextRow.Layout does, rather than drawing it over the
 	// form's right border (Database Mail Profiles' "Account to add" at 80 columns);
-	// the floor keeps one value cell and the arrow.
+	// the floor keeps one value cell, the gap and the arrow.
 	room := w - core.DisplayWidth(r.dd.Label()) - 3
-	r.dd.SetWidth(max(2, min(want, room)))
+	r.dd.SetWidth(max(3, min(want, room)))
 }
 func (r *SelectRow) Focusable() bool { return !r.disabled && !r.pageReadOnly }
 

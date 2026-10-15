@@ -99,8 +99,8 @@ func (s *Session) ExecuteWithPlan(ctx context.Context, script string, opts ...Op
 // ExecuteEstimatedPlan runs under SET SHOWPLAN_XML ON: SQL Server compiles
 // each GO batch and returns its estimated plan in Result.PlanXML without
 // executing it, as SSMS's "Display Estimated Execution Plan".
-func (s *Session) ExecuteEstimatedPlan(ctx context.Context, script string) *Result {
-	return s.execute(ctx, script, planCaptureEstimated, nil)
+func (s *Session) ExecuteEstimatedPlan(ctx context.Context, script string, opts ...Option) *Result {
+	return s.execute(ctx, script, planCaptureEstimated, nil, opts...)
 }
 
 // ExecuteToSink is Execute streaming every row to sink; Result.Sets comes back

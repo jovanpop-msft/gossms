@@ -73,6 +73,12 @@ type Editor struct {
 	// selection.
 	OnRightClick func(x, y int)
 
+	// OnDoubleClick, if set, is offered a double-click on document line row before
+	// the editor selects the word there; returning true claims it and the word is
+	// not selected. A read-only view uses it to act on a line, as the Messages
+	// pane jumps to an error's line.
+	OnDoubleClick func(row int) bool
+
 	// hideGutter suppresses the line-number gutter and reclaims its width. False by
 	// default so the SQL query editor keeps its gutter; plain multi-line text boxes
 	// opt out via SetGutterVisible(false).
@@ -361,6 +367,15 @@ func (e *Editor) resetForNewText() {
 	e.undoStack, e.redoStack, e.undoBytes, e.stepOpen = nil, nil, 0, false
 	e.closeCompletion()
 	e.completionSuppressed = false
+}
+
+// GoToLine moves the caret to the start of document line row (clamped), drops
+// any selection and scrolls the line into view.
+func (e *Editor) GoToLine(row int) {
+	e.selecting, e.selBlock = false, false
+	e.cursorRow, e.cursorCol, e.desiredCol = row, 0, 0
+	e.clampCursor()
+	e.ensureCursorVisible()
 }
 
 func (e *Editor) clampCursor() {

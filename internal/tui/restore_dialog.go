@@ -204,7 +204,8 @@ func (d *RestoreDialog) show(sc *db.ServerConn, dbName string) {
 	}
 	d.ddHistDB = widgets.NewDropDown("Database:   ", histItems, 40)
 	d.ddHistSet = widgets.NewDropDown("Backup Set: ", nil, histSetWidth)
-	d.fTarget = widgets.NewInputField("", d.fileFieldWidth()+3+d.btnBrowse.Width(), false)
+	// As wide as the Backup File row above it: its field, the gap and Browse.
+	d.fTarget = widgets.NewInputField("", d.fileFieldWidth()+1+d.btnBrowse.Width(), false)
 	d.rbRecovery = widgets.NewRadioBox("Recovery Options:", []string{"WITH RECOVERY", "WITH NORECOVERY"})
 	d.cbReplace = widgets.NewCheckBox("Replace existing database (WITH REPLACE)")
 	d.cbVerify = widgets.NewCheckBox("Verify backup before restore")

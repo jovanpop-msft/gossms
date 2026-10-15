@@ -293,7 +293,8 @@ declares no arm — `ALTER AUTHORIZATION` is refused on undenied roles too.
   `DeniedOnAnyColumn` never fires. Adding `SELECT` wouldn't help:
   `gate.ObjectDenial` asks columns only for rights an action lists, and the only
   object right declared is `rightAlterOnObject`. Firing it needs an action gated
-  on object `SELECT`; Select Top 1000 Rows only generates text. The machinery
+  on object `SELECT`; Select Top 1000 Rows runs ungated and leaves a
+  missing `SELECT` to the server's own error. The machinery
   stays, T-SQL-verified. For whoever picks it up: `SELECT` in the probe brings
   public's catalog-view grants into `ObjectPermissions` (232 rows on
   HealthClinic), which must **not** be filtered by `is_ms_shipped`; and

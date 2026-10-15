@@ -54,7 +54,7 @@ Download the latest release for your platform:
 
 Release binaries are available for:
 
-- Windows (amd64)
+- Windows (amd64 and arm64)
 - Linux (amd64 and arm64)
 - macOS (Apple silicon/arm64 and Intel/amd64)
 

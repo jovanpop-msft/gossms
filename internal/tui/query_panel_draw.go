@@ -22,6 +22,10 @@ func (p *QueryPanel) Draw(s tcell.Screen) {
 	core.DrawTextClipped(s, p.rect.X+1, p.rect.Y, p.rect.W-2, titleStyle, p.connInfoText())
 
 	p.editor.Draw(s)
+	if !p.resultsShown {
+		p.editor.DrawOverlay(s)
+		return
+	}
 	p.splitter.SetActive(p.resultsHasFocus())
 	p.splitter.Draw(s)
 	p.drawTabBar(s)

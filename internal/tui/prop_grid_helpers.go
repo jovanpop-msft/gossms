@@ -298,7 +298,8 @@ func credNames(creds []*gosmo.Credential) []string {
 // buildFilterInfoForm builds the read-only Filter page shared by Index and
 // Statistics Properties. SQL Server accepts a filtered predicate only at CREATE
 // time, so on an existing index or statistic it is read-only, with Check
-// Syntax/Estimate Rows running the predicate against the table live.
+// Syntax compiling the predicate against the table (never running it) and
+// Estimate Rows counting the rows it qualifies, live.
 func buildFilterInfoForm(d *PropDialog, t *gosmo.Table, hasFilter bool, filterDef string) *propsheet.Form {
 	statusRow := propsheet.Static("Status", "Not checked")
 	rowsRow := propsheet.Static("Estimated qualifying rows", "")

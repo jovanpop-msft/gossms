@@ -1124,3 +1124,91 @@ func TestDocEqualsMatchesText(t *testing.T) {
 		}
 	}
 }
+
+// goToLineResult is a run whose second batch failed on script line 4: a notice,
+// then the error's header and text, both pointing at line 4.
+func goToLineResult() *query.Result {
+	return &query.Result{Messages: []query.Message{
+		{Text: "a"},
+		{Text: "Msg 8134, Level 16, State 1, Line 4", IsError: true, Line: 4},
+		{Text: "Divide by zero error encountered.", IsError: true, Line: 4},
+	}}
+}
+
+// Enter on an error's line in Messages moves the editor's caret to the line the
+// error names and gives the editor focus; Enter on a notice does neither.
+func TestMessagesEnterGoesToTheErrorsLine(t *testing.T) {
+	a := newTestApp()
+	qp := NewQueryPanel(a, "Query 1")
+	qp.SetBounds(0, 0, 80, 24)
+	qp.editor.SetText("print 'a';\nselect 1\nGO\nselect 1/0;\nselect 2")
+	qp.setResult(goToLineResult(), false)
+	qp.setResultsFocused(true)
+	if !qp.onMessagesTab() {
+		t.Fatalf("a run with only messages should open on Messages")
+	}
+	enter := tcell.NewEventKey(tcell.KeyEnter, "", tcell.ModNone)
+
+	qp.HandleKey(enter) // on "a", a notice
+	if row, _ := qp.editor.CursorPos(); row != 0 || !qp.resultsFocused {
+		t.Fatalf("Enter on a notice: editor row %d, resultsFocused %v; want 0, true", row, qp.resultsFocused)
+	}
+
+	qp.HandleKey(tcell.NewEventKey(tcell.KeyDown, "", tcell.ModNone))
+	qp.HandleKey(tcell.NewEventKey(tcell.KeyDown, "", tcell.ModNone)) // the error's text line
+	if !qp.HandleKey(enter) {
+		t.Fatalf("Enter on an error line not handled")
+	}
+	if row, col := qp.editor.CursorPos(); row != 3 || col != 0 {
+		t.Errorf("editor caret = (%d,%d), want (3,0): Line 4", row, col)
+	}
+	if qp.resultsFocused {
+		t.Errorf("focus stayed on Messages, want the editor")
+	}
+}
+
+// A double-click on an error's header line goes to its line too, and claims the
+// click: the word under it is not selected.
+func TestMessagesDoubleClickGoesToTheErrorsLine(t *testing.T) {
+	a := newTestApp()
+	qp := NewQueryPanel(a, "Query 1")
+	qp.SetBounds(0, 0, 80, 24)
+	qp.editor.SetText("print 'a';\nselect 1\nGO\nselect 1/0;\nselect 2")
+	qp.setResult(goToLineResult(), false)
+	r := qp.messages.Bounds()
+	x, y := r.X+r.W/2, r.Y+1 // the header line
+	for range 2 {
+		qp.HandleMouse(tcell.NewEventMouse(x, y, tcell.Button1, tcell.ModNone))
+		qp.HandleMouse(tcell.NewEventMouse(x, y, tcell.ButtonNone, tcell.ModNone))
+	}
+	if row, _ := qp.editor.CursorPos(); row != 3 {
+		t.Errorf("editor row = %d after double-clicking the error, want 3", row)
+	}
+	if qp.resultsFocused {
+		t.Errorf("focus stayed on Messages, want the editor")
+	}
+	if qp.messages.HasSelection() {
+		t.Errorf("the double-click also selected a word in Messages")
+	}
+}
+
+// What Execute runs starts on the selection's top line, whichever way the
+// selection was made, so error lines count from there (query.WithLineOffset).
+func TestScriptToRunStartsOnTheSelectionsLine(t *testing.T) {
+	a := newTestApp()
+	qp := NewQueryPanel(a, "Query 1")
+	qp.SetBounds(0, 0, 80, 24)
+	qp.editor.SetText("select 1\nselect 2\nselect 3\nselect 4")
+	if text, first := qp.scriptToRun(); first != 0 || text != qp.editor.Text() {
+		t.Fatalf("no selection: scriptToRun = %q, %d; want the whole text, 0", text, first)
+	}
+	down := tcell.NewEventKey(tcell.KeyDown, "", tcell.ModNone)
+	shiftUp := tcell.NewEventKey(tcell.KeyUp, "", tcell.ModShift)
+	qp.editor.HandleKey(down)
+	qp.editor.HandleKey(down)
+	qp.editor.HandleKey(down)    // row 3
+	qp.editor.HandleKey(shiftUp) // select upwards to row 2
+	if text, first := qp.scriptToRun(); first != 2 || text != "select 3\n" {
+		t.Errorf("backward selection: scriptToRun = %q, %d; want %q, 2", text, first, "select 3\n")
+	}
+}

@@ -33,7 +33,10 @@ type nloginPrefetch struct {
 	dbNames       []string
 	langNames     []string
 	serverRoles   []*gosmo.ServerRole
-	dbRoles       []nloginDBRoles
+	// serverPerms rates the user-defined server roles; nil when the read failed
+	// (serverPermissionsForRating).
+	serverPerms []*gosmo.ServerPermissionEntry
+	dbRoles     []nloginDBRoles
 
 	// certNames and asymKeyNames are master's certificates and asymmetric keys, for
 	// the Mapped-object picker a certificate- or asymmetric-key-mapped login needs.
@@ -112,6 +115,7 @@ func fetchNewLoginPrefetch(ctx context.Context, sc *db.ServerConn) (*nloginPrefe
 		dbNames:       dbNames,
 		langNames:     langNames,
 		serverRoles:   roles,
+		serverPerms:   serverPermissionsForRating(ctx, sc),
 		dbRoles:       dbRoles,
 		certNames:     certNames,
 		asymKeyNames:  asymKeyNames,

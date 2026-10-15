@@ -358,7 +358,9 @@ func (e *Editor) applyMousePress(row, col int, ev *tcell.EventMouse) bool {
 		// hence the modifier test lives inside it, not in an && here that would discard
 		// the press before consulting it.
 		if e.pressIsDouble(row, col, ev.When(), ev.Modifiers()) {
-			e.selectWordAt(row, col)
+			if e.OnDoubleClick == nil || !e.OnDoubleClick(row) {
+				e.selectWordAt(row, col)
+			}
 			return true
 		}
 		if ev.Modifiers()&tcell.ModShift != 0 {

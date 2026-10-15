@@ -45,9 +45,16 @@ type QueryPanel struct {
 	planView    *planview.PlanView // nil until the first Show Estimated/Actual Execution Plan; see planTabActive
 	splitter    *layout.Splitter
 	active      bool
-	conn        *db.ServerConn // nil = none; may outlive a disconnect
-	database    string         // the session's DB_NAME() as of its last run
-	app         *App
+
+	// resultsShown is false until the first run, or the first notice a run attempt
+	// leaves (showResultsPane): until then the editor takes the whole panel and the
+	// splitter, tab bar and results are neither laid out nor drawn, as in SSMS. An
+	// empty grid there drew a lone "|" header over a separator in every new window.
+	// Once shown, the pane stays.
+	resultsShown bool
+	conn         *db.ServerConn // nil = none; may outlive a disconnect
+	database     string         // the session's DB_NAME() as of its last run
+	app          *App
 
 	// session is the one SQL Server session every run of this panel executes on,
 	// taken out of conn's pool by connectForQueryPanel; nil exactly when conn is nil
@@ -138,6 +145,16 @@ type QueryPanel struct {
 	// messagesHighlighter.
 	messageErrorLines []bool
 
+	// messageLines is messageErrorLines's partner: per rendered line, the 1-based
+	// editor line its error points at (query.Message.Line), 0 for none. Read by
+	// goToMessageLine.
+	messageLines []int
+
+	// wentToLine is set by goToMessageLine, so the click that called it (through
+	// the Messages editor's OnDoubleClick) leaves focus in the query editor
+	// instead of taking it for the results area. Reset before each press.
+	wentToLine bool
+
 	// resultsFocused tracks which sub-region gets keyboard input: false (default) the
 	// editor, true the results grid; set by whichever a click last landed in. It also
 	// gates the splitter's Ctrl+Up/Down resize to the results grid, as
@@ -221,6 +238,7 @@ func NewQueryPanel(app *App, title string) *QueryPanel {
 	p.editor.SetWrapMode(app.wordWrap)
 	p.messages = controls.NewEditor(p.messagesHighlighter)
 	p.messages.SetReadOnly(true)
+	p.messages.OnDoubleClick = p.goToMessageLine
 	p.resultsText = controls.NewEditor(nil)
 	p.resultsText.SetReadOnly(true)
 	// An XML or JSON cell goes to its own query tab with matching highlighting
@@ -322,6 +340,11 @@ func (p *QueryPanel) SetBounds(x, y, w, h int) {
 }
 
 func (p *QueryPanel) layoutChildren() {
+	if !p.resultsShown {
+		p.editor.SetBounds(p.rect.X, p.rect.Y+1, p.rect.W, p.rect.H-1)
+		p.tabRect, p.statusRect = core.Rect{}, core.Rect{}
+		return
+	}
 	top := p.splitter.FirstRect()
 	bottom := p.splitter.SecondRect()
 	p.editor.SetBounds(top.X, top.Y, top.W, top.H)
@@ -351,6 +374,15 @@ func (p *QueryPanel) layoutChildren() {
 	if p.planView != nil {
 		p.planView.SetBounds(bottom.X, respY, bottom.W, otherH)
 	}
+}
+
+// showResultsPane lays out the results area below the editor; see resultsShown.
+func (p *QueryPanel) showResultsPane() {
+	if p.resultsShown {
+		return
+	}
+	p.resultsShown = true
+	p.layoutChildren()
 }
 
 // SetActive marks this panel as focused.

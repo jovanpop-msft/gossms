@@ -2,11 +2,15 @@
 package fileutil
 
 import (
+	"bytes"
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
+	"time"
 )
 
 // WriteAtomic writes data to a temp file in path's directory and renames it
@@ -52,6 +56,7 @@ func WriteAtomic(path string, data []byte, perm os.FileMode) error {
 		return err
 	}
 	syncDir(filepath.Dir(path))
+	RemoveStaleTemps(path)
 	return nil
 }
 
@@ -120,6 +125,97 @@ func createExclusiveInPlace(path string, data []byte, perm os.FileMode) (bool, e
 	}
 	syncDir(filepath.Dir(path))
 	return true, nil
+}
+
+// StaleTempAge is how old a temp file left beside a target must be before
+// RemoveStaleTemps deletes it. A save takes milliseconds; the margin keeps a
+// write in progress in another gossms process (or over a slow share) safe.
+const StaleTempAge = 5 * time.Minute
+
+// RemoveStaleTemps deletes the temp files WriteAtomic and CreateAtomic left
+// beside path — named path's base + ".tmp" + CreateTemp's digits — that are
+// older than StaleTempAge. The deferred remove never runs when the process
+// dies between CreateTemp and the rename (os.Exit from the watchdog, a kill, a
+// crash), and each leftover of config.json is a full copy of it, encrypted
+// passwords included.
+//
+// Only that exact pattern is matched, so in a user's script folder nothing but
+// gossms's own leftovers for this one file can go. Best-effort and silent: a
+// file it can't read or remove (held open on Windows) is left for next time.
+func RemoveStaleTemps(path string) {
+	path = resolveSymlink(path)
+	entries, err := os.ReadDir(filepath.Dir(path))
+	if err != nil {
+		return
+	}
+	prefix := filepath.Base(path) + ".tmp"
+	cutoff := time.Now().Add(-StaleTempAge)
+	for _, e := range entries {
+		digits, ok := strings.CutPrefix(e.Name(), prefix)
+		if !ok || !allDigits(digits) || !e.Type().IsRegular() {
+			continue
+		}
+		if fi, err := e.Info(); err == nil && fi.ModTime().Before(cutoff) {
+			_ = os.Remove(filepath.Join(filepath.Dir(path), e.Name()))
+		}
+	}
+}
+
+// allDigits reports whether s is a non-empty run of ASCII digits, the random
+// part os.CreateTemp puts in place of no "*".
+func allDigits(s string) bool {
+	return s != "" && strings.Trim(s, "0123456789") == ""
+}
+
+// isTempName reports whether name is a WriteAtomic/CreateAtomic temp file,
+// possibly one still being written.
+func isTempName(name string) bool {
+	i := strings.LastIndex(name, ".tmp")
+	return i >= 0 && allDigits(name[i+len(".tmp"):])
+}
+
+// KeepCorrupt saves data — path's contents, which did not parse — beside it as
+// path.corrupt-<yyyymmdd_hhmmss>, so what the file held stays readable by
+// hand after the caller starts empty. It returns the copy's path.
+//
+// Each corruption gets its own copy: one fixed name would replace the first
+// recovery copy when the file is corrupted again later. A copy already holding
+// the same bytes (an older one, or the plain .corrupt name earlier versions
+// wrote) is reused instead, since Load and every Save re-read the same broken
+// file. The copy is created, never overwritten (CreateAtomic), so two
+// processes can't replace each other's.
+//
+// An error means data exists nowhere but in path: the caller must then not
+// write over path.
+func KeepCorrupt(path string, data []byte, now time.Time) (string, error) {
+	path = resolveSymlink(path)
+	dir, base := filepath.Dir(path), filepath.Base(path)+".corrupt"
+	if entries, err := os.ReadDir(dir); err == nil {
+		for _, e := range entries {
+			if !strings.HasPrefix(e.Name(), base) || !e.Type().IsRegular() || isTempName(e.Name()) {
+				continue
+			}
+			old := filepath.Join(dir, e.Name())
+			if held, err := os.ReadFile(old); err == nil && bytes.Equal(held, data) {
+				return old, nil
+			}
+		}
+	}
+	name := filepath.Join(dir, base+"-"+now.Format("20060102_150405"))
+	for i := range 100 {
+		dst := name
+		if i > 0 {
+			dst = fmt.Sprintf("%s-%d", name, i)
+		}
+		created, err := CreateAtomic(dst, data, 0o600)
+		if err != nil {
+			return "", err
+		}
+		if created {
+			return dst, nil
+		}
+	}
+	return "", fmt.Errorf("no free name for a copy of %s beside it", base)
 }
 
 // resolveSymlink returns the file path names, following symlinks, so

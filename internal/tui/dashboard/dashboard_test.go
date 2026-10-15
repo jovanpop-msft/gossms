@@ -19,7 +19,7 @@ func fullHistory() HistoryView {
 	return HistoryView{
 		Header:      Header{Instance: "SQLDEMO01", SampleTime: "11:56:23", Resolution: "2 sec"},
 		Activity:    testSeries("Batches", 1, 2, 3),
-		Lookups:     testSeries("Key lookups", 10, 20),
+		Lookups:     testSeries("Index searches", 10, 20),
 		Backup:      testSeries("Backup MB/sec", 0, 1),
 		CPU:         testSeries("SQL Server %", 20, 30),
 		Waits:       testSeries("Network", 5, 6),
@@ -51,7 +51,7 @@ func TestDrawHistoryDrawsEverySectionAndPanel(t *testing.T) {
 	rows := renderHistory(fullHistory()).Rows()
 
 	for _, want := range []string{
-		"SQL SERVER ACTIVITY", "Key lookups / Forwarded recs", "BACKUP THROUGHPUT",
+		"SQL SERVER ACTIVITY", "Index searches / Forwarded recs", "BACKUP THROUGHPUT",
 		"CPU usage", "SQL SERVER WAITS",
 		"SQL SERVER MEMORY", "CACHE HIT RATIOS / PLE", "PAGES READ / WRITE",
 		"DATABASE IO", "LOG FLUSHES", "CHECKPOINTS / LAZY WRITES",

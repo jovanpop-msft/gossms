@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"slices"
 	"sync"
+	"time"
 
 	"github.com/radix29/gossms/internal/fileutil"
 )
@@ -96,8 +97,9 @@ func LoadTrackedQueriesFrom(path string) *TrackedQueries {
 }
 
 // readTrackedFile reads path into a fresh set map. A missing file is an empty
-// set; one that doesn't parse is kept as .corrupt and is empty too. Only a
-// file that exists and can't be read is an error.
+// set; one that doesn't parse is kept aside (fileutil.KeepCorrupt) and is
+// empty too. A file that exists and can't be read is an error, and so is one
+// that doesn't parse and can't be kept aside.
 func readTrackedFile(path string) (map[string]map[string][]int64, error) {
 	sets := map[string]map[string][]int64{}
 	data, err := os.ReadFile(path)
@@ -109,9 +111,13 @@ func readTrackedFile(path string) (map[string]map[string][]int64, error) {
 	}
 	var f trackedFile
 	if err := json.Unmarshal(data, &f); err != nil {
-		// As with config.json: keep the bytes as .corrupt and start empty.
-		_ = fileutil.WriteAtomic(path+".corrupt", data, 0o600)
-		log.Printf("tracked queries: %s did not parse (%v); kept as %s.corrupt", path, err, path)
+		// As with config.json: keep the bytes aside and start empty — or, if
+		// they can't be kept, refuse, so nothing writes over the only copy.
+		kept, kerr := keepCorrupt(path, data, time.Now())
+		if kerr != nil {
+			return nil, fmt.Errorf("%s did not parse (%v) and could not be kept aside: %w", path, err, kerr)
+		}
+		log.Printf("tracked queries: %s did not parse (%v); kept as %s", path, err, kept)
 		return sets, nil
 	}
 	// Merged, not assigned: keys are re-folded on every read, so a file

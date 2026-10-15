@@ -42,7 +42,7 @@ type HistoryView struct {
 
 	// SQL SERVER ACTIVITY section.
 	Activity     []charts.Series // batches, transactions, compiles, recompiles — overlaid
-	Lookups      []charts.Series // key lookups, forwarded records
+	Lookups      []charts.Series // index searches, forwarded records
 	Backup       []charts.Series // backup MB/sec
 	ActivityKPIs []charts.KPI    // readouts along the section bar
 
@@ -87,7 +87,7 @@ type SampleView struct {
 	UserConnections  string
 	BlockedProcesses string
 	Activity         BarPanel // batches, trans, comp, recomp
-	Lookups          BarPanel // key lookups, forwarded records
+	Lookups          BarPanel // index searches, forwarded records
 	Backup           BarPanel // backup MB/sec
 
 	// SQL SERVER WAITS section. Each bar is one wait category, split into

@@ -18,6 +18,16 @@ func (e *Editor) HasSelection() bool {
 	return e.selAnchorRow != e.cursorRow || e.selAnchorCol != e.cursorCol
 }
 
+// SelectionTopRow returns the line SelectedText's first line comes from (a block
+// selection's top row too), or the cursor's line with no selection. A host
+// running the selection uses it to map a line of the text back to the document.
+func (e *Editor) SelectionTopRow() int {
+	if !e.HasSelection() {
+		return e.cursorRow
+	}
+	return min(e.selAnchorRow, e.cursorRow)
+}
+
 // ClearSelection drops any active selection without affecting the cursor.
 func (e *Editor) ClearSelection() { e.selecting = false }
 

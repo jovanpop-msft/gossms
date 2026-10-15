@@ -38,6 +38,14 @@ func pageDatabaseChangeTracking(sc *db.ServerConn, dbName string) propPage {
 			tablesRow := propsheet.NewToggleGrid([]string{"Table name", "Enabled", "Track columns updated"}, []int{1, 2}, 10)
 			tablesRow.SetRows(text, values)
 
+			// An untracked database reads retention 0 and auto cleanup OFF. Shown
+			// as read, switching tracking on was refused for retention 0 (minimum
+			// 1) and then wrote AUTO_CLEANUP = OFF, leaving the side tables to grow
+			// unbounded. Seeded with SQL Server's own defaults for SET
+			// CHANGE_TRACKING = ON, as SSMS does; the rows load clean either way.
+			if !ct.Enabled {
+				ct.RetentionPeriod, ct.RetentionUnit, ct.AutoCleanup = 2, gosmo.ChangeTrackingDays, true
+			}
 			enabledRow := propsheet.Select("Change tracking", onOff, boolIdx(ct.Enabled))
 			retentionRow := propsheet.Int("Retention period", int64(ct.RetentionPeriod), 1, 100000, "")
 			unitRow := propsheet.Select("Retention period units", retentionUnits, indexOf(retentionUnits, orDefault(string(ct.RetentionUnit), "DAYS")))
@@ -90,6 +98,11 @@ func pageDatabaseChangeTracking(sc *db.ServerConn, dbName string) propPage {
 				}
 				setDatabase := func() error {
 					if !(enabledRow.Dirty() || retentionRow.Dirty() || unitRow.Dirty() || autoCleanupRow.Dirty()) {
+						return nil
+					}
+					// Retention edited on a database left off has nothing to set:
+					// SET CHANGE_TRACKING = OFF on an untracked one is Msg 5089.
+					if !ct.Enabled && enabledRow.Selected() == 0 {
 						return nil
 					}
 					period, err := retentionRow.IntValue()

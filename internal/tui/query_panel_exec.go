@@ -19,11 +19,17 @@ import (
 // the run outlives its reason (B12).
 func (p *QueryPanel) Execute() {
 	p.editor.CloseCompletion()
+	p.runQuery(p.scriptToRun())
+}
+
+// scriptToRun returns what Execute and the estimated plan run: the selected text
+// if there is a selection, otherwise the whole content, with the 0-based editor
+// line it starts on (query.WithLineOffset), so error lines match the editor's.
+func (p *QueryPanel) scriptToRun() (script string, firstLine int) {
 	if sel := p.editor.SelectedText(); sel != "" {
-		p.runQuery(sel)
-		return
+		return sel, p.editor.SelectionTopRow()
 	}
-	p.runQuery(p.editor.Text())
+	return p.editor.Text(), 0
 }
 
 // ExecuteSelection runs only the editor's selected text, setting a status message
@@ -32,7 +38,7 @@ func (p *QueryPanel) Execute() {
 func (p *QueryPanel) ExecuteSelection() {
 	p.editor.CloseCompletion()
 	if sel := p.editor.SelectedText(); sel != "" {
-		p.runQuery(sel)
+		p.runQuery(sel, p.editor.SelectionTopRow())
 		return
 	}
 	p.app.setStatus("No selection to execute")
@@ -187,6 +193,7 @@ func (p *QueryPanel) clearResults() {
 	p.textMemo.key, p.textMemo.lines = textKey{}, nil
 	p.messages.SetText("")
 	p.messageErrorLines = nil
+	p.messageLines = nil
 	p.layoutChildren() // the tab bar's row goes back to the results area
 }
 
@@ -195,8 +202,9 @@ func (p *QueryPanel) clearResults() {
 //
 // In Results To File mode it asks for the destination first, then runs through
 // query.Session.ExecuteToSink, streaming rows to the file as they are scanned.
-func (p *QueryPanel) runQuery(queryText string) {
-	if p.runRefused(queryText, func() { p.runQuery(queryText) }) {
+// firstLine is the 0-based editor line queryText starts on (scriptToRun).
+func (p *QueryPanel) runQuery(queryText string, firstLine int) {
+	if p.runRefused(queryText, func() { p.runQuery(queryText, firstLine) }) {
 		return
 	}
 	// Snapshotted here rather than read inside the closures below: the Query menu can
@@ -220,11 +228,11 @@ func (p *QueryPanel) runQuery(queryText string) {
 				p.app.setStatus(p.notConnectedMessage())
 				return
 			}
-			p.startRun(queryText, path)
+			p.startRun(queryText, firstLine, path)
 		})
 		return
 	}
-	p.startRun(queryText, "")
+	p.startRun(queryText, firstLine, "")
 }
 
 // runRefused applies the checks every run entry point opens with (something to
@@ -251,13 +259,17 @@ func (p *QueryPanel) runRefused(queryText string, retry func()) bool {
 	default:
 		return false
 	}
+	if p.resultsNotice != "" {
+		p.showResultsPane() // the notice is drawn on the results status line
+	}
 	return true
 }
 
-// startRun executes queryText, clearing the results area first. exportPath is
-// non-empty only for a Results To File run, which streams every row there instead
-// of retaining it, bounded by the file rather than memory.
-func (p *QueryPanel) startRun(queryText, exportPath string) {
+// startRun executes queryText, clearing the results area first. firstLine is as
+// for runQuery. exportPath is non-empty only for a Results To File run, which
+// streams every row there instead of retaining it, bounded by the file rather than
+// memory.
+func (p *QueryPanel) startRun(queryText string, firstLine int, exportPath string) {
 	p.clearResults()
 	// Snapshot now, not read from the goroutine below: the "Include Actual Execution
 	// Plan" toggle can change while it runs. Live Query Statistics rides on the actual
@@ -266,6 +278,7 @@ func (p *QueryPanel) startRun(queryText, exportPath string) {
 	capturePlan := p.app.actualPlanEnabled || p.app.liveStatsEnabled
 	live := p.app.liveStatsEnabled && exportPath == ""
 	prog := &query.Progress{}
+	opts := []query.Option{query.WithProgress(prog), query.WithLineOffset(firstLine)}
 
 	// Written by run on the background goroutine, read by the completion on the UI
 	// goroutine; launch's postAndWake orders the two.
@@ -278,15 +291,15 @@ func (p *QueryPanel) startRun(queryText, exportPath string) {
 				exportErr = err
 				return &query.Result{Messages: query.ErrorMessages(err)}
 			}
-			res := sess.ExecuteToSink(ctx, queryText, sink, query.WithProgress(prog))
+			res := sess.ExecuteToSink(ctx, queryText, sink, opts...)
 			// Close after the run either way: the file has partial content and the handle
 			// must not leak.
 			exportErr = sink.Close()
 			return res
 		case capturePlan:
-			return sess.ExecuteWithPlan(ctx, queryText, query.WithProgress(prog))
+			return sess.ExecuteWithPlan(ctx, queryText, opts...)
 		default:
-			return sess.Execute(ctx, queryText, query.WithProgress(prog))
+			return sess.Execute(ctx, queryText, opts...)
 		}
 	}
 	p.launch("query execution", "Executing query...", prog, run, func(res *query.Result, cancelled bool) {
@@ -319,6 +332,7 @@ func (p *QueryPanel) launch(what, status string, prog *query.Progress,
 	ctx, cancel := context.WithCancel(p.conn.Server.Context())
 	p.cancel = cancel
 	p.resultsNotice = ""
+	p.showResultsPane()
 	p.executing = true
 	p.execStart = time.Now()
 	p.progress = prog
@@ -424,6 +438,7 @@ func (p *QueryPanel) setResult(res *query.Result, cancelled bool) {
 		}
 	}
 	p.result = res
+	p.showResultsPane()
 	p.setResultPlan(res)
 	p.activeTab = 0
 	if len(res.Sets) == 0 || res.HasErrors() {

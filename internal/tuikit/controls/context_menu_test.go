@@ -276,3 +276,42 @@ func TestContextMenuSetHoverRestoresTheCursor(t *testing.T) {
 		t.Errorf("SetHover(out of range) moved the cursor to %d", cm.hover)
 	}
 }
+
+// R11: with nothing highlighted, Up highlighted the first item, the same as
+// Down, so Ctrl+Space, Up, Enter on a database opened New Query instead of
+// Properties. Up now starts from the bottom; Down still starts from the top.
+func TestContextMenuUpFromNothingHighlightsTheLastItem(t *testing.T) {
+	items := []MenuItem{
+		{Label: "New Query"},
+		{Label: "Refresh"},
+		{Divider: true},
+		{Label: "Disabled", Enabled: func() bool { return false }},
+		{Label: "Properties"},
+	}
+	cm := &ContextMenu{}
+	cm.Show(0, 0, items)
+	cm.HandleKey(tcell.NewEventKey(tcell.KeyUp, "", tcell.ModNone))
+	if cm.hover != 4 {
+		t.Fatalf("Up from nothing highlighted: hover = %d, want 4 (Properties)", cm.hover)
+	}
+	cm.Show(0, 0, items)
+	cm.HandleKey(tcell.NewEventKey(tcell.KeyDown, "", tcell.ModNone))
+	if cm.hover != 0 {
+		t.Fatalf("Down from nothing highlighted: hover = %d, want 0 (New Query)", cm.hover)
+	}
+}
+
+// The same rule in an open submenu whose highlight was cleared; a trailing
+// divider is skipped.
+func TestStepSelectableItemFromNothing(t *testing.T) {
+	if got := stepSelectableItem([]MenuItem{{Label: "a"}, {Label: "b"}, {Label: "c"}}, -1, -1); got != 2 {
+		t.Errorf("Up from -1 = %d, want 2", got)
+	}
+	items := []MenuItem{{Label: "a"}, {Label: "b"}, {Divider: true}}
+	if got := stepSelectableItem(items, -1, -1); got != 1 {
+		t.Errorf("Up from -1 past a trailing divider = %d, want 1", got)
+	}
+	if got := stepSelectableItem(items, -1, 1); got != 0 {
+		t.Errorf("Down from -1 = %d, want 0", got)
+	}
+}

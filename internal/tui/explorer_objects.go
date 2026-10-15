@@ -451,7 +451,7 @@ func tableMenuItems(a *App, sc *db.ServerConn, node *explorerNode, newQuery, ref
 		newQuery,
 		{Divider: true},
 		{Label: "Select Top 1000 Rows", Action: func() {
-			a.openQueryWithText(sc, node.data.DBName, "SELECT TOP 1000 *\nFROM "+tableFQN)
+			a.openQueryWithTextAndExecute(sc, node.data.DBName, "SELECT TOP 1000 *\nFROM "+tableFQN)
 		}},
 		{Divider: true},
 		{Label: "Rebuild All Indexes", Action: func() {
@@ -474,7 +474,7 @@ func viewMenuItems(a *App, sc *db.ServerConn, node *explorerNode, newQuery, refr
 		newQuery,
 		{Divider: true},
 		{Label: "Select Top 1000 Rows", Action: func() {
-			a.openQueryWithText(sc, node.data.DBName, "SELECT TOP 1000 *\nFROM "+viewFQN)
+			a.openQueryWithTextAndExecute(sc, node.data.DBName, "SELECT TOP 1000 *\nFROM "+viewFQN)
 		}},
 		{Divider: true},
 		{Label: "View Dependencies", Action: func() { a.showDependencies(node) }},

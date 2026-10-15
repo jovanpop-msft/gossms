@@ -213,14 +213,37 @@ func (p *QueryPanel) renderActiveTab() {
 func (p *QueryPanel) setMessages(msgs []query.Message) {
 	var textLines []string
 	var errLines []bool
+	var lineNos []int
 	for _, m := range msgs {
 		for l := range strings.SplitSeq(m.Text, "\n") {
 			textLines = append(textLines, l)
 			errLines = append(errLines, m.IsError)
+			lineNos = append(lineNos, m.Line)
 		}
 	}
 	p.messageErrorLines = errLines
+	p.messageLines = lineNos
 	p.messages.SetText(strings.Join(textLines, "\n"))
+}
+
+// goToMessageLine moves the query editor's caret to the line the error on the
+// Messages pane's line idx points at, and focuses the editor: Enter or a
+// double-click there, as SSMS's double-click on an error. Reports whether idx had
+// a line to go to; anything else (a notice, an error inside a procedure) is left
+// to the pane.
+//
+// The line is where the error was when the script ran: an edit since then can
+// leave it pointing elsewhere, as in SSMS.
+func (p *QueryPanel) goToMessageLine(idx int) bool {
+	if idx < 0 || idx >= len(p.messageLines) || p.messageLines[idx] <= 0 {
+		return false
+	}
+	line := p.messageLines[idx]
+	p.editor.GoToLine(line - 1)
+	p.setResultsFocused(false)
+	p.wentToLine = true
+	p.app.setStatus(fmt.Sprintf("Line %d", line))
+	return true
 }
 
 // textKey is what one Results to Text rendering depends on: the set (a result and

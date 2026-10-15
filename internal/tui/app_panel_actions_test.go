@@ -1,8 +1,12 @@
 package tui
 
 import (
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/gdamore/tcell/v3"
+	"github.com/gdamore/tcell/v3/vt"
 )
 
 // TestPanelHosted confirms panelHosted distinguishes a panel that's still
@@ -120,5 +124,69 @@ func TestWithQueryPanelRunsOnTheActivePanel(t *testing.T) {
 	}
 	if a.statusText != "" {
 		t.Errorf("status = %q, want nothing said when there is a panel to act on", a.statusText)
+	}
+}
+
+// A query window opened from Object Explorer (New Query, Script As) drew an
+// empty results grid, a lone "|" header over a separator, before anything had
+// run. Until the first run the editor takes the whole panel; the first run
+// attempt, even one refused with a notice, brings the results pane in.
+func TestQueryWindowHasNoResultsPaneBeforeItsFirstRun(t *testing.T) {
+	s, err := tcell.NewTerminfoScreenFromTty(vt.NewMockTerm(vt.MockOptSize{X: 80, Y: 24}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Init(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(s.Fini)
+	a := newTestApp()
+	a.screen = s
+	a.openQueryWithText(nil, "", "SELECT 1")
+	qp := a.activeQueryPanel()
+	if qp == nil {
+		t.Fatal("openQueryWithText left no active query panel")
+	}
+	qp.SetBounds(0, 0, 80, 24)
+	screen := func() string {
+		s.Clear()
+		qp.Draw(s)
+		var b strings.Builder
+		for y := range 24 {
+			for x := range 80 {
+				str, _, _ := s.Get(x, y)
+				b.WriteString(str)
+			}
+			b.WriteByte('\n')
+		}
+		return b.String()
+	}
+
+	if got := qp.editor.Bounds().H; got != 23 {
+		t.Errorf("editor height before any run = %d, want 23 (everything below the title bar)", got)
+	}
+	if text := screen(); strings.Contains(text, "Results") || strings.Contains(text, "──────────") {
+		t.Fatalf("results pane drawn before any run:\n%s", text)
+	}
+	// Where the splitter bar would be: the click belongs to the editor.
+	qp.editor.SetText(strings.Repeat("SELECT 1\n", 20))
+	bar := qp.splitter.SplitPos()
+	qp.HandleMouse(tcell.NewEventMouse(5, bar, tcell.Button1, tcell.ModNone))
+	qp.HandleMouse(tcell.NewEventMouse(5, bar, tcell.ButtonNone, tcell.ModNone))
+	if qp.resultsFocused {
+		t.Error("a click on the hidden splitter's row focused the results")
+	}
+	if row, _ := qp.editor.CursorPos(); row == 0 {
+		t.Errorf("click on row %d left the editor caret on row 0; the editor didn't get it", bar)
+	}
+
+	qp.editor.SetText("")
+	qp.Execute()
+	text := screen()
+	if !strings.Contains(text, "Results") || !strings.Contains(text, "No query to execute") {
+		t.Fatalf("after a refused run, want the results pane with its notice:\n%s", text)
+	}
+	if got := qp.editor.Bounds().H; got >= 23 {
+		t.Errorf("editor height after a run = %d, want it to share the panel", got)
 	}
 }

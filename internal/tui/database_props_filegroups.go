@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 
@@ -129,6 +130,12 @@ func pageDatabaseFilegroups(sc *db.ServerConn, dbName string) propPage {
 			fgRow.ValidateFn = func() error {
 				syncToggles()
 				for _, e := range visible() {
+					// PRIMARY's Read-only is Msg 5047 ("Cannot change the READONLY
+					// property of the PRIMARY filegroup"), possibly after earlier
+					// writes in the same Apply.
+					if e.name == "PRIMARY" && e.isReadOnly != e.origReadOnly {
+						return errors.New("the PRIMARY filegroup cannot be made read-only; only the whole database can")
+					}
 					if e.fileCount == 0 && (e.isReadOnly != e.origReadOnly || e.isDefault && !e.origIsDefault) {
 						return emptyFilegroupToggleError(e.name)
 					}

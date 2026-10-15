@@ -74,6 +74,11 @@ func (p *QueryPanel) HandleKey(ev *tcell.EventKey) bool {
 	}
 	switch {
 	case p.onMessagesTab():
+		if ev.Key() == tcell.KeyEnter && ev.Modifiers() == tcell.ModNone {
+			if row, _ := p.messages.CursorPos(); p.goToMessageLine(row) {
+				return true
+			}
+		}
 		if p.messages.HandleKey(ev) {
 			return true
 		}
@@ -179,7 +184,7 @@ func (p *QueryPanel) HandleMouse(ev *tcell.EventMouse) bool {
 	if mx < p.rect.X || mx >= p.rect.X+p.rect.W {
 		return false
 	}
-	if p.splitter.HandleMouse(ev) {
+	if p.resultsShown && p.splitter.HandleMouse(ev) {
 		p.layoutChildren()
 		p.armDrag(ev, qZoneSplitter)
 		return true
@@ -200,9 +205,12 @@ func (p *QueryPanel) HandleMouse(ev *tcell.EventMouse) bool {
 			p.setResultsFocused(false)
 			return true
 		}
-		if p.resultsHandleMouse(ev) {
+		p.wentToLine = false
+		if p.resultsShown && p.resultsHandleMouse(ev) {
 			p.armDrag(ev, qZoneResults)
-			p.setResultsFocused(true)
+			// Except the double-click on an error in Messages that just sent the caret to
+			// its line: that hands focus to the editor, and this click must not take it back.
+			p.setResultsFocused(!p.wentToLine)
 			return true
 		}
 		p.armDrag(ev, qZoneUnclaimed)
@@ -211,7 +219,7 @@ func (p *QueryPanel) HandleMouse(ev *tcell.EventMouse) bool {
 	if p.editor.HandleMouse(ev) {
 		return true
 	}
-	return p.resultsHandleMouse(ev)
+	return p.resultsShown && p.resultsHandleMouse(ev)
 }
 
 // isCtrlEnter reports whether ev is Ctrl+Enter in either encoding a terminal can

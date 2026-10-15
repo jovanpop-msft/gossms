@@ -77,13 +77,20 @@ func firstSelectableItem(items []MenuItem) int {
 
 // stepSelectableItem returns the next selectable item index starting from
 // `from`, moving by `dir` (+1 or -1) and wrapping around. Returns -1 if the
-// menu has no selectable items at all.
+// menu has no selectable items at all. With nothing highlighted (from < 0),
+// Down gives the first item and Up the last, as Windows and GTK menus do.
 func stepSelectableItem(items []MenuItem, from, dir int) int {
 	n := len(items)
 	if n == 0 {
 		return -1
 	}
 	i := from
+	if i < 0 {
+		i = -1
+		if dir < 0 {
+			i = n
+		}
+	}
 	for range n {
 		i = (i + dir + n) % n
 		if !menuItemSkippable(items[i]) {

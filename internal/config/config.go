@@ -15,6 +15,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/radix29/gossms/internal/fileutil"
 )
@@ -482,6 +483,11 @@ func rotateLog(path string, limit int64) {
 // would overwrite a good file with an empty config.
 func Load() *Config {
 	path := configPath()
+	// A save the process died in the middle of leaves its temp file — a full
+	// copy of the config — behind; WriteAtomic's own sweep only runs on a
+	// later save, which a read-only session never makes.
+	fileutil.RemoveStaleTemps(path)
+	fileutil.RemoveStaleTemps(filepath.Join(filepath.Dir(path), keyFileName))
 	data, err := os.ReadFile(path)
 	if err != nil {
 		cfg := defaultConfig()
@@ -493,7 +499,12 @@ func Load() *Config {
 		cfg.base = cfg.settingsSnapshot()
 		return cfg
 	}
-	cfg := parseConfig(path, data)
+	cfg, err := parseConfig(path, data)
+	if err != nil {
+		// Not marked unreadable: Save re-reads the file and refuses while it
+		// is still corrupt and uncopied, but saves once the user repairs it.
+		log.Printf("config: %v; starting with no saved settings and not saving over it", err)
+	}
 	cfg.base = cfg.settingsSnapshot()
 
 	key, err := loadOrCreateKey(filepath.Dir(path))
@@ -525,17 +536,28 @@ func defaultConfig() *Config {
 	return cfg
 }
 
+// keepCorrupt is fileutil.KeepCorrupt; a variable so tests can make the copy
+// fail.
+var keepCorrupt = fileutil.KeepCorrupt
+
 // parseConfig decodes config.json's bytes, with every setting clamped, and
 // passwords still sealed.
-func parseConfig(path string, data []byte) *Config {
+//
+// Unparseable bytes (a hand-edit or an interrupted write) are kept aside by
+// fileutil.KeepCorrupt before the config starts empty: passwords are lost but
+// server/user/database stay readable by hand. The error is non-nil only when
+// that copy could not be made: the bytes then exist nowhere else, and the
+// caller must not write over path.
+func parseConfig(path string, data []byte) (*Config, error) {
 	cfg := new(Config)
+	var keepErr error
 	if err := json.Unmarshal(data, cfg); err != nil {
-		// Unparseable (hand-edit or interrupted write). Keep the bytes as
-		// .corrupt before starting empty: passwords are lost but
-		// server/user/database are readable by hand. Written atomically, since
-		// it's the only remaining copy.
-		_ = fileutil.WriteAtomic(path+".corrupt", data, 0o600)
 		cfg = new(Config)
+		if kept, kerr := keepCorrupt(path, data, time.Now()); kerr != nil {
+			keepErr = fmt.Errorf("%s did not parse (%v) and could not be kept aside: %w", path, err, kerr)
+		} else {
+			log.Printf("config: %s did not parse (%v); kept as %s", path, err, kept)
+		}
 	}
 	if cfg.MaxCellLength <= 0 {
 		cfg.MaxCellLength = DefaultMaxCellLength
@@ -547,7 +569,7 @@ func parseConfig(path string, data []byte) *Config {
 		cfg.IndentWidth = DefaultIndentWidth
 	}
 	cfg.XEventStoreCapacity = ClampXEventStoreCapacity(cfg.XEventStoreCapacity)
-	return cfg
+	return cfg, keepErr
 }
 
 // openPasswords decrypts every connection's password in place. One that won't
@@ -715,7 +737,9 @@ func (j *SaveJob) mergeAndWrite(key []byte, keyErr error) error {
 		// As at Load: what's there is unknown, so writing would destroy it.
 		return fmt.Errorf("config: not saving over %s — it could not be re-read: %w", path, err)
 	default:
-		merged = parseConfig(path, data)
+		if merged, err = parseConfig(path, data); err != nil {
+			return fmt.Errorf("config: not saving over %s — %w", path, err)
+		}
 		if key != nil {
 			merged.openPasswords(key, path)
 		} else {

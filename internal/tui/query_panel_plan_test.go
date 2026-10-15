@@ -236,13 +236,13 @@ func TestRunEstimatedPlanGuards(t *testing.T) {
 	a := newTestApp()
 	qp := NewQueryPanel(a, "Query 1")
 
-	qp.runEstimatedPlan("")
+	qp.runEstimatedPlan("", 0)
 	if qp.resultsNotice != "No query to execute" {
 		t.Errorf("resultsNotice = %q, want %q for empty text", qp.resultsNotice, "No query to execute")
 	}
 
 	qp.editor.SetText("SELECT 1")
-	qp.runEstimatedPlan(qp.editor.Text())
+	qp.runEstimatedPlan(qp.editor.Text(), 0)
 	if qp.resultsNotice != "Not connected — use File > Connect" {
 		t.Errorf("resultsNotice = %q, want the not-connected notice", qp.resultsNotice)
 	}
@@ -253,7 +253,7 @@ func TestRunEstimatedPlanGuards(t *testing.T) {
 	qp.conn = &db.ServerConn{Opts: config.Connection{Server: "fake"}}
 	qp.session = new(query.Session)
 	qp.executing = true
-	qp.runEstimatedPlan("SELECT 1")
+	qp.runEstimatedPlan("SELECT 1", 0)
 	if a.statusText != "A query is already executing in this panel" {
 		t.Errorf("status = %q, want the already-executing notice", a.statusText)
 	}

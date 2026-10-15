@@ -115,7 +115,7 @@ func TestTrackedQueriesKeepsAFileItCannotRead(t *testing.T) {
 	}
 }
 
-// A corrupt file is kept aside as .corrupt.
+// A corrupt file is kept aside as .corrupt-<time>.
 func TestTrackedQueriesKeepsACorruptFileAside(t *testing.T) {
 	path := trackedPath(t)
 	if err := os.WriteFile(path, []byte("{not json"), 0o600); err != nil {
@@ -125,8 +125,8 @@ func TestTrackedQueriesKeepsACorruptFileAside(t *testing.T) {
 	if got := tq.IDs("srv", "appdb"); got != nil {
 		t.Errorf("a corrupt file loaded as %v", got)
 	}
-	if data, err := os.ReadFile(path + ".corrupt"); err != nil || string(data) != "{not json" {
-		t.Errorf("the corrupt file was not kept aside: %v / %q", err, data)
+	if got := corruptCopies(t, path); len(got) != 1 || got[0] != "{not json" {
+		t.Errorf("the corrupt file was not kept aside: %q", got)
 	}
 	// Not write-protected: the bytes are safe, so the next toggle saves.
 	if _, err := toggleSaved(tq, "srv", "appdb", 7); err != nil {
@@ -250,5 +250,21 @@ func TestTrackedReadersDoNotWaitOnASave(t *testing.T) {
 	}
 	if got := LoadTrackedQueriesFrom(path).IDs("srv", "db"); !slices.Equal(got, []int64{1, 2}) {
 		t.Errorf("on disk after the next save: %v, want [1 2]", got)
+	}
+}
+
+// A corrupt file that can't be kept aside is the only copy: not saved over.
+func TestTrackedQueriesDoesNotSaveOverACorruptFileItCouldNotKeep(t *testing.T) {
+	path := trackedPath(t)
+	if err := os.WriteFile(path, []byte("{not json"), 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	failKeepCorrupt(t)
+	tq := LoadTrackedQueriesFrom(path)
+	if _, err := toggleSaved(tq, "srv", "appdb", 7); err == nil {
+		t.Error("Save wrote over a corrupt file that was kept nowhere else")
+	}
+	if data, _ := os.ReadFile(path); string(data) != "{not json" {
+		t.Errorf("the file was rewritten as %q, want it untouched", data)
 	}
 }

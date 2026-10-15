@@ -6,6 +6,11 @@ import "strings"
 type Batch struct {
 	Text  string
 	Count int
+
+	// StartLine is the 0-based script line Text starts on. SQL Server numbers an
+	// error's line from the batch's first line, so adding it gives the script line
+	// (see query.WithLineOffset).
+	StartLine int
 }
 
 // SplitBatches splits script into its GO batches, dropping whitespace-only ones.
@@ -23,16 +28,16 @@ type Batch struct {
 // for cancellation between repetitions.
 func SplitBatches(script string) []Batch {
 	var batches []Batch
-	emit := func(text string, count int) {
+	emit := func(text string, count, startLine int) {
 		if strings.TrimSpace(text) != "" {
-			batches = append(batches, Batch{Text: text, Count: count})
+			batches = append(batches, Batch{Text: text, Count: count, StartLine: startLine})
 		}
 	}
 
 	var line []rune
 	var st State
-	batchStart := 0
-	for pos := 0; pos < len(script); {
+	batchStart, batchLine := 0, 0
+	for pos, lineNo := 0, 0; pos < len(script); lineNo++ {
 		// pos is the byte offset of a line start, and next of the line after it.
 		end := strings.IndexByte(script[pos:], '\n')
 		next := len(script)
@@ -48,14 +53,14 @@ func SplitBatches(script string) []Batch {
 		}
 		if st.Mode == ModeNormal {
 			if _, count, ok := GoSeparatorAt(line, 0, len(line)); ok {
-				emit(script[batchStart:pos], count)
-				batchStart, pos = next, next
+				emit(script[batchStart:pos], count, batchLine)
+				batchStart, pos, batchLine = next, next, lineNo+1
 				continue
 			}
 		}
 		st = LineEnd(line, st)
 		pos = next
 	}
-	emit(script[batchStart:], 1)
+	emit(script[batchStart:], 1, batchLine)
 	return batches
 }

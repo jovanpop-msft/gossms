@@ -37,7 +37,7 @@ func sampleActivity(s tcell.Screen, r core.Rect, y int, v SampleView) int {
 
 	drawBarPanel(s, cols[0], "SQL SERVER ACTIVITY", v.Activity)
 	if len(cols) > 1 {
-		drawBarPanel(s, cols[1], "Key lookups / Forwarded recs", v.Lookups)
+		drawBarPanel(s, cols[1], "Index searches / Forwarded recs", v.Lookups)
 	}
 	if len(cols) > 2 {
 		drawBarPanel(s, cols[2], "BACKUP THROUGHPUT", v.Backup)

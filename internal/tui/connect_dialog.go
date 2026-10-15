@@ -24,7 +24,7 @@ import (
 // connectOnePaneWidth (decision 3 — it drops the pane, it does not clip).
 const (
 	connectLabelWidth = 24
-	connectValueWidth = 34
+	connectValueWidth = 35
 	// A field row is label + gap + "[" + value + "]".
 	connectRightWidth  = connectLabelWidth + 1 + connectValueWidth + 2
 	connectHistoryPane = 30

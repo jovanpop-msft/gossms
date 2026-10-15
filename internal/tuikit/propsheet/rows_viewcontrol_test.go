@@ -219,8 +219,8 @@ func TestSelectRowFitItems(t *testing.T) {
 	r := Select("Blob container", []string{"short", long}, 0)
 	r.SetFitItems(true)
 	r.Layout(0, 0, 120)
-	if got := r.dd.Width(); got != len(long)+1 {
-		t.Errorf("width in a wide row = %d, want %d (the item and the arrow)", got, len(long)+1)
+	if got := r.dd.Width(); got != len(long)+2 {
+		t.Errorf("width in a wide row = %d, want %d (the item, the gap and the arrow)", got, len(long)+2)
 	}
 	r.Layout(0, 0, LabelWidth+3+30)
 	if got := r.dd.Width(); got != 30 {

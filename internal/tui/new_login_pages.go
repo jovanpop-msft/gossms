@@ -221,14 +221,11 @@ func buildNewLoginServerRolesPage(sc *db.ServerConn, pf *nloginPrefetch, loginNa
 		}
 		toggleable = append(toggleable, r)
 	}
+	ratings := serverRoleRatings(pf.serverRoles, pf.serverPerms)
 	text := make([][]string, len(toggleable))
 	values := make([][]bool, len(toggleable))
 	for i, r := range toggleable {
-		impact := serverRoleImpact[r.Name]
-		if impact == "" {
-			impact = "Low"
-		}
-		text[i] = []string{r.Name, impact}
+		text[i] = []string{r.Name, ratings[r.Name].impact}
 		values[i] = []bool{false}
 	}
 	rolesGrid := propsheet.NewToggleGrid([]string{"Member", "Role", "Impact"}, []int{0}, 10)
@@ -244,7 +241,7 @@ func buildNewLoginServerRolesPage(sc *db.ServerConn, pf *nloginPrefetch, loginNa
 		}
 		r := toggleable[row]
 		roleNameStatic.SetValue(r.Name)
-		descStatic.SetValue(fixedServerRoleDescriptions[r.Name])
+		descStatic.SetValue(ratings[r.Name].description)
 	}
 	rolesGrid.Grid.OnSelectRow = syncFromSelection
 	if len(toggleable) > 0 {

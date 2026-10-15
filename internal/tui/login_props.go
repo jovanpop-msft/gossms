@@ -159,11 +159,12 @@ func pageLoginGeneral(sc *db.ServerConn, loginName *string) propPage {
 			// them can be the one edit that makes the combination one SQL Server refuses.
 			policyValidate := func(bool) error {
 				return loginPolicyError(policyRow.Checked(), expirationRow.Checked(), mustChangeRow.Checked(),
-					passwordRow.Value() != "", det.MustChangePassword)
+					unlockRow.Checked(), passwordRow.Value() != "", det.MustChangePassword)
 			}
 			policyRow.SetValidate(policyValidate)
 			expirationRow.SetValidate(policyValidate)
 			mustChangeRow.SetValidate(policyValidate)
+			unlockRow.SetValidate(policyValidate)
 
 			defaultDBRow := selectPreserving("Default database", dbNames, l.DefaultDatabase, unsetItem)
 			defaultLangRow := selectPreserving("Default language", langNames, det.DefaultLanguage, unsetItem)
@@ -276,7 +277,11 @@ func pageLoginGeneral(sc *db.ServerConn, loginName *string) propPage {
 // unticked one would be silently overridden), and either turned off on a login
 // that must change its password with no new password set in the same Apply
 // (Msg 15128 — a new password clears the flag, so gosmo can sequence that one).
-func loginPolicyError(policy, expiration, mustChange, passwordTyped, isMustChange bool) error {
+//
+// It also refuses Unlock, or a change to "must change", with no new password:
+// ALTER LOGIN takes UNLOCK and MUST_CHANGE only after PASSWORD =, so Apply
+// would send nothing for the box and report success over a login still locked.
+func loginPolicyError(policy, expiration, mustChange, unlock, passwordTyped, isMustChange bool) error {
 	switch {
 	case expiration && !policy:
 		return fmt.Errorf("\"Enforce password expiration\" needs \"Enforce password policy\" ticked")
@@ -284,6 +289,10 @@ func loginPolicyError(policy, expiration, mustChange, passwordTyped, isMustChang
 		return fmt.Errorf("\"User must change password at next login\" needs both password policy and expiration enforced")
 	case !passwordTyped && isMustChange && !(policy && expiration):
 		return fmt.Errorf("this login must change its password at next login, and SQL Server refuses turning password policy or expiration off until it has (Msg 15128); set a new password in the same Apply to do both")
+	case !passwordTyped && unlock:
+		return fmt.Errorf("\"Unlock login\" needs a new password in the same Apply")
+	case !passwordTyped && mustChange != isMustChange:
+		return fmt.Errorf("changing \"User must change password at next login\" needs a new password in the same Apply")
 	}
 	return nil
 }
@@ -296,14 +305,11 @@ func pageLoginServerRoles(sc *db.ServerConn, loginName *string) propPage {
 			if err != nil {
 				return nil, nil, err
 			}
+			ratings := serverRoleRatings(roles, serverPermissionsForRating(ctx, sc))
 			text := make([][]string, len(roles))
 			values := make([][]bool, len(roles))
 			for i, r := range roles {
-				impact := serverRoleImpact[r.Name]
-				if impact == "" {
-					impact = "Low"
-				}
-				text[i] = []string{r.Name, impact}
+				text[i] = []string{r.Name, ratings[r.Name].impact}
 				values[i] = []bool{slices.Contains(r.Members, *loginName)}
 			}
 			rolesGrid := propsheet.NewToggleGrid([]string{"Member", "Role", "Impact"}, []int{0}, 10)
@@ -321,7 +327,7 @@ func pageLoginServerRoles(sc *db.ServerConn, loginName *string) propPage {
 				}
 				r := roles[row]
 				roleNameStatic.SetValue(r.Name)
-				descStatic.SetValue(fixedServerRoleDescriptions[r.Name])
+				descStatic.SetValue(ratings[r.Name].description)
 				membersStatic.SetValue(strconv.Itoa(len(r.Members)))
 			}
 			rolesGrid.Grid.OnSelectRow = syncFromSelection

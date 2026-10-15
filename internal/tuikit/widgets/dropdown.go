@@ -224,7 +224,10 @@ func (d *DropDown) Draw(s tcell.Screen) {
 		inputStyle = theme.StyleInputDisabled()
 	}
 	core.FillRect(s, core.Rect{X: ix + 1, Y: d.rect.Y, W: d.rect.W - 1, H: 1}, ' ', inputStyle)
-	core.DrawTextClipped(s, ix+1, d.rect.Y, d.rect.W-1, inputStyle, d.Value())
+	// One blank column before the arrow, and "…" on a cut: clipped flush against
+	// it, a long value ran into the "v", and two backup sets differing only at the
+	// end looked the same.
+	core.DrawTextLine(s, ix+1, d.rect.Y, d.rect.W-2, inputStyle, d.Value())
 }
 
 // DrawOverlay renders the open item list, if open, after every other widget in

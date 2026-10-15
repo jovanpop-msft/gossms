@@ -28,7 +28,7 @@ func benchHistory() HistoryView {
 		Header:      Header{Instance: "SQLDEMO01", SampleTime: "11:56:23", Resolution: "2 sec"},
 		Interval:    2 * time.Second,
 		Activity:    series("Batches", "Transactions", "Compilations"),
-		Lookups:     series("Key lookups", "Forwarded records"),
+		Lookups:     series("Index searches", "Forwarded records"),
 		Backup:      series("Backup MB/sec"),
 		CPU:         series("SQL Server %", "Other processes %"),
 		Waits:       series("Network", "Buffer I/O", "Lock", "Memory"),

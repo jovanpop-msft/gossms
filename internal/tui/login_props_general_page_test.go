@@ -358,6 +358,14 @@ func TestLoginGeneralRefusesPolicyCombinationsTheServerRefuses(t *testing.T) {
 			map[string]bool{"User must change password at next login": true}, "both password policy and expiration"},
 		{"policy off on a must-change login, no password (15128)", true, true, true, "",
 			map[string]bool{"Enforce password expiration": false, "User must change password at next login": false}, "15128"},
+		// R5: ALTER LOGIN takes UNLOCK and MUST_CHANGE only with PASSWORD =, so with no
+		// password typed Apply sent nothing for these boxes and said it succeeded.
+		{"unlock with no password", true, true, false, "",
+			map[string]bool{"Unlock login": true}, "\"Unlock login\" needs a new password"},
+		{"must change ticked with no password", true, true, false, "",
+			map[string]bool{"User must change password at next login": true}, "needs a new password"},
+		{"must change cleared with no password", true, true, true, "",
+			map[string]bool{"User must change password at next login": false}, "needs a new password"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			sc, inst := newFakeConn(t, loginPolicyResponses(tc.policy, tc.expiration, tc.mustChg)...)
@@ -399,4 +407,22 @@ func TestLoginGeneralPolicyOffOnAMustChangeLoginWithAPassword(t *testing.T) {
 	if stmt := inst.Statements()[0]; !strings.Contains(stmt, "CHECK_POLICY = OFF, CHECK_EXPIRATION = OFF") {
 		t.Errorf("wrote:\n%s\nwant both options off", stmt)
 	}
+}
+
+// R5: Unlock with a new password is the one form ALTER LOGIN accepts, and it
+// rides in the password statement.
+func TestLoginGeneralUnlockRidesInThePasswordStatement(t *testing.T) {
+	sc, inst := newFakeConn(t, loginPolicyResponses(true, true, false)...)
+	form, apply := loadPage(t, pageLoginGeneral(sc, new("appuser")), inst)
+
+	editText(t, form, "Password", "n3wSecret!")
+	editText(t, form, "Confirm password", "n3wSecret!")
+	editCheck(t, form, "Unlock login", true)
+	if err := form.Validate(); err != nil {
+		t.Fatalf("validate: %v", err)
+	}
+	if err := apply(context.Background()); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	assertOneStatement(t, inst, "UNLOCK")
 }

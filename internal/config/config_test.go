@@ -3,10 +3,14 @@ package config
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestConnectionName(t *testing.T) {
@@ -536,12 +540,148 @@ func TestLoadCorruptFileKeepsACopy(t *testing.T) {
 
 	Load()
 
-	saved, err := os.ReadFile(filepath.Join(cfgDir, "config.json.corrupt"))
-	if err != nil {
-		t.Fatalf("no .corrupt copy kept: %v", err)
+	if got := corruptCopies(t, filepath.Join(cfgDir, "config.json")); len(got) != 1 || got[0] != string(raw) {
+		t.Errorf(".corrupt copies = %q, want one holding the original bytes %q", got, raw)
 	}
-	if string(saved) != string(raw) {
-		t.Errorf(".corrupt copy = %q, want the original bytes %q", saved, raw)
+}
+
+// corruptCopies returns the contents of each recovery copy of path
+// (path.corrupt*).
+func corruptCopies(t *testing.T, path string) []string {
+	t.Helper()
+	matches, err := filepath.Glob(path + ".corrupt*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, m := range matches {
+		data, err := os.ReadFile(m)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got = append(got, string(data))
+	}
+	return got
+}
+
+// A config corrupted a second time keeps both recovery copies: one fixed
+// .corrupt name lost the first.
+func TestASecondCorruptConfigKeepsTheFirstCopy(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	cfgDir := filepath.Join(dir, "gossms")
+	if err := os.MkdirAll(cfgDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for _, raw := range []string{`{"connections":[{"server":"first"`, `{"connections":[{"server":"second"`} {
+		if err := os.WriteFile(filepath.Join(cfgDir, "config.json"), []byte(raw), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		Load()
+	}
+	got := corruptCopies(t, filepath.Join(cfgDir, "config.json"))
+	slices.Sort(got)
+	if want := []string{`{"connections":[{"server":"first"`, `{"connections":[{"server":"second"`}; !slices.Equal(got, want) {
+		t.Errorf(".corrupt copies = %q, want %q", got, want)
+	}
+}
+
+// failKeepCorrupt makes every recovery copy fail for the test's duration.
+func failKeepCorrupt(t *testing.T) {
+	t.Helper()
+	orig := keepCorrupt
+	keepCorrupt = func(string, []byte, time.Time) (string, error) {
+		return "", errors.New("disk full")
+	}
+	t.Cleanup(func() { keepCorrupt = orig })
+}
+
+// When the corrupt bytes can't be copied aside, config.json is their only
+// copy, so Save must not write over it.
+func TestACorruptConfigThatCannotBeKeptIsNotSavedOver(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	cfgDir := filepath.Join(dir, "gossms")
+	if err := os.MkdirAll(cfgDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(cfgDir, "config.json")
+	raw := `{"connections":[{"server":"myserver"`
+	if err := os.WriteFile(path, []byte(raw), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	failKeepCorrupt(t)
+
+	cfg := Load()
+	cfg.IndentWidth = 2
+	if err := cfg.Save(); err == nil {
+		t.Error("Save wrote over a corrupt config.json that was kept nowhere else")
+	}
+	if data, _ := os.ReadFile(path); string(data) != raw {
+		t.Errorf("config.json = %q, want it untouched", data)
+	}
+}
+
+// The same when the file is found corrupt at Save's re-read, not at Load.
+func TestSaveDoesNotWriteOverAConfigCorruptedSinceLoadThatCannotBeKept(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	cfg := Load()
+	cfg.IndentWidth = 2
+	if err := cfg.Save(); err != nil {
+		t.Fatalf("first Save: %v", err)
+	}
+	path := configPath()
+	raw := `{"indent_width":`
+	if err := os.WriteFile(path, []byte(raw), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	failKeepCorrupt(t)
+
+	cfg.IndentWidth = 3
+	if err := cfg.Save(); err == nil {
+		t.Error("Save wrote over a corrupt config.json that was kept nowhere else")
+	}
+	if data, _ := os.ReadFile(path); string(data) != raw {
+		t.Errorf("config.json = %q, want it untouched", data)
+	}
+}
+
+// Load sweeps the temp files a save the process died in left behind — each a
+// full copy of the config, encrypted passwords included — but not one young
+// enough to be another instance's save in progress.
+func TestLoadRemovesStaleSaveTempFiles(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	cfgDir := filepath.Join(dir, "gossms")
+	if err := os.MkdirAll(cfgDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-time.Hour)
+	files := map[string]bool{ // name → want removed
+		"config.json.tmp1234567": true,
+		"gossms.key.tmp7654321":  true,
+		"config.json.tmp42":      false, // fresh
+	}
+	for name, stale := range files {
+		p := filepath.Join(cfgDir, name)
+		if err := os.WriteFile(p, []byte("{}"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if stale {
+			if err := os.Chtimes(p, old, old); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+
+	Load()
+
+	for name, want := range files {
+		_, err := os.Stat(filepath.Join(cfgDir, name))
+		if gone := errors.Is(err, fs.ErrNotExist); gone != want {
+			t.Errorf("%s: removed = %v, want %v", name, gone, want)
+		}
 	}
 }
 

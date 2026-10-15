@@ -27,7 +27,7 @@ func panickingPanel(t *testing.T) (*App, *QueryPanel) {
 func TestExecutePanicReleasesTheLatchAndAllowsTheNextRun(t *testing.T) {
 	a, p := panickingPanel(t)
 
-	p.startRun("SELECT 1", "")
+	p.startRun("SELECT 1", 0, "")
 	drainUntil(t, a, func() bool { return !p.executing }, "the execute latch to clear")
 
 	if p.cancel != nil {
@@ -37,7 +37,7 @@ func TestExecutePanicReleasesTheLatchAndAllowsTheNextRun(t *testing.T) {
 		"the panic to reach the status bar")
 
 	// The point of the repair: the next run actually starts.
-	p.startRun("SELECT 2", "")
+	p.startRun("SELECT 2", 0, "")
 	if !p.executing {
 		t.Fatal("a second Execute was refused after the first panicked")
 	}
@@ -51,7 +51,7 @@ func TestExecutePanicReleasesTheLatchAndAllowsTheNextRun(t *testing.T) {
 func TestExecutePanicStopsTheTickerAndCancelsTheContext(t *testing.T) {
 	a, p := panickingPanel(t)
 
-	p.startRun("SELECT 1", "")
+	p.startRun("SELECT 1", 0, "")
 	drainUntil(t, a, func() bool { return !p.executing }, "the execute latch to clear")
 
 	select {
@@ -67,7 +67,7 @@ func TestExecutePanicStopsTheTickerAndCancelsTheContext(t *testing.T) {
 func TestEstimatedPlanPanicReleasesTheLatch(t *testing.T) {
 	a, p := panickingPanel(t)
 
-	p.runEstimatedPlan("SELECT 1")
+	p.runEstimatedPlan("SELECT 1", 0)
 	drainUntil(t, a, func() bool { return !p.executing }, "the plan latch to clear")
 
 	if p.cancel != nil {

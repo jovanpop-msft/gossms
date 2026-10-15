@@ -68,7 +68,7 @@ type filterDialogRow struct {
 // and columnWidths shrinks from them on a narrower one.
 const (
 	filterPropColW  = 21
-	filterOpW       = 17
+	filterOpW       = 18
 	filterValueW    = 24
 	filterDialogW   = 74
 	filterButtonsOK = 1 // index of OK in buttons(), the Enter default

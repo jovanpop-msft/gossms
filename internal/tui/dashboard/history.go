@@ -84,7 +84,7 @@ func historyActivity(s tcell.Screen, r core.Rect, y int, v HistoryView, hits *[]
 	}, hits)
 
 	if len(cols) > 1 {
-		drawStackedChart(s, cols[1], "Key lookups / Forwarded recs", charts.StackedHistoryChart{
+		drawStackedChart(s, cols[1], "Index searches / Forwarded recs", charts.StackedHistoryChart{
 			Series:    v.Lookups,
 			TimeLabel: v.Header.SampleTime,
 			Interval:  v.Interval,

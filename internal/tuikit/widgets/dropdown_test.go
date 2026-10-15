@@ -304,3 +304,29 @@ func TestDisabledDropDownRefusesInputAndDrawsGreyed(t *testing.T) {
 		t.Fatal("re-enabled dropdown does not open on Enter")
 	}
 }
+
+// TestDropDownLongValueEndsInAnEllipsisClearOfTheArrow is R10: a value longer
+// than the field filled every column up to the arrow and was cut silently
+// (`…tui_dev.bakv]`). It now ends in "…" with one blank column before the "v";
+// a value that fits is drawn whole.
+func TestDropDownLongValueEndsInAnEllipsisClearOfTheArrow(t *testing.T) {
+	s := dropTestScreen(t, 40, 5)
+	d := NewDropDown("", []string{"backup_set_2026_10_15_full.bak", "short"}, 12)
+	d.SetBounds(0, 1)
+	d.Draw(s)
+	// [ at 0, value cells 1..11, v at 12, ] at 13.
+	if got := rowText(s, 0, 1, 14); got != "[backup_se… v]" {
+		t.Fatalf("row = %q, want the value cut with … and a blank before the arrow", got)
+	}
+	if str, _, _ := s.Get(10, 1); str != "…" {
+		t.Fatalf("cell before the gap = %q, want …", str)
+	}
+	if str, _, _ := s.Get(11, 1); str != " " {
+		t.Fatalf("cell before the arrow = %q, want a blank", str)
+	}
+	d.SetSelected(1)
+	d.Draw(s)
+	if got := rowText(s, 0, 1, 14); got != "[short      v]" {
+		t.Fatalf("row = %q, want the short value whole", got)
+	}
+}

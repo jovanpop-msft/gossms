@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	gosmo "github.com/radix29/gosmo"
 	"github.com/radix29/gossms/internal/db"
@@ -84,6 +85,14 @@ type BackupDialog struct {
 	backupDir *string
 	defPaths  latest
 
+	// destCheck is Start Backup's probe for an existing destination file,
+	// superseded by a second press and abandoned by Hide.
+	destCheck latest
+
+	// now stamps the generated destination name; nil is time.Now. A field so
+	// a test can pin two showings to different seconds.
+	now func() time.Time
+
 	// drag is the text-selection gesture a click in one of the dialog's text
 	// fields starts — see dialogs.FieldGesture for the ordering its three calls
 	// depend on.
@@ -153,6 +162,7 @@ func (d *BackupDialog) show(sc *db.ServerConn, dbName string) {
 func (d *BackupDialog) Hide() {
 	d.dbListRun.Abandon()
 	d.defPaths.Abandon()
+	d.destCheck.Abandon()
 	d.ModalDialog.Hide()
 }
 
@@ -233,26 +243,36 @@ func (d *BackupDialog) selectedAction() gosmo.BackupAction {
 
 // autoDest generates the default destination path for the current
 // database/type selection: the server's default backup directory plus
-// "<db>_full.bak" / "<db>_diff.bak" / "<db>_log.trn".
+// "<db>_FULL_<yyyymmdd_hhmmss>.bak" / "_DIFF_….bak" / "_LOG_….trn".
+//
+// The timestamp is what makes WITH INIT (currentOptions) safe. A fixed
+// "<db>_log.trn" sent every log backup to the same file, and INIT replaced
+// the previous one on disk while msdb still listed it — the second log backup
+// from the dialog broke the restore chain.
 func (d *BackupDialog) autoDest() string {
 	dbName := d.ddDatabase.Value()
 	if dbName == "" {
 		return ""
 	}
-	suffix := "_full.bak"
+	kind, ext := "FULL", ".bak"
 	switch d.rbType.Selected() {
 	case 1:
-		suffix = "_diff.bak"
+		kind = "DIFF"
 	case 2:
-		suffix = "_log.trn"
+		kind, ext = "LOG", ".trn"
 	}
+	now := time.Now
+	if d.now != nil {
+		now = d.now
+	}
+	name := dbName + "_" + kind + "_" + now().Format("20060102_150405") + ext
 	dir := ""
 	if d.backupDir != nil {
 		dir = *d.backupDir
 	} else if d.sc != nil && d.sc.Server != nil {
 		dir = d.sc.Server.Info().DefaultBackupPath
 	}
-	return gosmo.JoinServerPath(dir, dbName+suffix)
+	return gosmo.JoinServerPath(dir, name)
 }
 
 // loadDefaultPaths reads the server's current default backup directory and,
@@ -476,9 +496,8 @@ func (d *BackupDialog) currentOptions() gosmo.BackupOptions {
 	return opts
 }
 
-// startBackup validates the form, switches to the progress view, and runs
-// the backup as a background Task; with "Verify backup after completion"
-// checked, a RESTORE VERIFYONLY runs as part of the same task.
+// startBackup validates the form and, once the destination has been checked
+// (checkDestThen), runs the backup.
 func (d *BackupDialog) startBackup() {
 	opts := d.currentOptions()
 	if opts.Database == "" {
@@ -490,6 +509,53 @@ func (d *BackupDialog) startBackup() {
 		return
 	}
 	verify := d.cbVerify.Checked()
+	d.checkDestThen(opts.Devices[0], func() { d.runBackup(opts, verify) })
+}
+
+// checkDestThen asks before a backup overwrites an existing file. Every backup
+// carries WITH INIT, so a destination that already holds backups loses them —
+// a generated name never does, but a typed or browsed one can.
+//
+// xp_fileexist needs sysadmin where BACKUP needs only db_backupoperator, so a
+// probe that fails (refused, timed out) is not a refusal: the backup runs
+// unasked, as it did before there was a check. A URL destination is a blob,
+// which xp_fileexist cannot see, and goes straight through.
+func (d *BackupDialog) checkDestThen(dest gosmo.BackupTarget, run func()) {
+	if dest.IsURL() {
+		run()
+		return
+	}
+	app, srv, path := d.app, d.sc.Server, dest.String()
+	ctx, tok := d.destCheck.BeginTimeout(srv.Context(), childFetchTimeout)
+	d.setStatusMsg("Checking the destination...", false)
+	app.safego("checking the backup destination", func() {
+		exists, isDir, err := srv.FileSystemExists(ctx, path)
+		app.postAndWake(func() {
+			if !d.destCheck.Done(tok) || !d.Visible() || d.mode != backupModeForm {
+				return
+			}
+			switch {
+			case err != nil || !exists:
+				run()
+			case isDir:
+				d.setStatusMsg("The destination is a folder — add a file name.", true)
+			default:
+				d.setStatusMsg(d.restingStatus(), false)
+				app.confirmDialog.ShowConfirmDefaultNo("Overwrite Backup File",
+					path+" already exists on the server. Overwrite it? The backups it holds will be lost.",
+					func(yes bool) {
+						if yes && d.Visible() && d.mode == backupModeForm {
+							run()
+						}
+					})
+			}
+		})
+	})
+}
+
+// runBackup switches to the progress view and runs the backup as a background
+// Task; with verify, a RESTORE VERIFYONLY runs as part of the same task.
+func (d *BackupDialog) runBackup(opts gosmo.BackupOptions, verify bool) {
 	dest := opts.Devices[0]
 
 	task, ctx := d.app.startTask(d.sc.Server.Context(), "Backup "+opts.Database)

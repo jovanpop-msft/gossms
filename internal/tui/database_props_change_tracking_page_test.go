@@ -224,7 +224,6 @@ func TestChangeTrackingOnStillWritesTheDatabaseFirst(t *testing.T) {
 	form, apply := loadPage(t, pageDatabaseChangeTracking(sc, "appdb"), inst)
 
 	editSelect(t, form, "Change tracking", "ON")
-	editText(t, form, "Retention period", "2")
 	toggleByName(t, toggleGrid(t, form), "dbo.Customers", 0)
 
 	if err := apply(context.Background()); err != nil {
@@ -288,4 +287,52 @@ func TestChangeTrackingColumnsOnAnUntrackedTableWritesNothing(t *testing.T) {
 		t.Fatalf("apply: %v", err)
 	}
 	assertNoStatementsIn(t, inst, "appdb")
+}
+
+// untrackedChangeTrackingResponses is appdb with change tracking off: the
+// catalog's LEFT JOIN reads retention 0, no unit and auto cleanup OFF.
+func untrackedChangeTrackingResponses() []fakeResponse {
+	r := changeTrackingResponses()
+	r[1].rows = [][]driver.Value{{int64(0), false, int64(0), ""}}
+	r[2].rows = [][]driver.Value{{"dbo", "Customers", int64(0), false}}
+	return r
+}
+
+// Switching tracking on took the untracked database's zeros as they read:
+// retention 0 was refused as out of range, and auto cleanup went out OFF, so
+// the side tables grew without limit (review plan R3). The page now opens on
+// SQL Server's own defaults for SET CHANGE_TRACKING = ON.
+func TestChangeTrackingOnAnUntrackedDatabaseUsesTheServerDefaults(t *testing.T) {
+	sc, inst := newFakeConn(t, untrackedChangeTrackingResponses()...)
+	form, apply := loadPage(t, pageDatabaseChangeTracking(sc, "appdb"), inst)
+
+	if form.Dirty() {
+		t.Fatal("the seeded defaults load dirty: an untouched page would write")
+	}
+	editSelect(t, form, "Change tracking", "ON")
+	if err := form.Validate(); err != nil {
+		t.Fatalf("switching tracking on alone was refused: %v", err)
+	}
+	if err := apply(context.Background()); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	stmts := inst.Statements()
+	if len(stmts) != 1 || !strings.Contains(stmts[0], "CHANGE_RETENTION = 2 DAYS, AUTO_CLEANUP = ON") {
+		t.Errorf("want CHANGE_RETENTION = 2 DAYS, AUTO_CLEANUP = ON, got:\n%s", strings.Join(stmts, "\n"))
+	}
+}
+
+// Retention edited while the database stays untracked has nothing to set:
+// the write it produced, SET CHANGE_TRACKING = OFF, is Msg 5089 there.
+func TestChangeTrackingSettingsOnADatabaseLeftOffWriteNothing(t *testing.T) {
+	sc, inst := newFakeConn(t, untrackedChangeTrackingResponses()...)
+	form, apply := loadPage(t, pageDatabaseChangeTracking(sc, "appdb"), inst)
+
+	editText(t, form, "Retention period", "5")
+	if err := apply(context.Background()); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	if stmts := inst.Statements(); len(stmts) != 0 {
+		t.Errorf("wrote:\n%s", strings.Join(stmts, "\n"))
+	}
 }

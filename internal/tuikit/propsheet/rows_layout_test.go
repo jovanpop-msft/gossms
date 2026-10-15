@@ -81,7 +81,7 @@ func TestSelectRowControlFitsTheRow(t *testing.T) {
 		{"exactly fits", false, LabelWidth + 3 + selectControlWidth, selectControlWidth},
 		{"narrow row", false, LabelWidth + 3 + 10, 10},
 		{"fit items, below the fixed width", true, LabelWidth + 3 + 15, 15},
-		{"no room at all", false, LabelWidth, 2},
+		{"no room at all", false, LabelWidth, 3},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -91,7 +91,7 @@ func TestSelectRowControlFitsTheRow(t *testing.T) {
 			if got := r.dd.Width(); got != c.wantW {
 				t.Fatalf("control width at row width %d = %d, want %d", c.w, got, c.wantW)
 			}
-			if c.wantW > 2 {
+			if c.wantW > 3 { // the floor overflows a row with no room
 				s := newCellScreen(200, 1)
 				r.Draw(s, false)
 				if got, want := rightmostCell(s), min(c.w, LabelWidth+3+selectControlWidth)-1; got != want {
@@ -101,7 +101,7 @@ func TestSelectRowControlFitsTheRow(t *testing.T) {
 			r.Layout(0, 0, 200)
 			want := selectControlWidth
 			if c.fit {
-				want = len(long) + 1
+				want = len(long) + 2
 			}
 			if got := r.dd.Width(); got != want {
 				t.Errorf("control width after widening = %d, want %d", got, want)

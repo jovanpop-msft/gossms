@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/gdamore/tcell/v3"
+	"github.com/gdamore/tcell/v3/vt"
 	gosmo "github.com/radix29/gosmo"
 	"github.com/radix29/gossms/internal/tuikit/core"
 	"github.com/radix29/gossms/internal/tuikit/widgets"
@@ -392,4 +393,51 @@ func TestRestoreProgressButtonsFollowTheTask(t *testing.T) {
 	if got, want := strings.Join(d.progressButtons(), ","), "Close"; got != want {
 		t.Errorf("finished task: %q, want %q", got, want)
 	}
+}
+
+// The Target Database field was two columns too wide: its `]` landed on the
+// dialog's right border and erased it on that row. It ends where the Backup
+// File row's Browse button ends, inside the border.
+func TestRestoreTargetFieldStaysInsideTheBorder(t *testing.T) {
+	s, err := tcell.NewTerminfoScreenFromTty(vt.NewMockTerm(vt.MockOptSize{X: 100, Y: 40}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Init(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(s.Fini)
+	a := newTestApp()
+	a.screen = s
+	d := NewRestoreDialog(a)
+	d.show(nil, "AppDB")
+	d.Draw(s)
+
+	cell := func(x, y int) string { str, _, _ := s.Get(x, y); return str }
+	r := d.Rect()
+	border := r.X + r.W - 1
+	ty, fy := d.fTarget.RectY(), d.fFile.RectY()
+	if got, want := cell(border, ty), cell(border, fy); got != want {
+		t.Fatalf("border cell on the Target row = %q, want %q (as on the Backup File row)", got, want)
+	}
+	browseEnd := lastNonSpace(t, s, fy, border)
+	if got := lastNonSpace(t, s, ty, border); got != browseEnd {
+		t.Fatalf("Target field ends at column %d, want %d (where Browse ends)", got, browseEnd)
+	}
+	if cell(browseEnd, ty) != "]" {
+		t.Fatalf("Target row's last cell = %q, want ]", cell(browseEnd, ty))
+	}
+}
+
+// lastNonSpace returns the rightmost column left of limit on row y that holds
+// a visible cell.
+func lastNonSpace(t *testing.T, s tcell.Screen, y, limit int) int {
+	t.Helper()
+	for x := limit - 1; x >= 0; x-- {
+		if str, _, _ := s.Get(x, y); strings.TrimSpace(str) != "" {
+			return x
+		}
+	}
+	t.Fatalf("row %d is blank", y)
+	return -1
 }

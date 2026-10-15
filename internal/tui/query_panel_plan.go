@@ -12,11 +12,7 @@ import (
 // as Execute, and like it closes the completion popup first.
 func (p *QueryPanel) ShowEstimatedPlan() {
 	p.editor.CloseCompletion()
-	if sel := p.editor.SelectedText(); sel != "" {
-		p.runEstimatedPlan(sel)
-		return
-	}
-	p.runEstimatedPlan(p.editor.Text())
+	p.runEstimatedPlan(p.scriptToRun())
 }
 
 // runEstimatedPlan is runQuery's plan-fetching counterpart, through the same
@@ -26,15 +22,15 @@ func (p *QueryPanel) ShowEstimatedPlan() {
 // gosmo directly, so a script containing GO batch separators is split as Execute
 // splits it: gosmo's own EstimatedPlan takes one statement at a time and would
 // reject a multi-batch script with a syntax error on "GO" itself.
-func (p *QueryPanel) runEstimatedPlan(queryText string) {
-	if p.runRefused(queryText, func() { p.runEstimatedPlan(queryText) }) {
+func (p *QueryPanel) runEstimatedPlan(queryText string, firstLine int) {
+	if p.runRefused(queryText, func() { p.runEstimatedPlan(queryText, firstLine) }) {
 		return
 	}
 	// No rows are scanned by an estimated plan, so the status line's row counter
 	// stays off for this run.
 	p.launch("the estimated execution plan", "Fetching estimated execution plan...", nil,
 		func(ctx context.Context, sess *query.Session) *query.Result {
-			return sess.ExecuteEstimatedPlan(ctx, queryText)
+			return sess.ExecuteEstimatedPlan(ctx, queryText, query.WithLineOffset(firstLine))
 		},
 		p.setEstimatedPlan)
 }
@@ -54,6 +50,7 @@ func (p *QueryPanel) runEstimatedPlan(queryText string) {
 // Messages.
 func (p *QueryPanel) setEstimatedPlan(res *query.Result, cancelled bool) {
 	p.result = nil // Estimated mode has no result; setResultPlan clears the other way
+	p.showResultsPane()
 
 	fetchFailed := res.HasErrors()
 	if !fetchFailed && len(res.PlanXML) == 0 {

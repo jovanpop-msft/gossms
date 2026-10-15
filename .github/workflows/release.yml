@@ -64,14 +64,15 @@ jobs:
           set -euo pipefail
 
           # go build links any .syso in the main package automatically. The
-          # _windows_amd64 filename suffix is a build constraint, so the
-          # other targets ignore it — no CGO, no build tags. Generated here
-          # only, never committed (.gitignore'd): a stale checked-in .syso
-          # would carry the wrong version string. go-winres wants a dotted
-          # numeric version, hence the stripped "v".
+          # _windows_<arch> filename suffix is a build constraint, so each
+          # Windows target links only its own and the other targets ignore
+          # both — no CGO, no build tags. Generated here only, never
+          # committed (.gitignore'd): a stale checked-in .syso would carry
+          # the wrong version string. go-winres wants a dotted numeric
+          # version, hence the stripped "v".
           go install github.com/tc-hib/go-winres@v0.3.3
           go-winres simply \
-            --arch amd64 \
+            --arch amd64,arm64 \
             --out "${MAIN_PACKAGE}/rsrc" \
             --icon docs/ico/win/gossms.ico \
             --manifest cli \
@@ -98,6 +99,7 @@ jobs:
           # which (e.g. android/*) doesn't even build for this codebase.
           TARGETS=(
             "windows/amd64"
+            "windows/arm64"
             "linux/amd64"
             "linux/arm64"
             "darwin/amd64"
