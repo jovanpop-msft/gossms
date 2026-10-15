@@ -109,7 +109,10 @@ func (a *App) copySelection() {
 	// its content viewer is open, but always has a cell or block under its cursor:
 	// copy that, matching its right-click "Copy".
 	if g, ok := target.(*controls.DataGrid); ok && !g.HasSelection() {
-		a.copyWithStatus(g.SelectedCellsText())
+		// A grid with no rows has no cell under its cursor: leave the clipboard alone.
+		if g.SelectedRowCount() > 0 {
+			a.copyWithStatus(g.SelectedCellsText())
+		}
 		return
 	}
 	if !target.HasSelection() {

@@ -23,7 +23,8 @@ func (g *DataGrid) selectedCellsText() string {
 		if i > 0 {
 			b.WriteByte('\n')
 		}
-		cells := g.rows.Row(r)
+		// Row, not rows.Row: a marked row can outlive a source that shrank under it.
+		cells := g.Row(r)
 		for c := c0; c <= c1; c++ {
 			if c > c0 {
 				b.WriteByte('\t')
@@ -77,7 +78,13 @@ func (g *DataGrid) requestCopy(text string) {
 func (g *DataGrid) cellContextMenuItems() []MenuItem {
 	var items []MenuItem
 	if g.OnCopyRequest != nil {
-		items = append(items, MenuItem{Label: "Copy", Action: func() { g.requestCopy(g.selectedCellsText()) }})
+		items = append(items, MenuItem{Label: "Copy", Action: func() {
+			// The menu can outlive its rows (a refresh that empties the grid while it is
+			// open); copying then would blank the clipboard.
+			if g.selectedRowCount() > 0 {
+				g.requestCopy(g.selectedCellsText())
+			}
+		}})
 	}
 	if !g.blockSelecting && g.selectedRowCount() <= 1 {
 		items = append(items, MenuItem{Label: showValueMenuItem, Action: g.openViewer})
@@ -101,7 +108,9 @@ const showValueMenuItem = "Show Value"
 // read-only Editor (navigable, selectable, copyable). A host claiming the value
 // via OnShowValue displays it instead and the popup doesn't open.
 func (g *DataGrid) openViewer() {
-	cells := g.rows.Row(g.selRow)
+	// Row, not rows.Row: nil past the end, as on an empty grid or after a refresh
+	// shrank the source under an open menu.
+	cells := g.Row(g.selRow)
 	if g.selCol < 0 || g.selCol >= len(cells) {
 		return
 	}

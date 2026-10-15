@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/gdamore/tcell/v3"
+	"github.com/radix29/gossms/internal/query"
 	"github.com/radix29/gossms/internal/tuikit/dialogs"
 )
 
@@ -318,5 +319,32 @@ func TestBracketedPasteDrawsOnceAtTheEnd(t *testing.T) {
 	feed(tcell.NewEventInterrupt(nil))
 	if frames != before+1 {
 		t.Error("a background result arriving mid-paste drew no frame")
+	}
+}
+
+// TestCopyFromEmptyResultsGridLeavesClipboardAlone pins review plan X6: Ctrl+C
+// in a results grid showing a set with no rows (`SELECT … WHERE 1 = 0`) indexed
+// the missing row 0 and took the process down. It must neither panic nor write
+// the clipboard (an empty write would blank whatever the user had copied).
+func TestCopyFromEmptyResultsGridLeavesClipboardAlone(t *testing.T) {
+	a := newClipboardTestApp()
+	qp := NewQueryPanel(a, "Query 1")
+	qp.SetBounds(0, 0, 80, 24)
+	a.panels.AddPanel(qp)
+	qp.setResult(&query.Result{Sets: []query.ResultSet{{Columns: []string{"c"}}}}, false)
+	a.focus = focusOnPanels
+	a.syncActivePanelFocus()
+	qp.setResultsFocused(true)
+	if got := a.activeClipboardTarget(); got != clipboardTarget(qp.results) {
+		t.Fatalf("setup: activeClipboardTarget() = %T, want the results grid", got)
+	}
+
+	status := a.statusText
+	a.copySelection()
+	if n := a.clipWriteSeq.Load(); n != 0 {
+		t.Errorf("copySelection wrote the clipboard %d time(s) from a grid with no rows", n)
+	}
+	if a.statusText != status {
+		t.Errorf("status = %q, want it left at %q", a.statusText, status)
 	}
 }

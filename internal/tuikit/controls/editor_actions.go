@@ -17,9 +17,18 @@ import (
 // affectedLineRange returns the row range a line/block action applies to: the
 // selection's row span if any (selectionBounds' rows are min/max regardless of
 // anchor vs. cursor, right for linear and block modes), else the cursor's line.
+//
+// A linear selection that ends at column 0 of a later row leaves that row out:
+// Shift+Down from a line start, or a drag to the start of a line, selects up to
+// and including the previous line's break and none of the row it stops on, so
+// acting on that row too commented, indented, moved or deleted a line the user
+// never selected (Visual Studio, SSMS and Notepad++ all exclude it).
 func (e *Editor) affectedLineRange() (startRow, endRow int) {
 	if e.HasSelection() {
-		sr, _, er, _ := e.selectionBounds()
+		sr, _, er, ec := e.selectionBounds()
+		if !e.selBlock && er > sr && ec == 0 {
+			er--
+		}
 		return sr, er
 	}
 	return e.cursorRow, e.cursorRow
@@ -60,7 +69,9 @@ func (e *Editor) DuplicateLines() {
 		newLines = append(newLines, block...)
 		return append(newLines, lines[er+1:]...)
 	})
-	e.cursorRow += n
+	// min: a cursor on the row a column-0 selection end leaves out
+	// (affectedLineRange) lands on the copy's last line, not past it.
+	e.cursorRow = min(e.cursorRow, er) + n
 	e.clampCursor()
 	e.ensureCursorVisible()
 }
@@ -125,6 +136,17 @@ func (e *Editor) MoveLinesDown() {
 	e.cursorRow++
 	if e.selecting {
 		e.selAnchorRow++
+	}
+	// A selection end at column 0 of the row below the block (affectedLineRange
+	// leaves that row out) now sits past the buffer when the block reached the
+	// bottom: pin it to the end of the moved block's last line instead, so the
+	// selection still covers exactly the moved lines and the anchor stays in range.
+	last := e.doc.Len() - 1
+	if e.cursorRow > last {
+		e.cursorRow, e.cursorCol = last, len(e.doc.Line(last))
+	}
+	if e.selecting && e.selAnchorRow > last {
+		e.selAnchorRow, e.selAnchorCol = last, len(e.doc.Line(last))
 	}
 	e.clampCursor()
 	e.ensureCursorVisible()

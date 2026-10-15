@@ -539,11 +539,19 @@ func (g *DataGrid) selectedRows() []int {
 }
 
 // selectedRun is the inclusive row run the anchor/cursor rectangle spans,
-// ok false when it spans none.
+// clipped to the rows that exist, ok false when it spans none. The cursor sits
+// on (0,0) of a grid with no rows, so without the clip an empty result set
+// "selects" row 0 and Ctrl+C indexed past the end of it — a crash.
 func (g *DataGrid) selectedRun() (r0, r1 int, ok bool) {
 	r0, _, r1, _ = g.selectionBounds()
+	r1 = min(r1, g.rows.Len()-1)
 	return r0, r1, r0 >= 0 && r1 >= r0
 }
+
+// SelectedRowCount is len(SelectedRows()) without building the slice: 0 on a
+// grid with no rows, so a host's Ctrl+C can tell "nothing to copy" from a
+// selected empty cell.
+func (g *DataGrid) SelectedRowCount() int { return g.selectedRowCount() }
 
 // selectedRowCount is len(selectedRows()) without building the slice — what
 // the context menu asks, on every open, of a selection that may hold a
