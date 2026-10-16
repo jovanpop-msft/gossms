@@ -8,12 +8,11 @@ package gate
 // CREDENTIAL: CONTROL on the database, and nothing else.
 //
 // The single entry is the point (why this is a function, not an inline
-// ControlDB). Probed live (major 17) with a WITHOUT LOGIN user: all three
-// statements succeeded under GRANT CONTROL ON DATABASE and were refused under
-// GRANT ALTER ON DATABASE, so AlterDatabase is deliberately absent, unlike
-// every other database-scoped set; adding it "for symmetry" would offer
-// New/Delete/Properties the server refuses. ALTER ANY CREDENTIAL is not the
-// narrower twin: asked of a database, HAS_PERMS_BY_NAME reads it NULL, not 0,
+// ControlDB): all three statements succeed under GRANT CONTROL ON DATABASE and
+// are refused under GRANT ALTER ON DATABASE, so AlterDatabase is deliberately
+// absent, unlike every other database-scoped set; adding it "for symmetry" would
+// offer New/Delete/Properties the server refuses. ALTER ANY CREDENTIAL is not
+// the narrower twin: asked of a database, HAS_PERMS_BY_NAME reads it NULL, not 0,
 // which a gate takes for "unknown" forever.
 func DBScopedCredentialRights() []Right {
 	return []Right{ControlDB}
@@ -30,11 +29,10 @@ func DatabaseWriteRights() []Right {
 //
 // The set reaches the object itself. A grant made directly on one table shows at
 // no wider scope: such a principal reads 0 for every database- and schema-scope
-// permission, so the four wider rights all deny and the action would be
-// withheld from someone who can perform it. AlterOnObject speaks for them.
-//
-// OBJECT scope costs no per-object query: gosmo's object block reads the whole
-// database in one pass, as a fourth part of the existing probe.
+// permission, so the four wider rights all deny and the action would be withheld
+// from someone who can perform it. AlterOnObject speaks for them. OBJECT scope
+// costs no per-object query: gosmo's object block reads the whole database in one
+// pass, as a fourth part of the existing probe.
 func ObjectWriteRights() []Right {
 	return []Right{
 		AlterDatabase, ControlDB, AlterAnySchema,
@@ -79,9 +77,8 @@ func BrokerPriorityWriteRights() []Right {
 func QueueAlterRights() []Right { return ObjectWriteRights() }
 
 // QueueDropRights are what permits DROP QUEUE: QueueAlterRights minus the
-// object-scoped ALTER. That is the asymmetry the probe found: ALTER ON
-// OBJECT::<queue> alters the queue and is refused the drop (Msg 15151), which
-// needs CONTROL on the queue or ALTER on its schema.
+// object-scoped ALTER. ALTER ON OBJECT::<queue> alters the queue and is refused
+// the drop (Msg 15151), which needs CONTROL on the queue or ALTER on its schema.
 //
 // CONTROL on the queue is in the set and the object-scoped ALTER is not, the
 // distinction ControlOnObject exists for: gosmo's object block matches CONTROL
@@ -97,27 +94,24 @@ func QueueDropRights() []Right {
 }
 
 // ClassOneTransferRights are what permits Move to Schema on a class-1 object
-// (every sys.objects family the tree offers a transfer on, queues included),
-// and are neither of that family's other two sets: ALTER SCHEMA ... TRANSFER
-// wants CONTROL on the object, which no ALTER substitutes for.
+// (every sys.objects family the tree offers a transfer on, queues included), and
+// are neither of that family's other two sets: ALTER SCHEMA ... TRANSFER wants
+// CONTROL on the object, which no ALTER substitutes for.
 //
-// Probed live twice on major 17 (queue, table), a WITHOUT LOGIN user per right
-// with ALTER on the target schema held, the runs agreeing: CONTROL on the
-// object, owning it, CONTROL on the source schema and CONTROL on the database
-// each transferred it, while ALTER on the object, ALTER on the source schema,
-// ALTER ANY SCHEMA, db_ddladmin and ALTER on the database were refused Msg
-// 15151 (the split securableTransferRights found for a type and an XML schema
-// collection). One set serves all families because the server checks the
-// class, not the family.
+// With ALTER on the target schema held, CONTROL on the object, owning it,
+// CONTROL on the source schema and CONTROL on the database each transfer it,
+// while ALTER on the object, ALTER on the source schema, ALTER ANY SCHEMA,
+// db_ddladmin and ALTER on the database are refused Msg 15151 (the split
+// securableTransferRights found for a type and an XML schema collection). One set
+// serves all families because the server checks the class, not the family.
 //
 // Two of the four permitting rights are deliberately missing. CONTROL on the
 // source schema reads through gosmo's schema probe as ALTER, which ALTER alone
 // also reads, so asking for it would offer the move to principals the server
 // refuses; and the object's own CONTROL already covers its owner, since the
 // object block records an owned object under every name it probes. As with
-// QueueDropRights, a principal holding only CONTROL on the schema is not
-// offered a move the server would allow. See docs/decisions.md § Permission
-// gating.
+// QueueDropRights, a principal holding only CONTROL on the schema is not offered
+// a move the server would allow. See docs/decisions.md § Permission gating.
 func ClassOneTransferRights() []Right {
 	return []Right{ControlOnObject, ControlDB}
 }
@@ -125,22 +119,21 @@ func ClassOneTransferRights() []Right {
 // AgentWriteRights are what permits SQL Agent's New Job / New Schedule / New
 // Alert / New Operator. Any one of them.
 //
-// Three facts settled live shape this set; assuming any the other way breaks
-// the gate:
+// Three facts shape this set; assuming any the other way breaks the gate:
 //
-//   - A sysadmin reads IS_ROLEMEMBER = 0 for all three SQLAgent* roles (it
-//     maps to dbo, a member of none). Gating on the roles alone withholds every
-//     Agent action from the login that certainly may perform them, hence
-//     CONTROL SERVER.
+//   - A sysadmin reads IS_ROLEMEMBER = 0 for all three SQLAgent* roles (it maps
+//     to dbo, a member of none). Gating on the roles alone withholds every Agent
+//     action from the login that certainly may perform them, hence CONTROL
+//     SERVER.
 //   - The roles nest, and IS_ROLEMEMBER resolves it: a member of
 //     SQLAgentOperatorRole reads 1 for SQLAgentUserRole. The narrowest role is
 //     the whole test for "or above".
 //   - msdb db_owner is a real non-sysadmin case covered by neither.
 //
 // The order is the message, not the test: Item shows only rights[0] in a
-// withheld note, so the narrowest sufficient right goes first. Led with
-// CONTROL SERVER the note read "needs CONTROL SERVER", sending a user who wants
-// to create a job off to ask for sysadmin.
+// withheld note, so the narrowest sufficient right goes first. Leading with
+// CONTROL SERVER would send a user who wants to create a job off to ask for
+// sysadmin.
 func AgentWriteRights() []Right {
 	return []Right{SQLAgentUser, MsdbOwner, ControlServer}
 }

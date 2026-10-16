@@ -272,10 +272,10 @@ func (p *queryParser) parseBranch() *Query {
 // clause, so the parse is abandoned unless the first binding matches, and only
 // the WITH itself is consumed.
 //
-// Bindings that did parse are kept even when a later one does not. The tail of
-// a half-typed clause (from the comma just typed onwards) stops matching until
-// the next binding's name arrives, and dropping earlier bindings would empty
-// the completion popup on exactly the script this package exists for.
+// Bindings that did parse are kept even when a later one does not: the tail of a
+// half-typed clause (from the comma just typed onwards) stops matching until the
+// next binding's name arrives, and dropping earlier bindings would empty the
+// completion popup on exactly the script this package exists for.
 func (p *queryParser) parseCTEs(q *Query) {
 	p.i++ // WITH
 	// resume is where the branch loop picks up if a binding fails to parse: just
@@ -570,10 +570,10 @@ func refFromParts(parts []string) FromRef {
 // PIVOT/UNPIVOT clause and an alias.
 //
 // Both orders occur ("t PIVOT (...) AS p" and "(SELECT ...) AS src PIVOT (...)
-// AS p"); the clause is checked first in each, because parseAlias would take
-// the bare word PIVOT for the alias. When a clause is found, the alias after it
-// is the reference's: a pivoted source's own alias is addressable only inside
-// the clause.
+// AS p"); the clause is checked first in each, because parseAlias would take the
+// bare word PIVOT for the alias. When a clause is found, the alias after it is
+// the reference's: a pivoted source's own alias is addressable only inside the
+// clause.
 func (p *queryParser) parseRefTail(ref *FromRef) {
 	p.skipSystemTime()
 	ref.Pivot = p.parsePivot()
@@ -645,10 +645,10 @@ func aliasAt(toks []Token, i int) (string, int) {
 }
 
 // skipSystemTime consumes a temporal table's "FOR SYSTEM_TIME <period>", which
-// sits between the name and the alias ("FROM t FOR SYSTEM_TIME AS OF @d AS
-// h"). Left in place it hides the alias, and its FROM ... TO form reads as a
-// second FROM clause. A period's bound is a literal (no token: the tokenizer
-// drops strings) or a variable, so only an '@' word is taken for one:
+// sits between the name and the alias ("FROM t FOR SYSTEM_TIME AS OF @d AS h").
+// Left in place it hides the alias, and its FROM ... TO form reads as a second
+// FROM clause. A period's bound is a literal (no token: the tokenizer drops
+// strings) or a variable, so only an '@' word is taken for one:
 //
 //	AS OF <v> | FROM <v> TO <v> | BETWEEN <v> AND <v> | CONTAINED IN ( <v>, <v> ) | ALL
 func (p *queryParser) skipSystemTime() {

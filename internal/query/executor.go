@@ -72,10 +72,10 @@ type Message struct {
 	Text    string
 	IsError bool
 
-	// Line is the 1-based script line a SQL Server error points at, its "Line N"
-	// header counted from the script's start (see WithLineOffset), and so where
-	// go-to-line jumps. 0 when there is none: not an error, an error raised inside
-	// a procedure, function or trigger (its line is in that module), or one from
+	// Line is the 1-based script line a SQL Server error points at (its "Line N"
+	// counted from the script's start, see WithLineOffset), where go-to-line
+	// jumps. 0 when there is none: not an error, an error inside a procedure,
+	// function or trigger (its line is in that module), or one from
 	// ErrorMessages, which has no script to count in.
 	Line int
 }
@@ -161,11 +161,10 @@ func ErrorMessages(err error) []Message {
 // batchErrorMessages is ErrorMessages for an error raised by a batch starting on
 // 0-based script line firstLine, or -1 for no script. SQL Server counts "Line N"
 // from the batch's first line, so firstLine is added to make it the script line,
-// as SSMS does since 2016, so the header matches the editor's line numbers.
+// as SSMS does since 2016.
 //
-// Not for an error raised inside a module (ProcName set): its line counts from the
-// procedure, function or trigger's own text, and stays as the server sent it. Nor
-// for Line 0, which points at no line.
+// Not for an error raised inside a module (ProcName set): its line counts from
+// the module's own text and stays as sent. Nor for Line 0.
 func batchErrorMessages(err error, firstLine int) []Message {
 	if se, ok := gosmo.AsSQLError(err); ok {
 		line := 0
@@ -186,8 +185,8 @@ func (r *Result) addNotice(s string) { r.Messages = append(r.Messages, Message{T
 // shouldReportSuccess reports whether the run produced nothing else to say, so
 // Messages gets SSMS's "Commands completed successfully."
 //
-// The test is whether any result set happened, not any row: Sets for Execute,
-// sinkSets for Session.ExecuteToSink. RowsWritten would make an empty set print
+// The test is whether any result set happened, not any row (Sets for Execute,
+// sinkSets for Session.ExecuteToSink): RowsWritten would make an empty set print
 // both "(0 row(s) written)" and the success notice. planCaptureEstimated
 // executes nothing, so never reports success.
 func (r *Result) shouldReportSuccess(capture planCapture) bool {
@@ -291,12 +290,12 @@ func Execute(ctx context.Context, db *sql.DB, database, script string, opts ...O
 //
 // EndSet is called for every set BeginSet was called for, including sets
 // abandoned by a Row error or whose BeginSet failed, so it's the one place to
-// finalise per-set state. Its count is rows that reached Row (0 if the set
-// never opened).
+// finalise per-set state. Its count is rows that reached Row (0 if the set never
+// opened).
 //
-// Row's isNull parallels cells and marks the cells holding a SQL NULL (text
-// "NULL", as in a ResultSet). Both slices are reused for the next row: Row must
-// consume them before returning.
+// Row's isNull parallels cells and marks SQL NULLs (text "NULL", as in a
+// ResultSet). Both slices are reused for the next row: consume them before
+// returning.
 type RowSink interface {
 	BeginSet(columns []string) error
 	Row(cells []string, isNull []bool) error
@@ -318,8 +317,8 @@ func newResult(opts []Option) *Result {
 // with the requested plan capture switched on around them. Returns false if the
 // capture couldn't be switched on (already recorded on res).
 //
-// cleanupErr is the failure of the capture's SET ... OFF, if any. Deferred to
-// run on every exit; gosmo.StartPlanCapture's stop detaches it from ctx's
+// cleanupErr is the failure of the capture's SET ... OFF, if any, deferred to run
+// on every exit; gosmo.StartPlanCapture's stop detaches it from ctx's
 // cancellation (a cancelled run most likely left it pending) and bounds it.
 func runScript(ctx context.Context, conn *sql.Conn, script string, capture planCapture, sink RowSink, res *Result) (ran bool, cleanupErr error) {
 	if capture != planCaptureNone {
@@ -380,9 +379,9 @@ func runBatch(ctx context.Context, conn *sql.Conn, sqlText string, firstLine int
 			}
 		case sqlexp.MsgNext:
 			if scanNext(rows, res, sink) {
-				// scanNext abandoned the set with rows pending, and the message loop can't
-				// advance past it. Drain here only: an extra Next() on an exhausted set makes
-				// the driver swallow the message retmsg awaits, losing the set.
+				// scanNext abandoned the set with rows pending, and the message loop
+				// can't advance past it. Drain only here: an extra Next() on an
+				// exhausted set makes the driver swallow the message retmsg awaits.
 				for rows.Next() {
 				}
 			}
@@ -390,13 +389,13 @@ func runBatch(ctx context.Context, conn *sql.Conn, sqlText string, firstLine int
 			active = rows.NextResultSet()
 		case sqlexp.MsgLastInsertID:
 			// sqlexp's sixth type, never enqueued by go-mssqldb: SQL Server reports an
-			// identity through SCOPE_IDENTITY(), not the protocol, so there is nothing to
-			// show. Ignored explicitly so only an unknown type reaches default.
+			// identity through SCOPE_IDENTITY(), not the protocol. Ignored explicitly
+			// so only an unknown type reaches default.
 		default:
-			// Unreachable: go-mssqldb enqueues only the five types above. A guard against
-			// a driver change; a new type would otherwise spin this loop at 100% CPU. It
-			// ends the batch with an error, truncating the batch's remaining output, so a
-			// type that starts arriving wants an arm of its own.
+			// Unreachable: go-mssqldb enqueues only the five types above. A guard
+			// against a driver change; a new type would otherwise spin this loop at
+			// 100% CPU. It ends the batch with an error, truncating the remaining
+			// output, so a type that starts arriving wants its own arm.
 			res.addError(fmt.Errorf("unexpected message type %T from the driver", m))
 			active = false
 		}
@@ -434,8 +433,8 @@ type rowScanner struct {
 // uniqueidentifier scans as 16 raw bytes in the wrong order for hex;
 // NullUniqueIdentifier gives the canonical GUID and preserves NULL.
 //
-// decimal/numeric/money/smallmoney scan as []byte already decoded to ASCII
-// digits ("0.070312"), so render as text, not hex. (numeric reports as DECIMAL.)
+// decimal/numeric/money/smallmoney scan as []byte already decoded to ASCII digits
+// ("0.070312"), so render as text, not hex (numeric reports as DECIMAL).
 // money/smallmoney arrive with four decimals; isMoney trims them as SSMS does.
 //
 // real scans as float64(float32); formatting at 64 bits shows widening noise
@@ -529,12 +528,12 @@ func (sc *rowScanner) scan(rows *sql.Rows, row []string, a *cellArena) error {
 // into a cellArena since there's no row cap.
 //
 // No trailing rows.Err(), deliberately, and likewise in streamResultSet:
-// runBatch ends the message loop with one, so a truncated set is still
-// reported from there. This keeps the partial set: the user gets the grid *and*
-// the error, as SSMS shows a query that died on row 900. scanPlanXML checks and
-// discards its partial result; the asymmetry is a decision about partial
-// output. Both are reached only through scanNext, itself reached only from
-// runBatch; a caller added outside runBatch must bring its own check.
+// runBatch ends the message loop with one, so a truncated set is still reported
+// from there. This keeps the partial set: the user gets the grid *and* the
+// error, as SSMS shows a query that died on row 900. scanPlanXML checks and
+// discards its partial result instead: half a showplan is not a plan. Both are
+// reached only through scanNext, itself reached only from runBatch; a caller
+// outside runBatch must bring its own check.
 func scanResultSet(rows *sql.Rows, prog *Progress) (ResultSet, error) {
 	sc, err := newRowScanner(rows)
 	if err != nil {
@@ -562,8 +561,8 @@ func scanResultSet(rows *sql.Rows, prog *Progress) (ResultSet, error) {
 // returns rows written.
 //
 // exhausted reports whether the loop reached the set's end; not derivable from
-// err, since the deferred EndSet can fail on a fully read set, and draining
-// that costs a message (see scanNext).
+// err, since the deferred EndSet can fail on a fully read set, and draining that
+// costs a message (see scanNext).
 //
 // Like scanResultSet, it ends without rows.Err(): runBatch's trailing one
 // reports a set the server truncated, and rows already handed to the sink stay
@@ -607,13 +606,13 @@ func isShowplanResultSet(cols []string) bool {
 	return len(cols) == 1 && cols[0] == gosmo.ShowplanColumn
 }
 
-// scanNext consumes the result set MsgNext just announced, appending it to res
-// as showplan XML or a grid. Errors go to res, since the batch continues.
+// scanNext consumes the result set MsgNext just announced, appending it to res as
+// showplan XML or a grid. Errors go to res, since the batch continues.
 //
-// It returns whether the set was abandoned with rows pending, the only case
-// the caller may drain. Not "did it fail": streamResultSet's deferred EndSet
-// and scanPlanXML's trailing rows.Err() can fail on a fully read set, and
-// draining that swallows the message retmsg awaits.
+// It returns whether the set was abandoned with rows pending, the only case the
+// caller may drain. Not "did it fail": streamResultSet's deferred EndSet and
+// scanPlanXML's trailing rows.Err() can fail on a fully read set, and draining
+// that swallows the message retmsg awaits.
 func scanNext(rows *sql.Rows, res *Result, sink RowSink) (abandoned bool) {
 	cols, err := rows.Columns()
 	if err != nil {
@@ -654,16 +653,16 @@ func scanNext(rows *sql.Rows, res *Result, sink RowSink) (abandoned bool) {
 }
 
 // scanPlanXML reads the current showplan set into one XML document per row.
-// Every probed server sends one row per set; keeping every row is a tolerance
-// so a split set wouldn't lose plans (as in gosmo's capturePlan).
+// Every probed server sends one row per set; keeping every row is a tolerance so
+// a split set wouldn't lose plans (as in gosmo's capturePlan).
 //
 // exhausted reports whether the loop reached the set's end; rows.Err() can't
 // tell a failed end from a clean one, and neither needs draining.
 //
-// Unlike the grid scanners it checks the trailing rows.Err(), so a truncated
-// plan set yields *no* plans: half a showplan is not a plan, whereas a grid cut
-// at row 900 is still 900 rows. runBatch reports the same failure again in
-// Messages, which is accepted.
+// Unlike the grid scanners it checks the trailing rows.Err(), so a truncated plan
+// set yields *no* plans (half a showplan is not a plan; a grid cut at row 900 is
+// still 900 rows). runBatch reports the same failure again in Messages, which is
+// accepted.
 func scanPlanXML(rows *sql.Rows) (plans []string, exhausted bool, err error) {
 	for rows.Next() {
 		var xml string
@@ -787,16 +786,16 @@ func appendMoney(dst []byte, digits []byte) []byte {
 // temporal type as a bare time.Time. So the value has to say what it was:
 //
 //   - a []byte that is exactly a decimal literal is decimal or money digits,
-//     shown as text. A varbinary variant whose bytes happen to spell one shows
-//     as text too — rare, and accepted (docs/decisions.md);
+//     shown as text. A varbinary variant whose bytes spell one shows as text too
+//     — rare, accepted (docs/decisions.md);
 //   - a time.Time in a nameless fixed zone is a datetimeoffset, the only type
-//     the driver decodes into one (the others get the connection's zone, UTC
-//     unless "timezone" names one), and keeps its offset;
-//   - fractional seconds show three digits, as datetime does, and more only
-//     when the value carries them.
+//     the driver decodes into one (the others get the connection's zone), and
+//     keeps its offset;
+//   - fractional seconds show three digits, as datetime does, and more only when
+//     the value carries them.
 //
-// A date or time variant still shows as a datetime, and a GUID as hex: the
-// value alone can't tell them from a datetime at midnight or a binary(16).
+// A date or time variant still shows as a datetime, and a GUID as hex: the value
+// alone can't tell them from a datetime at midnight or a binary(16).
 func appendVariant(dst []byte, v any) []byte {
 	switch x := v.(type) {
 	case []byte:

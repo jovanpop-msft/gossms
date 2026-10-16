@@ -46,12 +46,10 @@ type treeState struct {
 	sbDragging bool
 
 	// rowDragging is true from a press on a tree row until its release.
-	// PlanView.mouseDragging can't stand in: it is set unconditionally on the
-	// way to the content area so the XML editor and graph still receive the
-	// resent Button1 events a selection drag is made of. A row click is the
-	// opposite: it toggles, so a held press would expand and collapse a
-	// selected row per motion event, and select-then-toggle an unselected one
-	// on the next resend.
+	// PlanView.mouseDragging can't stand in: it is set unconditionally on the way
+	// to the content area so the XML editor and graph still receive the resent
+	// Button1 events a selection drag is made of. A row click toggles, so a held
+	// press would expand and collapse a selected row per motion event.
 	rowDragging bool
 }
 
@@ -435,14 +433,14 @@ func (v *PlanView) expandAncestorsOf(n *showplan.Node, id int) bool {
 	return false
 }
 
-// handleTreeTabKey handles navigation, expand/collapse, and the bottom
-// section's own key handling while the Tree tab is active.
+// handleTreeTabKey handles navigation, expand/collapse, and the bottom section's
+// own key handling while the Tree tab is active.
 //
 // The Summary table's sort keys (c/r/t) work whichever pane has focus; they
 // collide with nothing the tree binds. Tab switches focus between the tree and
 // the summary table (Properties has nothing to navigate); while the summary has
-// focus, arrow/PgUp/PgDn/Enter drive its grid and row-jump instead of the
-// tree's (see trySummarySort/bottomFocused).
+// focus, arrow/PgUp/PgDn/Enter drive its grid and row-jump instead of the tree's
+// (see trySummarySort/bottomFocused).
 func (v *PlanView) handleTreeTabKey(ev *tcell.EventKey) bool {
 	if core.EvRune(ev) == 'o' {
 		v.cycleBottomMode()

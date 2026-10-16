@@ -25,7 +25,7 @@ type ModalDialog struct {
 	// action on every resend. Reset in ConsumeOutsideClick rather than
 	// ButtonClicked, since every embedding dialog's HandleMouse calls the former
 	// first while some reach the latter only through a mode-gated branch a release
-	// never takes; and again in Show, for the gesture whose release never gets that
+	// never takes; and again in Show, for a gesture whose release never gets that
 	// far.
 	mouseDragging bool
 
@@ -85,8 +85,7 @@ func (d *ModalDialog) Show() {
 // every terminal resize for each open dialog: recentre otherwise runs only from
 // InitModal/SetSize/Show, so the dialog would keep its old rect, drawing its
 // border and button row off-screen while still swallowing every key. A dialog
-// whose size depends on the screen overrides this to recompute it and call
-// SetSize.
+// whose size depends on the screen overrides this to recompute and call SetSize.
 func (d *ModalDialog) Relayout() { d.recentre() }
 
 // Hide dismisses the dialog.

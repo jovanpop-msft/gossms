@@ -13,11 +13,11 @@ import (
 	"time"
 )
 
-// WriteAtomic writes data to a temp file in path's directory and renames it
-// over path, so path is only ever replaced whole. os.WriteFile truncates in
-// place: a crash mid-write leaves a half file (a truncated config.json loses
-// every saved connection). The temp file must share path's directory; a
-// cross-filesystem rename is not atomic.
+// WriteAtomic writes data to a temp file in path's directory and renames it over
+// path, so path is only ever replaced whole. os.WriteFile truncates in place: a
+// crash mid-write leaves a half file (a truncated config.json loses every saved
+// connection). The temp file must share path's directory; a cross-filesystem
+// rename is not atomic.
 //
 // perm is the mode a new file gets, less the umask, and the widest an existing
 // one keeps; see modeFor.
@@ -62,12 +62,12 @@ func WriteAtomic(path string, data []byte, perm os.FileMode) error {
 
 // CreateAtomic is WriteAtomic for a file that must never be replaced once it
 // exists: it writes data to a temp file beside path and hard-links it into
-// place, which fails rather than overwrites if path appeared meanwhile.
-// created is false, with no error, when path already existed — the caller
-// then reads the winner's file instead of its own data.
+// place, which fails rather than overwrites if path appeared meanwhile. created
+// is false, with no error, when path already existed — the caller then reads the
+// winner's file instead of its own data.
 //
-// It exists for two processes creating the same file at once: with WriteAtomic's
-// rename both "succeed" and the later one silently wins.
+// For two processes creating the same file at once: with WriteAtomic's rename
+// both "succeed" and the later one silently wins.
 //
 // A filesystem that cannot hard-link falls back to an O_EXCL create written in
 // place: still create-if-absent, but a concurrent reader can see it partly
@@ -133,11 +133,10 @@ func createExclusiveInPlace(path string, data []byte, perm os.FileMode) (bool, e
 const StaleTempAge = 5 * time.Minute
 
 // RemoveStaleTemps deletes the temp files WriteAtomic and CreateAtomic left
-// beside path — named path's base + ".tmp" + CreateTemp's digits — that are
-// older than StaleTempAge. The deferred remove never runs when the process
-// dies between CreateTemp and the rename (os.Exit from the watchdog, a kill, a
-// crash), and each leftover of config.json is a full copy of it, encrypted
-// passwords included.
+// beside path — path's base + ".tmp" + CreateTemp's digits — older than
+// StaleTempAge. The deferred remove never runs when the process dies between
+// CreateTemp and the rename (watchdog os.Exit, a kill, a crash), and each
+// leftover of config.json is a full copy of it, encrypted passwords included.
 //
 // Only that exact pattern is matched, so in a user's script folder nothing but
 // gossms's own leftovers for this one file can go. Best-effort and silent: a
@@ -175,18 +174,17 @@ func isTempName(name string) bool {
 }
 
 // KeepCorrupt saves data — path's contents, which did not parse — beside it as
-// path.corrupt-<yyyymmdd_hhmmss>, so what the file held stays readable by
-// hand after the caller starts empty. It returns the copy's path.
+// path.corrupt-<yyyymmdd_hhmmss>, so what the file held stays readable by hand
+// after the caller starts empty. It returns the copy's path.
 //
 // Each corruption gets its own copy: one fixed name would replace the first
-// recovery copy when the file is corrupted again later. A copy already holding
-// the same bytes (an older one, or the plain .corrupt name earlier versions
-// wrote) is reused instead, since Load and every Save re-read the same broken
-// file. The copy is created, never overwritten (CreateAtomic), so two
-// processes can't replace each other's.
+// recovery copy when the file is corrupted again. A copy already holding the
+// same bytes (an older one, or the plain .corrupt name) is reused, since Load
+// and every Save re-read the same broken file. The copy is created, never
+// overwritten (CreateAtomic), so two processes can't replace each other's.
 //
-// An error means data exists nowhere but in path: the caller must then not
-// write over path.
+// An error means data exists nowhere but in path: the caller must not write
+// over path.
 func KeepCorrupt(path string, data []byte, now time.Time) (string, error) {
 	path = resolveSymlink(path)
 	dir, base := filepath.Dir(path), filepath.Base(path)+".corrupt"
@@ -218,16 +216,16 @@ func KeepCorrupt(path string, data []byte, now time.Time) (string, error) {
 	return "", fmt.Errorf("no free name for a copy of %s beside it", base)
 }
 
-// resolveSymlink returns the file path names, following symlinks, so
-// WriteAtomic writes through a link instead of replacing it. A rename replaces
-// the directory entry, so without this saving a symlinked script would turn the
-// link into a regular file and leave the target untouched. Resolving also puts
-// the temp file in the target's directory, where the rename stays atomic.
+// resolveSymlink returns the file path names, following symlinks, so WriteAtomic
+// writes through a link instead of replacing it. A rename replaces the directory
+// entry, so otherwise saving a symlinked script would turn the link into a
+// regular file and leave the target untouched. Resolving also puts the temp file
+// in the target's directory, where the rename stays atomic.
 //
 // EvalSymlinks fails when the target doesn't exist — including a dangling link,
 // which must still create the target, not overwrite the link. So the fallback
 // walks the last component by hand; a relative link resolves against its own
-// directory, and a hop limit stops link cycles.
+// directory, and a hop limit stops cycles.
 func resolveSymlink(path string) string {
 	if resolved, err := filepath.EvalSymlinks(path); err == nil {
 		return resolved
@@ -253,21 +251,18 @@ func resolveSymlink(path string) string {
 // unreadable path gets perm less the umask, as os.WriteFile's would.
 //
 // Preserving the mode keeps rename-based writes behaving like os.WriteFile: a
-// script the user chmodded 0600 must stay 0600 across saves, which applying
-// perm blindly would undo.
+// script the user chmodded 0600 stays 0600 across saves.
 //
 // The umask matters because the chmod is explicit: the kernel applies the umask
 // only at create, and CreateTemp creates at 0600, so an explicit 0644 chmod
 // would bypass a umask of 077.
 //
-// Capping at perm tightens a config.json or gossms.key that reached 0644 back
-// to 0600.
-//
-// The mode read is the symlink target's; WriteAtomic resolved it already.
+// Capping at perm tightens a config.json or gossms.key that reached 0644 back to
+// 0600. The mode read is the symlink target's (WriteAtomic resolved it already).
 //
 // Ownership is not preserved: the new file belongs to the running user.
-// Preserving it would need OS branching and matters only for root writing
-// another user's file, which is not supported.
+// Preserving it needs OS branching and matters only for root writing another
+// user's file, which is unsupported.
 func modeFor(path string, perm os.FileMode) os.FileMode {
 	fi, err := os.Stat(path)
 	if err != nil {
@@ -280,11 +275,11 @@ func modeFor(path string, perm os.FileMode) os.FileMode {
 // without changing the process's own.
 var umask = sync.OnceValue(probeUmask)
 
-// probeUmask reads the umask by creating a file at 0777 and seeing which bits
-// the kernel kept: Go has no portable read of it (syscall.Umask sets the mask
-// to read it, racing every other goroutine's create). Read once: gossms never
-// changes its umask. Any failure reads as no mask. On Windows the probe reads
-// 0666 back, a mask of 0111 that no caller's perm has bits in.
+// probeUmask reads the umask by creating a file at 0777 and seeing which bits the
+// kernel kept: Go has no portable read of it (syscall.Umask sets the mask to read
+// it, racing other goroutines' creates). Read once: gossms never changes its
+// umask. Any failure reads as no mask. On Windows the probe reads 0666 back, a
+// mask of 0111 that no caller's perm has bits in.
 func probeUmask() os.FileMode {
 	dir, err := os.MkdirTemp("", "gossms-umask")
 	if err != nil {
@@ -304,11 +299,9 @@ func probeUmask() os.FileMode {
 }
 
 // syncDir flushes the directory entry WriteAtomic's rename created, so the
-// rename survives a crash.
-//
-// Best-effort and silent: it must not fail a save that already succeeded.
-// Directory sync is POSIX-only (Windows FlushFileBuffers rejects a read
-// handle), so reporting errors would break saving on Windows.
+// rename survives a crash. Best-effort and silent: it must not fail a save that
+// already succeeded. Directory sync is POSIX-only (Windows FlushFileBuffers
+// rejects a read handle), so reporting errors would break saving on Windows.
 func syncDir(dir string) {
 	d, err := os.Open(dir)
 	if err != nil {

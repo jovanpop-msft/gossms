@@ -63,14 +63,13 @@ func orList(names []string) string {
 	return strings.Join(names[:len(names)-1], ", ") + " or " + names[len(names)-1]
 }
 
-// RequiresText is the sentence shown when an action is withheld. Any one of
-// the rights suffices, hence "or".
+// RequiresText is the sentence shown when an action is withheld. Any one of the
+// rights suffices, hence "or".
 //
-// Roles are gathered into one trailing clause because the alternatives for an
-// action mostly share a Role: spelled out per right it read "ALTER (db_owner)
-// or CONTROL (db_owner) or ALTER ANY DATABASE (dbcreator)", naming db_owner
-// twice and looking like six things to ask for. A right with no role stays
-// outside the clause (see Right.String).
+// Roles are gathered into one trailing clause because the alternatives mostly
+// share a Role: spelled out per right it names db_owner twice and looks like six
+// things to ask for. A right with no role stays outside the clause (see
+// Right.String).
 func RequiresText(rights ...Right) string {
 	var named, plain, roles []string
 	for _, r := range rights {

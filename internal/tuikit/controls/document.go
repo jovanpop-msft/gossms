@@ -14,28 +14,27 @@ import (
 // counter that every mutation bumps.
 //
 // The counter lets work proportional to the *document* be done once per edit
-// instead of once per Draw (which runs on every event, keystrokes included).
-// Three caches key on it: the syntax highlighters' block-comment prefix states
+// instead of once per Draw (which runs on every event, keystrokes included). Three
+// caches key on it: the syntax highlighters' block-comment prefix states
 // (sql_highlighter.go, xml_highlighter.go), Editor's wrap-mode visual-row
 // flattening (buildVisualLines), and maxDisplayWidth below.
 //
 // The version must never be stale, so the buffer is writable through exactly
-// three methods: setLine, edit and replaceRange. Each ends in a version bump
-// and cache invalidation; setLines is edit's whole-buffer form, and
-// setMeasuredLines is setLines with the width cache seeded. A new mutator
-// belongs alongside them and must do the same. A mutation reaching the lines
-// any other way leaves every cache rendering the *previous* document (stale
-// colours, wrap segments, scrollbar), a silent failure that looks like a
-// rendering glitch. Line returns a slice the caller can write through; a caller
-// that does must hand the result back to setLine.
+// three methods: setLine, edit and replaceRange. Each ends in a version bump and
+// cache invalidation; setLines is edit's whole-buffer form, and setMeasuredLines
+// is setLines with the width cache seeded. A new mutator belongs alongside them
+// and must do the same. A mutation reaching the lines any other way leaves every
+// cache rendering the *previous* document (stale colours, wrap segments,
+// scrollbar), a silent failure that looks like a rendering glitch. Line returns a
+// slice the caller can write through; a caller that does must hand the result back
+// to setLine.
 type Document struct {
 	lines   [][]rune
 	version uint64
 
 	// maxWidth caches the widest line's display width, which drives the horizontal
 	// scrollbar and is asked for several times per Draw. maxWidthValid
-	// distinguishes "not computed" from "0", the correct answer for an empty
-	// buffer.
+	// distinguishes "not computed" from "0", the correct answer for an empty buffer.
 	//
 	// lineW is the per-line half of that cache: entry i is line i's display width,
 	// or -1 when unknown. Measuring a line is O(its runes), so rebuilding maxWidth
@@ -54,15 +53,15 @@ type Document struct {
 	dirtyFrom int
 
 	// dirtyTo bounds that range above: the line after the last one the mutation
-	// touched, or -1 when it could have changed every line from dirtyFrom down.
-	// Only setLine gives a bound, always dirtyFrom+1 (one line, same line count).
+	// touched, or -1 when it could have changed every line from dirtyFrom down. Only
+	// setLine gives a bound, always dirtyFrom+1 (one line, same line count).
 	//
 	// prefixStates doesn't need it: a state replay stops where it converges, so an
 	// over-wide range costs time, not correctness. A cache indexed by line and
-	// spliced in place (the search match list) does: replaceRange leaves
-	// dirtyFrom > 0 with the line count unchanged whenever a span is replaced by
-	// one of equal length (every same-size undo), and rescanning only dirtyFrom
-	// would keep stale entries for the rest of the span.
+	// spliced in place (the search match list) does: replaceRange leaves dirtyFrom >
+	// 0 with the line count unchanged whenever a span is replaced by one of equal
+	// length (every same-size undo), and rescanning only dirtyFrom would keep stale
+	// entries for the rest of the span.
 	dirtyTo int
 
 	// splices records the reach of the most recent mutations, one slot per version
@@ -130,12 +129,12 @@ func (d *Document) setLines(lines [][]rune) {
 }
 
 // setMeasuredLines is setLines for a buffer whose line widths are already known
-// (LineBuffer), seeding the width cache rather than leaving it to the next
-// Draw. lineW is copied, not shared: touch truncates the cache in place and
+// (LineBuffer), seeding the width cache rather than leaving it to the next Draw.
+// lineW is copied, not shared: touch truncates the cache in place and
 // maxDisplayWidth appends into the same array, so a later mutation would
-// overwrite the buffer's widths (clipping the slice doesn't help; truncation
-// keeps capacity). A copy of a million ints is a few ms; the measuring it
-// replaces was 370.
+// overwrite the buffer's widths (clipping the slice doesn't help; truncation keeps
+// capacity). Copying a million ints takes a few ms; the measuring it replaces took
+// 370.
 func (d *Document) setMeasuredLines(lines [][]rune, lineW []int, maxW int) {
 	d.setLines(lines)
 	d.lineW = slices.Clone(lineW)
@@ -155,10 +154,9 @@ func (d *Document) edit(fn func(lines [][]rune) [][]rune) {
 // Document takes ownership of. It is the general splice undo and redo apply
 // through: a step covers one contiguous span, and restoring it in one mutation
 // keeps the version moving once per undo rather than once per line. Editor's
-// line-count-changing keystrokes (Enter, a joining Backspace or Delete,
-// deleting a multi-line selection) use it too rather than edit, so caches
-// resume at the span (in wrap mode edit re-segments the whole document per
-// Enter).
+// line-count-changing keystrokes (Enter, a joining Backspace or Delete, deleting a
+// multi-line selection) use it too rather than edit, so caches resume at the span
+// (in wrap mode edit re-segments the whole document per Enter).
 func (d *Document) replaceRange(row, n int, with [][]rune) {
 	// slices.Replace, not a hand-built fresh buffer: an undo over a same-length
 	// span (the common case) then costs a copy of the span, not of the whole
@@ -173,16 +171,15 @@ func (d *Document) replaceRange(row, n int, with [][]rune) {
 }
 
 // touch invalidates every version-keyed cache from line `from` down. Called by
-// setLines and edit with 0 (both can move any line anywhere) and by
-// replaceRange with the first line of its span; setLine has its own narrower
-// invalidation. Nothing else should call this directly.
+// setLines and edit with 0 (both can move any line anywhere) and by replaceRange
+// with the first line of its span; setLine has its own narrower invalidation.
+// Nothing else should call this directly.
 //
-// `from` must be the lowest line the mutation could have changed the meaning
-// of, not merely the lowest whose *text* changed: the surviving widths and the
-// resume in prefixStates.at take it as a promise that every earlier line is
-// untouched. It is never past the end of the new buffer (lines before a splice
-// survive it), so maxDisplayWidth only ever extends lineW. When in doubt, 0 is
-// always correct.
+// `from` must be the lowest line the mutation could have changed the meaning of,
+// not merely the lowest whose *text* changed: the surviving widths and the resume
+// in prefixStates.at take it as a promise that every earlier line is untouched. It
+// is never past the end of the new buffer (lines before a splice survive it), so
+// maxDisplayWidth only ever extends lineW. When in doubt, 0 is always correct.
 func (d *Document) touch(from int) {
 	d.version++
 	d.maxWidthValid = false

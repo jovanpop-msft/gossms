@@ -50,13 +50,13 @@ func (sc *ServerConn) Capabilities() *gosmo.Capabilities {
 	return &gosmo.Capabilities{}
 }
 
-// DatabaseCapabilities reports what the login may do in one database, probing
-// on first use and caching for the connection's life.
+// DatabaseCapabilities reports what the login may do in one database, probing on
+// first use and caching for the connection's life.
 //
-// Never nil or an error. A failed probe returns Accessible with no rights
-// known, which reads like an unrestricted login through Allows. Only a real
-// server answer reports Accessible false ("cannot be opened"); deriving that
-// from a failure would hide databases over a dropped connection.
+// Never nil or an error. A failed probe returns Accessible with no rights known,
+// which reads like an unrestricted login through Allows. Only a real server
+// answer reports Accessible false ("cannot be opened"); deriving that from a
+// failure would hide databases over a dropped connection.
 //
 // Two round trips on first call, none after. Concurrent callers wait for the
 // first probe, each bounded by its own ctx.
@@ -184,9 +184,9 @@ func (sc *ServerConn) ClearCapabilityCache() {
 // ProbeCapabilities fills the server-scope capability set, best effort: a login
 // that can't be asked may still work.
 //
-// A server-node Refresh calls it again off the UI goroutine, so later grants
-// are seen. A failed re-probe keeps the previous answer rather than switching
-// every gate to unknown.
+// A server-node Refresh calls it again off the UI goroutine so later grants are
+// seen. A failed re-probe keeps the previous answer rather than switching every
+// gate to unknown.
 //
 // Exported because tests build ServerConns over scripted pools, and an unprobed
 // set silently fails open, masking a gate under test.
@@ -195,9 +195,9 @@ func (sc *ServerConn) ProbeCapabilities() {
 }
 
 // ProbeCapabilitiesContext is ProbeCapabilities under ctx, still bounded by
-// capabilityProbeTimeout. ConnectContext passes the dial's ctx so cancelling
-// the Connect dialog (or a closing query panel's redial) during the probe
-// returns at once instead of waiting out the timeout.
+// capabilityProbeTimeout. ConnectContext passes the dial's ctx so cancelling the
+// Connect dialog (or a closing query panel's redial) returns at once instead of
+// waiting out the timeout.
 func (sc *ServerConn) ProbeCapabilitiesContext(ctx context.Context) {
 	ctx, cancel := context.WithTimeout(ctx, capabilityProbeTimeout)
 	defer cancel()

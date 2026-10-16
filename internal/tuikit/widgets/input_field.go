@@ -10,13 +10,12 @@ import (
 )
 
 // InputField is a single-line text input control.
-// InputField is a single-line text input control.
 //
 // value is indexed by rune but drawn in terminal columns (a CJK ideograph or
-// emoji takes two, a combining mark none). cursor and selAnchor are rune
-// indices, scroll is a column offset, and conversions go through
-// core.ColumnOfRune or core.RuneIndexAtColumn: treating a rune index as a column
-// puts the caret one column left of its character.
+// emoji takes two, a combining mark none). cursor and selAnchor are rune indices,
+// scroll is a column offset, and conversions go through core.ColumnOfRune or
+// core.RuneIndexAtColumn: treating a rune index as a column puts the caret one
+// column left of its character.
 type InputField struct {
 	rect     core.Rect
 	value    []rune
@@ -253,9 +252,8 @@ func (f *InputField) Draw(s tcell.Screen) {
 
 	// Walk grapheme clusters accumulating display width, not a column per rune: a
 	// wide character shifts everything after it and a cluster's width isn't the sum
-	// of its runes' ("❤️" is two runes, two columns). Counting runes drew the tail
-	// out of step; dropping zero-width runes lost every combining mark. Each
-	// cluster is styled by its first rune.
+	// of its runes' ("❤️" is two runes, two columns). Dropping zero-width runes would
+	// lose every combining mark. Each cluster is styled by its first rune.
 	i, col := 0, 0
 	for i < len(runes) {
 		end, cw := core.GraphemeAt(runes, i)

@@ -6,8 +6,8 @@ package sqlparse
 // A pivoted reference is where a FROM source's own column list is not what the
 // rest of the query sees: PIVOT drops the aggregated and pivoted columns and
 // adds one per IN-list value, UNPIVOT drops the IN-list columns and adds the
-// value and name columns. Unparsed, "FROM t PIVOT (...) AS p" read as "t AS
-// PIVOT" (keyword taken for an alias) and offered t's columns under PIVOT.
+// value and name columns. Unparsed, "FROM t PIVOT (...) AS p" reads as "t AS
+// PIVOT" (keyword taken for an alias) and offers t's columns under PIVOT.
 // ---------------------------------------------------------------------------
 
 // Pivot is the output shape a PIVOT/UNPIVOT clause imposes on the reference it
@@ -52,11 +52,10 @@ const pivotClauseSkip = 2
 //	UNPIVOT ( <col>         FOR <col> IN ( a, b, c ) )
 //
 // PIVOT, UNPIVOT and FOR are reserved (bare, none is a legal column or alias
-// name: Msg 156, probed on 17), but are matched as identifiers followed by the
-// shape they must have, not added to sqlKeywordList where they would change how
-// every other statement tokenizes. A bare one that doesn't open its clause is
-// no alias either (notAliases). skipSelectModifiers matches PERCENT and TIES
-// the same way.
+// name: Msg 156), but are matched as identifiers followed by the shape they must
+// have, not added to sqlKeywordList where they would change how every other
+// statement tokenizes. A bare one that doesn't open its clause is no alias
+// either (notAliases). skipSelectModifiers matches PERCENT and TIES the same way.
 //
 // Anything not matching rewinds p.i and returns nil, so the reference parses as
 // before rather than by a guess.

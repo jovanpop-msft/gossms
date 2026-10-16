@@ -68,15 +68,14 @@ func (v *PlanView) routeToContent(ev *tcell.EventMouse) bool {
 // statement selector's ◀/▶ arrows, or the XML editor.
 func (v *PlanView) HandleMouse(ev *tcell.EventMouse) bool {
 	mx, my := ev.Position()
-	// An open summary popup outranks the tab row, statement bar and content
-	// area: it's centred on the whole screen, so its coordinates land inside
-	// all of them.
+	// An open summary popup outranks the tab row, statement bar and content area:
+	// it's centred on the whole screen, so its coordinates land inside all of them.
 	//
-	// Releases included. Routing one by position would never reach the grid
-	// (the popup sits nowhere near the summary strip), and DataGrid hands a
-	// release to the popup's editor, whose HandleMouse clears mouseDragging
-	// wherever it landed. Withholding it strands that latch and the next press
-	// reads as more of the same drag. PlanView's own latch comes down here too.
+	// Releases included. Routing one by position would never reach the grid (the
+	// popup sits nowhere near the summary strip), and DataGrid hands a release to
+	// the popup's editor, whose HandleMouse clears mouseDragging wherever it
+	// landed. Withholding it strands that latch and the next press reads as more of
+	// the same drag. PlanView's own latch comes down here too.
 	if v.summaryOverlayActive() {
 		if ev.Buttons() == tcell.ButtonNone {
 			v.mouseDragging = false

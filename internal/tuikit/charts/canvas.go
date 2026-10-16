@@ -28,9 +28,9 @@ type Canvas struct {
 // cell, 2 for the first cell of a wide grapheme, 0 for the trailing cell it
 // covers (no content, skipped when blitting).
 //
-// Content is a primary rune plus the rest of its grapheme rather than one
-// string, which cost an allocation per cell (62% of the dashboard draw path's
-// allocations). rest is non-empty only for a cell carrying combining marks.
+// Content is a primary rune plus the rest of its grapheme, not one string (an
+// allocation per cell, 62% of the dashboard draw path's allocations). rest is
+// non-empty only for a cell carrying combining marks.
 type canvasCell struct {
 	primary rune // 0 in a trailing cell, which has no content of its own
 	rest    string

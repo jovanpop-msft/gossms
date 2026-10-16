@@ -25,7 +25,7 @@ type FileEntry struct {
 // FileSystem is the filesystem a FileDialog browses. Every path operation goes
 // through it, so a host can point the dialog at another machine: goSSMS browses
 // the SQL Server host's filesystem, with different path conventions
-// (backslashes, drive letters) from the client's. So none of these can be
+// (backslashes, drive letters) from the client's. None of these can be
 // `path/filepath` calls at the call site: filepath uses the client's rules, and a
 // Linux client joining a Windows server path would produce
 // "/home/user/C:\Backup\db.bak".

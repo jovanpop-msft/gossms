@@ -13,21 +13,20 @@ import "math"
 // database dependencies, so ProfileRow mirrors only the gosmo.QueryProfile
 // fields the merge reads.
 //
-// Parallel plans (observed on 2025, DOP 4): an operator in a parallel zone has
-// a row per worker thread 1..DOP *and* a thread-0 row that stays all zeros
-// (never opened, no estimate). Treating that phantom as an unstarted thread
-// would keep every parallel operator "running" forever, so threads that never
-// opened are ignored once any thread has. estimate_row_count is split across
-// threads (750 each of a 3000-row scan) and already covers every execution of
-// an inner-side operator (a spool under nested loops estimated 750 × 3000), so
-// the per-node estimate is a plain sum, like the rows.
+// Parallel plans (observed on 2025, DOP 4): an operator in a parallel zone has a
+// row per worker thread 1..DOP *and* a thread-0 row that stays all zeros (never
+// opened, no estimate). Counting that phantom as an unstarted thread would keep
+// every parallel operator "running" forever, so threads that never opened are
+// ignored once any thread has. estimate_row_count is split across threads (750
+// each of a 3000-row scan) and already covers every execution of an inner-side
+// operator, so the per-node estimate is a plain sum, like the rows.
 //
-// Lightweight profiling (on by default from 2019; what Activity Monitor's Show
-// Live Execution Plan watches) counts rows only: every time column stays 0,
-// open and close included (observed on 2025). A thread that has produced rows
-// counts as open without an open time; it is never seen to close, so the
-// operator stays running, and LiveCounters.Timed is false so the zero times
-// are not drawn as measured.
+// Lightweight profiling (default from 2019; what Activity Monitor's Show Live
+// Execution Plan watches) counts rows only: every time column stays 0, open and
+// close included (observed on 2025). A thread that has produced rows counts as
+// open without an open time; it is never seen to close, so the operator stays
+// running, and LiveCounters.Timed is false so the zero times are not drawn as
+// measured.
 
 // ProfileRow is one row of sys.dm_exec_query_profiles: one operator on one
 // thread. The caller filters to the statement shown (gosmo's PlanHandle and
@@ -167,9 +166,9 @@ func MergeProfiles(rows []ProfileRow) map[int]LiveCounters {
 // FillPlanEstimates gives each operator in m that the DMV reported no estimate
 // for the plan's own over all executions: EstimateRows × (1 + EstimateRebinds +
 // EstimateRewinds), the figure estimate_row_count otherwise carries. The DMV
-// leaves it 0 at times (observed on 2025 under lightweight profiling, on a
-// re-run of a cached plan). The plan is the in-flight single statement; its
-// first statement with an operator tree is used.
+// leaves it 0 at times (2025, lightweight profiling, a re-run of a cached plan).
+// The plan is the in-flight single statement; its first statement with an
+// operator tree is used.
 func FillPlanEstimates(p *Plan, m map[int]LiveCounters) {
 	if p == nil || len(m) == 0 {
 		return

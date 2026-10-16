@@ -16,13 +16,13 @@ const maxMessageWidthNum, maxMessageWidthDen = 2, 3
 
 // fitMessage sizes a dialog to its message: wide enough for one line when that
 // fits within 2/3 of the screen width, else word-wrapped onto more lines. minW is
-// the width floor (room for title and button row); baseH is the total height
-// with a one-line message. Line breaks are kept: each line is a paragraph
-// wrapped on its own, and the width is the widest one's. The line count is
-// capped so the dialog never exceeds the screen height (recentre would clamp
-// rect.H without shrinking the message, drawing a long message's tail over the
-// separator/button row); surplus lines are dropped and the last kept one
-// ellipsized. Returns the size for SetSize and the lines to draw one per row.
+// the width floor (room for title and button row); baseH is the total height with
+// a one-line message. Line breaks are kept: each line is a paragraph wrapped on
+// its own, and the width is the widest one's. The line count is capped so the
+// dialog never exceeds the screen height (recentre would clamp rect.H without
+// shrinking the message, drawing a long message's tail over the separator/button
+// row); surplus lines are dropped and the last kept one ellipsized. Returns the
+// size for SetSize and the lines to draw one per row.
 func (d *ModalDialog) fitMessage(message string, minW, baseH int) (w, h int, lines []string) {
 	w = max(minW, core.ParagraphsWidth(message)+messageBoxOverhead)
 	if d.screen != nil {

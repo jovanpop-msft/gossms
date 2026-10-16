@@ -19,8 +19,7 @@ import (
 )
 
 func main() {
-	// Handled first, without the flag package: gossms takes no other arguments,
-	// and everything below opens a file or a tcell screen. `brew test` and CI
+	// Handled before anything opens a file or a tcell screen: `brew test` and CI
 	// run without a TTY, where App.Run cannot start.
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
@@ -40,13 +39,12 @@ func main() {
 	err := run(app)
 	loopReturned()
 	if !errors.Is(err, errPanicked) {
-		// Background saves still out when the loop returned would die with
-		// the process.
+		// Background saves still out when the loop returned would die with the process.
 		app.FlushSaves(3 * time.Second)
 	}
 	if err != nil {
-		// An error before the screen starts ("init screen") would otherwise
-		// leave the shell with nothing. run already reported a panic.
+		// An error before the screen starts ("init screen") must still reach the
+		// shell. run already reported a panic.
 		if !errors.Is(err, errPanicked) {
 			fmt.Fprintf(os.Stderr, "gossms error: %v\n", err)
 		}
@@ -58,19 +56,17 @@ func main() {
 // stderr itself.
 var errPanicked = errors.New("panic")
 
-// watchTermSignals saves every unsaved query panel when the terminal is closed,
-// an ssh session drops (SIGHUP) or the process is killed (SIGTERM), rather than
-// dying with the default action. Both constants exist on every GOOS; on
-// Windows they are never delivered.
+// watchTermSignals saves every unsaved query panel when the terminal closes,
+// ssh drops (SIGHUP) or the process is killed (SIGTERM). Both constants exist
+// on every GOOS; on Windows they are never delivered.
 //
 // App.SaveOnSignal quits once saved, so Run returns and main exits normally.
 // If Run is wedged, the exit below ends the process anyway: the text is on disk
 // by then, and a hung process on a closed terminal is worse than an unrestored
 // one.
 //
-// main calls the returned func as soon as Run returns, and then owns the exit:
-// a watchdog os.Exit firing regardless would cut off main's FlushSaves(3s)
-// mid-write.
+// main calls the returned func as soon as Run returns and then owns the exit: a
+// watchdog os.Exit would cut off main's FlushSaves(3s) mid-write.
 func watchTermSignals(app *tui.App) (loopReturned func()) {
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGHUP, syscall.SIGTERM)
@@ -80,9 +76,8 @@ func watchTermSignals(app *tui.App) (loopReturned func()) {
 	return sync.OnceFunc(func() { close(returned) })
 }
 
-// watchdog is watchTermSignals' goroutine, with the save and the exit injected
-// for a test. After a signal it saves, then exits only if returned is still open
-// once grace has passed.
+// watchdog is watchTermSignals' goroutine, with save and exit injected for
+// tests. After a signal it saves, then exits unless returned closes within grace.
 func watchdog(sigs <-chan os.Signal, returned <-chan struct{}, save func(os.Signal), grace time.Duration, exit func()) {
 	var sig os.Signal
 	select {
@@ -110,13 +105,12 @@ func printVersion() {
 	fmt.Printf("gosmo:    %s\n", gosmoversion.Version)
 }
 
-// run reports a panic on the UI goroutine instead of letting it vanish:
-// App.Run's deferred screen.Fini restores the terminal, but a trace written
-// while on the alternate screen scrolls away with it. Recovering here, after
-// Fini, puts the trace in the log and a short line on the restored screen.
-// Query panels with unsaved text are written to config.RecoveredDir by
-// App.EmergencySave and the files named. Background goroutines use
-// App.safego/recoverPanic instead.
+// run reports a UI-goroutine panic instead of letting it vanish: a trace
+// written on the alternate screen scrolls away with it, so recover after
+// App.Run's deferred screen.Fini and log it plus a short line on the restored
+// screen. Query panels with unsaved text go to config.RecoveredDir via
+// App.EmergencySave and the files are named. Background goroutines use
+// App.safego/recoverPanic.
 func run(app *tui.App) (err error) {
 	defer func() {
 		if r := recover(); r != nil {

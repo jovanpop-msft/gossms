@@ -111,12 +111,12 @@ func (tv *TreeView) SetActive(v bool) { tv.active = v }
 // SetNodes replaces the entire visible node list, typically rebuilt in OnExpand
 // after loading children.
 //
-// The selection follows the selected node's ID, and its row keeps its screen
-// line. Keeping the index is wrong whenever rows are inserted or removed above
-// the selection (children arriving for a folder higher up): it silently moves
-// onto a different node, which every keyboard action then acts on. Only a gone
-// ID falls back to clamping the index. SetNodes never fires OnSelect, so a
-// host that replaces nodes resolves the selection itself (see SelectID).
+// The selection follows the selected node's ID, and its row keeps its screen line.
+// Keeping the index is wrong whenever rows are inserted or removed above the
+// selection (children arriving for a folder higher up): it silently moves onto a
+// different node, which every keyboard action then acts on. Only a gone ID falls
+// back to clamping the index. SetNodes never fires OnSelect, so a host that
+// replaces nodes resolves the selection itself (see SelectID).
 func (tv *TreeView) SetNodes(nodes []TreeNode) {
 	prevID, hadSel := 0, false
 	if n := tv.SelectedNode(); n != nil {

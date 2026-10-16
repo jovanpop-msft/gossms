@@ -12,14 +12,14 @@ import (
 )
 
 // Session is one SQL Server session held as long as its owner wants, what an
-// SSMS query window runs on. Temp tables, SET options, open transactions and
-// USE persist between runs.
+// SSMS query window runs on. Temp tables, SET options, open transactions and USE
+// persist between runs.
 //
 // Package-level Execute can't do that: database/sql marks a returned connection
 // for reset, and go-mssqldb sets the TDS reset-connection bit on its next use
-// (SET options to login defaults, temp tables dropped, open transactions rolled
-// back). If the next Execute lands on another connection, the first sits idle
-// holding the transaction's locks.
+// (SET options to defaults, temp tables dropped, transactions rolled back). If
+// the next Execute lands on another connection, the first sits idle holding the
+// transaction's locks.
 //
 // One run at a time; the owner must not overlap runs. Close is safe from any
 // goroutine.
@@ -54,9 +54,8 @@ const stateQuery = "SELECT @@SPID, DB_NAME(), @@TRANCOUNT"
 
 // openQuery is Open's first batch: SSMS's ARITHABORT ON, then the state read.
 // go-mssqldb logs in with it OFF (@@OPTIONS 5432 against SSMS's 5496). Results
-// match either way — ANSI_WARNINGS ON implies it — but set_options keys the
-// plan cache, so OFF compiles and caches a different plan from SSMS's for the
-// same query (docs/decisions.md).
+// match either way, but set_options keys the plan cache, so OFF compiles and
+// caches a different plan from SSMS's for the same query (docs/decisions.md).
 const openQuery = "SET ARITHABORT ON; " + stateQuery
 
 // Open checks a connection out of db for the Session's exclusive use, in
@@ -201,8 +200,8 @@ func (s *Session) markLost() { s.lost.Store(true) }
 
 // Close ends the session. The connection is discarded, not pooled: pooled, it
 // would sit idle holding the open transaction's locks; discarded, the server
-// rolls it back. Close waits for an in-flight run, so cancel it first and call
-// Close off the UI goroutine if needed. Idempotent.
+// rolls it back. Close waits for an in-flight run, so cancel it first and call it
+// off the UI goroutine if needed. Idempotent.
 func (s *Session) Close() {
 	s.markLost()
 	// driver.ErrBadConn from Raw is database/sql's way to close rather than

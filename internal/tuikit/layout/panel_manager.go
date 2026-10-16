@@ -222,9 +222,9 @@ func (pm *PanelManager) comboScrollMax(h int) int { return max(0, len(pm.panels)
 // survive into the widget's next showing" rule ModalDialog.Show enforces;
 // PanelManager has no Show, so the transition carries it.
 //
-// mouseDragging is deliberately not cleared: it belongs to the press that
-// claimed the gesture (tab row and combo arrow set it too), and clearing it on
-// close would release a held press to the panel underneath.
+// mouseDragging is deliberately not cleared: it belongs to the press that claimed
+// the gesture (tab row and combo arrow set it too), and clearing it on close
+// would release a held press to the panel underneath.
 func (pm *PanelManager) setComboOpen(v bool) {
 	pm.comboOpen = v
 	pm.comboSbDragging = false

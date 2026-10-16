@@ -220,15 +220,15 @@ func (e *Editor) Cut() string {
 // Paste inserts text at the cursor, replacing the selection if any. Embedded
 // newlines produce multiple lines, as typing them would.
 //
-// It bypasses the completion popup entirely: it closes it and never re-queries
-// the provider. Pasted text is finished text; offering (let alone committing)
-// IntelliSense candidates against the token the paste ends on is how pasted SQL
-// gets silently rewritten.
+// It bypasses the completion popup entirely: it closes it and never re-queries the
+// provider. Pasted text is finished text; offering (let alone committing)
+// IntelliSense candidates against the token the paste ends on would silently
+// rewrite pasted SQL.
 //
 // Text from this editor's own block (column) selection goes back in as a block,
 // one line per row at the cursor's column (see blockPaste). A block copy is
-// unmarked once it reaches the OS clipboard, so the only way to recognise it is
-// the text matching blockClip.
+// unmarked once it reaches the OS clipboard, so the only way to recognise it is the
+// text matching blockClip.
 func (e *Editor) Paste(text string) {
 	if e.readOnly || text == "" {
 		return

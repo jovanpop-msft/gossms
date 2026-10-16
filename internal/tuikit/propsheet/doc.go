@@ -8,22 +8,22 @@
 // outward only through callbacks (OnLoadPage, OnApply, OnOK, OnScript, OnClose,
 // ConfirmDiscard) and expects its caller to drive the async parts:
 //
-//   - When a page needs data, PropertySheet calls OnLoadPage(page, seq) and
-//     marks the page Loading. The caller fetches the data, typically on a
-//     background goroutine, and reports via SetPageForm(page, seq, form) or
+//   - When a page needs data, PropertySheet calls OnLoadPage(page, seq) and marks
+//     the page Loading. The caller fetches the data, typically on a background
+//     goroutine, and reports via SetPageForm(page, seq, form) or
 //     SetPageError(page, seq, err).
 //   - seq is a sheet-wide monotonic counter that SetPages never resets. A call
-//     with a stale seq (page refreshed, sheet hidden, or reopened with a new
-//     page set) is silently ignored, which makes a slow, superseded fetch
-//     harmless. SetPageForm reports whether it accepted the form.
-//     SetPageForm/SetPageError must be called from the UI goroutine that calls
-//     Draw/HandleKey/HandleMouse; PropertySheet does no locking.
+//     with a stale seq (page refreshed, sheet hidden, or reopened with a new page
+//     set) is silently ignored, which makes a slow, superseded fetch harmless.
+//     SetPageForm reports whether it accepted the form. SetPageForm/SetPageError
+//     must be called from the UI goroutine that calls Draw/HandleKey/HandleMouse;
+//     PropertySheet does no locking.
 //
-// A page's Form (see form.go) holds the editable rows; dirty state is tracked
-// per row and rolled up per page and for the sheet. Apply semantics (which rows
-// map to which backend calls) are entirely the caller's; propsheet only reports
-// what changed. A form whose editor fields stand in for one selected item of a
-// list registers a commit hook (Form.SetCommit), and the caller runs
+// A page's Form (see form.go) holds the editable rows; dirty state is tracked per
+// row and rolled up per page and for the sheet. Apply semantics (which rows map
+// to which backend calls) are entirely the caller's; propsheet only reports what
+// changed. A form whose editor fields stand in for one selected item of a list
+// registers a commit hook (Form.SetCommit), and the caller runs
 // PropertySheet.Commit on the UI goroutine before reading Dirty or Validate for
 // an Apply, so the apply, usually on another goroutine, never touches a widget.
 //

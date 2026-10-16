@@ -21,9 +21,9 @@ const buckets = 900
 var mockStart = time.Date(2026, 8, 5, 11, 56, 23, 0, time.UTC)
 
 // The workload is two periodic waves plus five one-off events. Waves, because
-// panels show different spans of the history (a 48-column panel ~40 samples,
-// the full-width waits panel ~140) and a single bump would leave narrow panels
-// showing noise. Events sit inside the last 140 samples so every panel shows them.
+// panels show different spans (a 48-column panel ~40 samples, the waits panel
+// ~140) and a single bump would leave narrow panels showing noise. Events sit
+// inside the last 140 samples so every panel shows them.
 const (
 	workloadPeriod  = 55.0 // samples per workload wave
 	reportingPeriod = 130.0

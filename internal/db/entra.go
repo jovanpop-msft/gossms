@@ -70,9 +70,9 @@ func NeedsSignIn(m config.AuthMethod) bool {
 // under ctx and at most SignInTimeout, keeping the token for the dial. Anything
 // else, or an existing sign-in, returns nil at once.
 //
-// gosmo first opens and abandons a login to learn the server's tenant (once
-// per server per process; Azure logs Error 33155), so a sign-in without
-// TenantID reaches the server's tenant as in SSMS instead of azidentity's
+// gosmo first opens and abandons a login to learn the server's tenant (once per
+// server per process; Azure logs Error 33155), so a sign-in without TenantID
+// reaches the server's tenant as in SSMS instead of azidentity's
 // "organizations", which refuses personal accounts. An unreachable server
 // therefore fails here.
 //

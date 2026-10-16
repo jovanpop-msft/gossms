@@ -92,13 +92,11 @@ func drawDetails(s tcell.Screen, rect core.Rect, n *showplan.Node, st *showplan.
 	}
 }
 
-// detailKVs builds n's ordered key/value pairs, matching SSMS's Properties
-// grid. st supplies the statement-level Memory Grant, shown only on the root
-// operator as SSMS does.
-//
-// live, when non-nil, adds a Live block after the estimates and stands in for
-// the Actual figures, which in an in-flight plan are a partial snapshot older
-// than the counters.
+// detailKVs builds n's ordered key/value pairs, matching SSMS's Properties grid.
+// st supplies the statement-level Memory Grant, shown only on the root operator
+// as SSMS does. live, when non-nil, adds a Live block after the estimates and
+// stands in for the Actual figures, which in an in-flight plan are a partial
+// snapshot older than the counters.
 func detailKVs(n *showplan.Node, st *showplan.Statement, live *showplan.LiveCounters) []showplan.KV {
 	var kvs []showplan.KV
 	add := func(k, v string) { kvs = append(kvs, showplan.KV{Key: k, Value: v}) }

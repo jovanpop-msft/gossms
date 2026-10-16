@@ -71,11 +71,11 @@ type PlanView struct {
 	propsSt            propsState
 	summarySt          summaryState
 
-	// Plan tab (TabPlan) state — see graph.go, graph_layout.go. The detail
-	// strip (open initially; Enter toggles graphSt.detailOpen) is a draggable
-	// graphSplit below the canvas, default 70/30: "Properties" (detailLines
-	// for the selected node). No Operator Summary here (Tree-tab-only); its
-	// Cost % is folded into detailKVs.
+	// Plan tab (TabPlan) state — see graph.go, graph_layout.go. The detail strip
+	// (open initially; Enter toggles graphSt.detailOpen) is a draggable graphSplit
+	// below the canvas, default 70/30, showing "Properties" (detailLines for the
+	// selected node). The Operator Summary is Tree-tab-only; its Cost % is folded
+	// into detailKVs.
 	graphSt              graphState
 	graphSplit           *layout.Splitter // divides the canvas from the Properties strip
 	graphCanvasRect      core.Rect
@@ -108,8 +108,8 @@ type PlanView struct {
 	// mouseDragging distinguishes a fresh Button1 press on the tab bar or
 	// statement selector from a continued hold (as Toolbar/TreeView/MenuBar).
 	// Without it, tcell's all-motion tracking resends Button1 on every motion
-	// while held, so a twitching click would re-fire OnExpand (a second
-	// panel), switch tabs or step the selector per event, not once per click.
+	// while held, so a twitching click would re-fire OnExpand, switch tabs or step
+	// the selector per event, not once per click.
 	mouseDragging bool
 }
 
@@ -164,8 +164,8 @@ func (v *PlanView) installPlan(p *showplan.Plan) {
 	v.treeSt.collapsed = make(map[int]bool)
 	// searchSt.matches holds NodeIDs, assigned per statement from 0, so they
 	// collide with unrelated operators in a different plan (re-run, an
-	// Estimated<->Actual toggle, QueryPanel reusing this *PlanView). Without
-	// this reset, n/N after a swap jumps to whatever now owns the stale ID.
+	// Estimated<->Actual toggle, QueryPanel reusing this *PlanView). Without this
+	// reset, n/N after a swap jumps to whatever now owns the stale ID.
 	v.searchSt = searchState{}
 	v.selectFirstNode()
 	v.layout()
@@ -302,11 +302,10 @@ func (v *PlanView) layout() {
 	v.xml.SetBounds(v.contentRect.X, v.contentRect.Y, v.contentRect.W, v.contentRect.H)
 	v.layoutTree()
 	v.layoutGraphTab()
-	// installPlan calls selectFirstNode before layout(), which can't scroll
-	// into view yet: SetPlanXML/SetPlan usually precede the host's first
-	// SetBounds, so graphCanvasRect/treePaneRect are still zero. The first
-	// real rect re-applies "scroll the selection into view"; a no-op on later
-	// resizes while it's visible.
+	// installPlan calls selectFirstNode before layout(), which can't scroll into
+	// view yet: SetPlanXML/SetPlan usually precede the host's first SetBounds, so
+	// graphCanvasRect/treePaneRect are still zero. The first real rect re-applies
+	// "scroll the selection into view"; a no-op on later resizes while visible.
 	v.ensureTreeRowVisible()
 	v.ensureTileVisible(v.selectedID)
 }
@@ -344,11 +343,11 @@ func (v *PlanView) stepStatement(delta int) {
 	v.stmtIdx = ((v.stmtIdx+delta)%n + n) % n
 	v.selectFirstNode()
 	// layout, not just its trailing ensure* calls: the missing-index banner
-	// belongs to the statement on screen, so its row must be reclaimed when
-	// the next statement has no suggestion. The ensure* tail is needed either
-	// way: selectFirstNode alone can leave the new root scrolled out of view,
-	// since an unbalanced tree's root tile isn't necessarily near (0,0) and a
-	// rebuild that still fits the pane doesn't reset scroll.
+	// belongs to the statement on screen, so its row must be reclaimed when the
+	// next statement has none. The ensure* tail is needed either way:
+	// selectFirstNode alone can leave the new root scrolled out of view, since an
+	// unbalanced tree's root tile isn't necessarily near (0,0) and a rebuild that
+	// still fits the pane doesn't reset scroll.
 	v.layout()
 }
 

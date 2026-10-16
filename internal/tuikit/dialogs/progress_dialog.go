@@ -27,10 +27,10 @@ const (
 // progressButtons is the dialog's button row: Cancel, and nothing else.
 var progressButtons = []string{"Cancel"}
 
-// ProgressDialog stands in front of the application while one long operation
-// runs (the wait after a confirmation: a delete, a failover). It shows what is
-// happening, a spinner and the elapsed time, with a single Cancel button;
-// nothing else is reachable until the host hides it.
+// ProgressDialog stands in front of the application while one long operation runs
+// (the wait after a confirmation: a delete, a failover). It shows what is
+// happening, a spinner and the elapsed time, with a single Cancel button; nothing
+// else is reachable until the host hides it.
 //
 // It runs nothing itself. The host starts the work, calls SetMessage as it
 // progresses, drives the redraw at Spinner.Period (the spinner is drawn from

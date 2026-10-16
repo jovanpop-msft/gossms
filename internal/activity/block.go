@@ -1,20 +1,20 @@
 package activity
 
-// BlockProc is the blocking-chain procedure behind the Block tab. It builds
-// one row per session with the session it is blocked by; a recursive CTE
-// walks that pairing into the indented tree.
+// BlockProc is the blocking-chain procedure behind the Block tab: one row per
+// session with the session blocking it; a recursive CTE walks that into the
+// indented tree.
 //
-// The blocker comes from sys.dm_os_waiting_tasks, the rule gosmo's
-// sessionBlockerJoin uses for RequestActivity, BlockedRequests and
-// ActiveSessions: the longest-waiting task blocked by another session, else
-// dm_exec_requests.blocking_session_id. A request running a parallel plan
-// waits on its workers (CXCONSUMER, blocking_session_id 0) while the lock wait
-// sits on a worker. The proc once read sys.sysprocesses, where that worker is
-// an ecid > 0 row with a zero sql_handle: CROSS APPLYing the text dropped the
-// row, the parallel reader showed as unblocked and its idle head blocker was
-// filtered out — the Block tab showed nothing (review plan 2026-10-16, U1).
-// Rejoining sysprocesses by spid also repeated every tree row once per
-// thread, so nothing below reads it.
+// The blocker follows gosmo's sessionBlockerJoin (RequestActivity,
+// BlockedRequests, ActiveSessions): the longest-waiting
+// sys.dm_os_waiting_tasks task blocked by another session, else
+// dm_exec_requests.blocking_session_id. A parallel request waits on its
+// workers (CXCONSUMER, blocking_session_id 0) while the lock wait sits on a
+// worker.
+//
+// Never read sys.sysprocesses: that worker is an ecid > 0 row with a zero
+// sql_handle, so CROSS APPLYing the text drops it, the parallel reader shows as
+// unblocked and its idle head blocker is filtered out. Rejoining by spid also
+// repeats every tree row once per thread.
 var BlockProc = &Proc{
 	MasterName: "sp_block",
 	TempDBName: "usp_block",

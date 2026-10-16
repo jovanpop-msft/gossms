@@ -19,8 +19,8 @@ type SchedulerLoad struct {
 }
 
 // collectCPUUsage reads the newest scheduler-monitor record. The ring buffer
-// gets one a minute, so faster ticks reread it, and a freshly started instance
-// has none: gosmo reads that as zero, not an error.
+// gets one a minute, so faster ticks reread it; a fresh instance has none,
+// which gosmo reads as zero, not an error.
 func collectCPUUsage(ctx context.Context, src Source) (CPUUsage, error) {
 	c, err := src.HostCPU(ctx)
 	if err != nil {

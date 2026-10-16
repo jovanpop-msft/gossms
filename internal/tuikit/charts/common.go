@@ -132,13 +132,13 @@ func (c stackCell) filled() bool { return c.split > 0 }
 // composeStack turns a run of segments into exactly length composed cells,
 // ordered from the stack's base outward.
 //
-// Every cell is filled: one spanning a segment boundary carries the lower
-// segment as foreground and the upper as background, so the partial block glyph
-// shows both with no hole. Rendering each segment independently and rounding its
-// own height leaves gaps and double counts at every boundary. Cells past the top
-// are filled with bg. When several boundaries fall in one cell, it keeps the
-// segment covering most of its lower half and the one covering most of its upper
-// half; the rest are dropped rather than drawn as a hole.
+// Every cell is filled: one spanning a segment boundary carries the lower segment
+// as foreground and the upper as background, so the partial block glyph shows
+// both with no hole. Rendering each segment independently and rounding its own
+// height leaves gaps and double counts at every boundary. Cells past the top are
+// filled with bg. When several boundaries fall in one cell, it keeps the segment
+// covering most of its lower half and the one covering most of its upper half;
+// the rest are dropped rather than drawn as a hole.
 func composeStack(length int, segs []segment, bg tcell.Color) []stackCell {
 	out := make([]stackCell, max(length, 0))
 	for i := range out {
@@ -290,10 +290,10 @@ func layoutPlot(r core.Rect, gutter, legendRows int) plotFrame {
 	return f
 }
 
-// historySpec is everything HistoryChart and StackedHistoryChart do
-// identically: all but where an auto-scale takes its maximum and how a column is
-// drawn. Both convert themselves into one so the chrome sequence (gutter, plot,
-// time row, legend, draw order) exists once; two copies drift silently.
+// historySpec is everything HistoryChart and StackedHistoryChart do identically:
+// all but where an auto-scale takes its maximum and how a column is drawn. Both
+// convert themselves into one so the chrome sequence (gutter, plot, time row,
+// legend, draw order) exists once; two copies drift silently.
 //
 // autoMax is a func because it is needed only when Scale is zero, and it walks
 // every bucket of every series on a chart redrawn every collector tick.

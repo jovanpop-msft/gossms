@@ -9,21 +9,18 @@ import (
 // JSON syntax highlighter (can be used as a Highlighter for Editor)
 // ---------------------------------------------------------------------------
 
-// JSONHighlighter is the built-in JSON syntax highlighter for Editor — used
-// when a JSON result-set cell is opened in its own panel (see
-// internal/tui/cell_value.go).
+// JSONHighlighter is the built-in JSON syntax highlighter for Editor, used when a
+// JSON result-set cell is opened in its own panel (see internal/tui/cell_value.go).
 //
-// Unlike SQLHighlighter and XMLHighlighter this needs no prefixStates cache,
-// and that is a property of JSON rather than an omission: no JSON token can
-// span a line. A string may not contain a literal newline (RFC 8259 §7 — a
-// line break has to be written \n), there are no comments, and every other
-// token is a literal or a single punctuation character. So each line's
-// highlighting depends only on that line, and a highlighter that replayed
-// prior lines would be paying for state that cannot exist.
+// Unlike SQLHighlighter and XMLHighlighter this needs no prefixStates cache, and
+// that is a property of JSON, not an omission: no JSON token can span a line. A
+// string may not contain a literal newline (RFC 8259 §7), there are no comments,
+// and every other token is a literal or a single punctuation character. So each
+// line's highlighting depends only on that line.
 //
-// The practical consequence is that this is also the cheapest of the three on
-// the shape a SQL Server JSON column actually arrives in: one enormous single
-// line. Cost is linear in the line, once, with no prior-line replay.
+// That also makes it the cheapest of the three on the shape a SQL Server JSON
+// column actually arrives in: one enormous single line. Cost is linear in the
+// line, once.
 func JSONHighlighter(p *theme.Palette) Highlighter {
 	keyStyle := tcell.StyleDefault.Background(p.EditorBg).Foreground(p.EditorKeyword).Bold(true)
 	strStyle := tcell.StyleDefault.Background(p.EditorBg).Foreground(p.EditorString)

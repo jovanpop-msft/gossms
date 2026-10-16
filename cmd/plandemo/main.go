@@ -1,11 +1,10 @@
-// Command plandemo shows a single planview.PlanView full-screen, for checking
-// the execution-plan viewer against real plan files without the full app. Not
-// in the release build.
+// Command plandemo shows one planview.PlanView full-screen, for checking the
+// plan viewer against real plan files. Not in the release build.
 //
 //	plandemo <plan.xml|plan.sqlplan>
 //	plandemo -live <recording.json>
 //
-// -live replays a recorded Live Query Statistics run (see replay.go and
+// -live replays a recorded Live Query Statistics run (replay.go,
 // testdata/live_crossjoin.json): the in-flight plan with each recorded
 // sys.dm_exec_query_profiles snapshot in turn, then the actual plan. Space
 // pauses and resumes, F5 restarts.

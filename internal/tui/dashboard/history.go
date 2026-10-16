@@ -17,15 +17,14 @@ var (
 )
 
 // DrawHistory renders the History dashboard into r, top to bottom: activity,
-// waits, memory, database I/O. Each section is a title bar plus a row of
-// panels; waits is full width since wait patterns need horizontal history.
+// waits, memory, database I/O. Each section is a title bar plus a row of panels;
+// waits is full width since wait patterns need horizontal history.
 //
-// r is normally a canvas of HistoryCanvasW × HistoryCanvasH. A smaller rect
-// loses the sections and panels that don't fit, which is why the caller
-// scrolls a viewport rather than shrinking the rect. The returned hits give
-// each chart's plot area and what it plotted, so a click maps to a sample. They
-// are in r's coordinates; a caller drawing off-screen must translate them as it
-// does the pixels.
+// r is normally HistoryCanvasW × HistoryCanvasH. A smaller rect loses the
+// sections and panels that don't fit, which is why the caller scrolls a viewport
+// rather than shrinking the rect. The returned hits give each chart's plot area
+// and what it plotted, so a click maps to a sample; they are in r's coordinates,
+// so a caller drawing off-screen must translate them as it does the pixels.
 func DrawHistory(s tcell.Screen, r core.Rect, v HistoryView) []ChartHit {
 	if r.W <= 0 || r.H <= 0 {
 		return nil

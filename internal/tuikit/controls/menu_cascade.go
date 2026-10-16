@@ -12,17 +12,15 @@ import (
 // menuCascade — the open submenu chain hanging off a root menu
 // ---------------------------------------------------------------------------
 
-// menuCascade tracks which submenus of a root menu are currently open, for
-// both MenuBar dropdowns and ContextMenu popups. "Level 0" is always the
-// host's own menu, which the host draws and hit-tests itself; the cascade
-// owns levels 1..n.
+// menuCascade tracks which submenus of a root menu are currently open, for both
+// MenuBar dropdowns and ContextMenu popups. "Level 0" is always the host's own
+// menu, which the host draws and hit-tests itself; the cascade owns levels 1..n.
 //
-// path[i] is the index, within level i's item list, of the item whose Sub
-// is shown as level i+1. hover[i] is the highlighted row within that
-// submenu, and rects[i] is where it was last drawn — hit-testing reads the
-// rect back rather than recomputing it, for the same reason ContextMenu
-// caches drawnX/drawnY: only Draw sees a tcell.Screen, so only Draw knows
-// where the edge clamp actually put the box.
+// path[i] is the index, within level i's item list, of the item whose Sub is shown
+// as level i+1. hover[i] is the highlighted row within that submenu, and rects[i]
+// is where it was last drawn: hit-testing reads the rect back rather than
+// recomputing it, as ContextMenu does with drawnX/drawnY, since only Draw sees a
+// tcell.Screen and so knows where the edge clamp put the box.
 type menuCascade struct {
 	path  []int
 	hover []int

@@ -36,10 +36,10 @@ func (l ProcLocation) Database() string {
 // differently in each database it can live in.
 //
 // In master it keeps its sp_ name, as a hand-installed copy has. In tempdb it
-// has no sp_ prefix: an sp_ name falls back to master when the current
-// database lacks it, so in tempdb CREATE OR ALTER dbo.sp_block alters master's
-// copy and fails with "Invalid object name", and DROP PROCEDURE IF EXISTS
-// deletes master's copy (verified live).
+// has no sp_ prefix: an sp_ name falls back to master when the current database
+// lacks it, so in tempdb CREATE OR ALTER dbo.sp_block alters master's copy and
+// fails with "Invalid object name", and DROP PROCEDURE IF EXISTS deletes
+// master's copy (verified live).
 type Proc struct {
 	// MasterName is the unqualified name in master, sp_-prefixed.
 	MasterName string
@@ -109,10 +109,10 @@ func (p *Proc) Find(ctx context.Context, db *sql.DB) (ProcLocation, error) {
 	return ProcNone, nil
 }
 
-// Install creates or replaces the procedure at l (not ProcNone). The script is
-// a parameter to the three-part db..sp_executesql, which runs it in the target
-// database without USE (the pooled connection's database must stay unchanged;
-// verified live) and avoids quoting the body.
+// Install creates or replaces the procedure at l (not ProcNone). The script is a
+// parameter to the three-part db..sp_executesql, which runs it in the target
+// database without USE (the pooled connection's database must stay unchanged)
+// and avoids quoting the body.
 func (p *Proc) Install(ctx context.Context, db *sql.DB, l ProcLocation) error {
 	database := l.Database()
 	if database == "" {
@@ -126,10 +126,9 @@ func (p *Proc) Install(ctx context.Context, db *sql.DB, l ProcLocation) error {
 }
 
 // Current reports whether the copy at l (not ProcNone) is the one Install
-// writes, by its stored definition — false for an earlier gossms's body, or
-// when the definition can't be read (no VIEW DEFINITION). An install that
-// keeps the copy current is what carries a fix to a server that already has
-// one: Find alone stops at "it exists" (review plan 2026-10-16, U1).
+// writes, by its stored definition — false for an earlier gossms's body, or when
+// the definition can't be read (no VIEW DEFINITION). Keeping the copy current
+// carries a fix to a server that already has one; Find alone stops at "it exists".
 func (p *Proc) Current(ctx context.Context, db *sql.DB, l ProcLocation) (bool, error) {
 	database := l.Database()
 	if database == "" {
@@ -151,10 +150,10 @@ func (p *Proc) Current(ctx context.Context, db *sql.DB, l ProcLocation) (bool, e
 var procHead = regexp.MustCompile(`(?i)create\s+(or\s+alter\s+)?procedure`)
 
 // storedHead puts every CREATE head in one form. The server stores CREATE OR
-// ALTER's as "create   procedure" (verified live, 13 and 17), so a stored
-// definition otherwise never equals the script that made it. Every
-// occurrence, on both sides: whoisactive.sql's leading comment quotes the
-// head too, and the server leaves that one alone.
+// ALTER's as "create   procedure", so a stored definition otherwise never equals
+// the script that made it. Applies to every occurrence on both sides:
+// whoisactive.sql's leading comment quotes the head too, and the server leaves
+// that one alone.
 func storedHead(def string) string {
 	return procHead.ReplaceAllString(def, "create procedure")
 }

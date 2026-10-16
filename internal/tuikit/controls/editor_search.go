@@ -111,14 +111,14 @@ func (e *Editor) SearchOpts() SearchOptions { return e.search.opts }
 
 // scanMatches brings the match list up to date with the document and returns it.
 //
-// Typing with a search active is the hot path: nothing clears the search when
-// the Find dialog closes (F3 must keep working, SSMS parity), so every keystroke
-// for the rest of the panel's life lands here through Draw. A full rescan is a
-// regexp sweep over every line (123ms on a 20,000-line script), so a one-line
-// edit resumes instead, as prefixStates.at does: the cache is exactly one version
+// Typing with a search active is the hot path: nothing clears the search when the
+// Find dialog closes (F3 must keep working, SSMS parity), so every keystroke for
+// the rest of the panel's life lands here through Draw. A full rescan is a regexp
+// sweep over every line (123ms on a 20,000-line script), so a one-line edit
+// resumes instead, as prefixStates.at does: the cache is exactly one version
 // behind and the mutation touched exactly one line without changing the line
-// count, so every other match keeps its row and only that line's run is
-// re-scanned and spliced in. Anything else does the full scan.
+// count, so every other match keeps its row and only that line's run is re-scanned
+// and spliced in. Anything else does the full scan.
 func (e *Editor) scanMatches() []searchMatch {
 	s := &e.search
 	if s.re == nil {
@@ -218,8 +218,8 @@ func (s *editorSearch) lineMatchLocs(text string, submatches bool) [][]int {
 
 // wholeWordLocs finds the whole-word matches on text one at a time. A rejected
 // candidate must not hide an overlapping valid one, so after a rejection the
-// search resumes one rune past the candidate's start rather than at its end,
-// which FindAll cannot do.
+// search resumes one rune past the candidate's start rather than at its end, which
+// FindAll cannot do.
 //
 // Resuming searches text[pos:], where the regexp sees pos as the start of text.
 // That changes only assertions evaluated at pos: `^`/`\A`, which beginAnchored
@@ -513,11 +513,11 @@ func (s *editorSearch) submatchesOf(line []rune) lineSubmatches {
 // replacementFor returns the text that replaces m. A regexp template is expanded
 // against the match in its line, never by re-running the pattern on the matched
 // text cut out of it: there `\B`, `\b`, `^` and `$` see the cut's edges (`\Bing`
-// fails on "ing" alone, so Replace counted a replacement and changed nothing), and
-// an alternative matching again inside the cut was substituted twice. line must be
-// the row's text before any replacement on it: Replace All rewrites a row right to
-// left, and `$` or a trailing `\b` would see the already-replaced tail. ok is
-// false when m is not a match of line, so nothing is replaced.
+// fails on "ing" alone, so Replace would count a replacement and change nothing),
+// and an alternative matching again inside the cut would be substituted twice.
+// line must be the row's text before any replacement on it: Replace All rewrites a
+// row right to left, and `$` or a trailing `\b` would see the already-replaced
+// tail. ok is false when m is not a match of line, so nothing is replaced.
 func (s *editorSearch) replacementFor(m searchMatch, line lineSubmatches) (repl string, ok bool) {
 	if !s.opts.Regexp {
 		return s.opts.Replace, true

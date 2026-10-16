@@ -53,14 +53,14 @@ func (t *ToggleGridRow) SetReadOnly(v bool) {
 func (t *ToggleGridRow) ReadOnly() bool { return t.pageReadOnly }
 
 // SetDrawReadOnly implements ReadOnlyDrawer: the toggle columns render their
-// state as a read-only CheckRow does, so nothing on a gated page still looks
-// like a control. The cells are already inert: GridRow.SetDrawReadOnly, called
-// first, makes the grid browse-only.
+// state as a read-only CheckRow does, so nothing on a gated page still looks like
+// a control. The cells are already inert: GridRow.SetDrawReadOnly, called first,
+// makes the grid browse-only.
 //
 // render, not renderPreservingView: Form calls this from SetReadOnly, which a
 // page runs before the sheet has laid the grid out, and preserving the view of a
 // grid with no rect ends in SetSelectedCell's ensureVisible scrolling past every
-// row (the affinity grid drew four blank lines under its header).
+// row.
 func (t *ToggleGridRow) SetDrawReadOnly(v bool) {
 	t.GridRow.SetDrawReadOnly(v)
 	if t.drawReadOnly == v {
@@ -164,11 +164,11 @@ func (t *ToggleGridRow) activateCell(row, col int) {
 }
 
 // Dirty and the Revert beside it implement Editable (Validate is the embedded
-// GridRow's). ToggleGridRow tracks its own toggle baseline and still consults
-// the embedded GridRow's DirtyFn/RevertFn when a page sets them: a page with
-// pending row adds/removes keeps that state itself, and every SetRows showing
-// the change resets the baseline. Shadowing them outright made Database
-// Properties > Filegroups drop an Add or Remove on OK (the form read clean).
+// GridRow's). ToggleGridRow tracks its own toggle baseline and still consults the
+// embedded GridRow's DirtyFn/RevertFn when a page sets them: a page with pending
+// row adds/removes keeps that state itself, and every SetRows showing the change
+// resets the baseline. Shadowing them outright would drop an Add or Remove on OK
+// (the form would read clean).
 func (t *ToggleGridRow) Dirty() bool {
 	for i := range t.values {
 		if !slices.Equal(t.values[i], t.baseline[i]) {

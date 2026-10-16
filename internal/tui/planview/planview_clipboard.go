@@ -2,14 +2,14 @@ package planview
 
 // HasSelection and the SelectedText, Cut, Paste and SelectAll beside it let a
 // host wire PlanView into its App-level Copy/Cut/Paste (see
-// internal/tui/clipboard.go's clipboardTarget interface), as DetailBrowser
-// does for its grid. The XML tab forwards to its editor's selection; the Plan
-// and Tree tabs report the selected operator's details (details.go's
-// formatDetailsText) as their "selection". The summary grid's "Show Value"
-// popup takes precedence while open: DataGrid is then a clipboard target backed
-// by the popup's read-only editor, so Ctrl+C copies its selected text. Its
-// HasSelection is false when the popup is closed, so this falls through (the
-// fall-back contract DataGrid documents for propsheet.GridRow).
+// internal/tui/clipboard.go's clipboardTarget interface), as DetailBrowser does
+// for its grid. The XML tab forwards to its editor's selection; the Plan and Tree
+// tabs report the selected operator's details (details.go's formatDetailsText).
+// The summary grid's "Show Value" popup takes precedence while open: DataGrid is
+// then a clipboard target backed by the popup's read-only editor, so Ctrl+C
+// copies its selected text. Its HasSelection is false when the popup is closed,
+// so this falls through (the fall-back contract DataGrid documents for
+// propsheet.GridRow).
 func (v *PlanView) HasSelection() bool {
 	if v.summaryVisible() && v.summarySt.grid.HasSelection() {
 		return true

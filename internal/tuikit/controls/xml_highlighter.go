@@ -38,12 +38,11 @@ var (
 // PlanView's raw-XML tab (see planview.New) and by the query editor when a .xml
 // file is opened via File > Open (see App.openQueryFile).
 //
-// Editor.Draw calls the returned Highlighter once per visible row, and Draw
-// runs on every event the app processes while the XML tab is visible, focused
-// or not. Determining whether a line starts inside an unterminated <!-- -->
-// comment or <![CDATA[ ]]> section means replaying every prior line
-// (xmlOpenBlock): O(N) per line, O(H*N) per Draw for H rows, noticeably slow on
-// large execution-plan XML.
+// Editor.Draw calls the returned Highlighter once per visible row, and Draw runs
+// on every event the app processes while the XML tab is visible, focused or not.
+// Determining whether a line starts inside an unterminated <!-- --> comment or
+// <![CDATA[ ]]> section means replaying every prior line (xmlOpenBlock): O(N) per
+// line, O(H*N) per Draw for H rows, noticeably slow on large execution-plan XML.
 //
 // starts below holds the answer for every line, replayed once per change to the
 // document and reused for every redraw in between (see prefixStates, and

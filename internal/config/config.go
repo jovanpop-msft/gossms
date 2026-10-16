@@ -159,15 +159,15 @@ type Connection struct {
 	ExtraProperties       string      `json:"extra_properties"`
 
 	// RememberPassword is the Connect dialog's "Remember Password" box: the
-	// password is written to config.json only when it is set (see AddOrUpdate).
-	// Deliberately absent from connectionAAD — toggling it must not invalidate
-	// a password sealed before the toggle (secret.go).
+	// password is written to config.json only when set (see AddOrUpdate). Absent
+	// from connectionAAD so toggling it doesn't invalidate a sealed password
+	// (secret.go).
 	RememberPassword bool `json:"remember_password"`
 
 	// sealed is the on-disk ciphertext Load could not open (replaced key file,
-	// hand-edited server/user bound into the AAD, truncated write). Save writes
-	// it back verbatim instead of encrypting the "" Password, so the password
-	// stays recoverable. Unexported, so JSON ignores it.
+	// hand-edited server/user bound into the AAD, truncated write). Save writes it
+	// back verbatim instead of encrypting the "" Password. Unexported, so JSON
+	// ignores it.
 	sealed string
 }
 
@@ -218,9 +218,9 @@ type connectionWire struct {
 }
 
 // MarshalJSON writes Encrypt as "encrypt_mode" and also the legacy boolean
-// "encrypt" (true unless Optional), for an older gossms reading this file after
-// a downgrade: it decodes "encrypt" as a bool, and a string there would make
-// Load treat the whole file as corrupt.
+// "encrypt" (true unless Optional): an older gossms after a downgrade decodes
+// "encrypt" as a bool, and a string there would make Load treat the file as
+// corrupt.
 func (c Connection) MarshalJSON() ([]byte, error) {
 	legacy := c.Encrypt != EncryptOptional && c.Encrypt != ""
 	return json.Marshal(connectionWire{connectionFields: connectionFields(c), LegacyEncrypt: &legacy})
@@ -256,15 +256,12 @@ func ConnectionName(server string, port int, database, user string) string {
 // GeneratedName is the name AddOrUpdate gives c: ConnectionName with c's
 // signing-in identity in the user slot, plus the auth method's tag
 // ("srv,1433,db,app-id (Entra Service Principal)"). It is both the Connect
-// autocomplete label and the dedup key, so it must distinguish any two
-// different connections (two service principals on one server, Windows vs Entra
-// Default).
+// autocomplete label and the dedup key, so it must distinguish any two different
+// connections (two service principals on one server, Windows vs Entra Default).
 //
 // The identity is User when the method reads one and it is set, else ClientID
 // when the method reads that; an older service principal entry carries its
-// application id in User.
-//
-// SQL Server Authentication has no tag, so its names are unchanged.
+// application id in User. SQL Server Authentication has no tag.
 func (c Connection) GeneratedName() string {
 	identity, tag := c.signInIdentity()
 	name := ConnectionName(c.Server, c.Port, c.Database, identity)
@@ -331,9 +328,9 @@ type Config struct {
 	// XEventHiddenColumns is, per event session name, the columns the Extended
 	// Events viewer's Choose Columns has hidden ("name", "timestamp",
 	// "field:<name>", "action:<name>"). Hidden rather than shown, so a field the
-	// session starts collecting later still gets a column. Replace the map rather
-	// than writing into it: base shares the map with this Config, so an in-place
-	// write would compare equal to itself and Save would skip it.
+	// session starts collecting later still gets a column. Replace the map, never
+	// write into it: base shares it with this Config, so an in-place write would
+	// compare equal to itself and Save would skip it.
 	XEventHiddenColumns map[string][]string `json:"xevent_hidden_columns,omitempty"`
 	// XEventViewSettings are the Extended Events viewer's saved display
 	// settings, by the name they were saved as — SSMS's .viewsetting files.
@@ -341,20 +338,19 @@ type Config struct {
 	XEventViewSettings map[string]XEventViewSetting `json:"xevent_view_settings,omitempty"`
 
 	// unreadable is the error Load hit reading an existing config.json. It
-	// write-protects this Config (see Save): the file's contents are missing,
-	// so writing back would destroy a likely-intact file. Unexported, so it
-	// neither serialises nor survives a copy.
+	// write-protects this Config (see Save): writing back would destroy a
+	// likely-intact file. Unexported, so it neither serialises nor survives a copy.
 	unreadable error
 
 	// ops is this process's AddOrUpdate/RemoveConnection calls since the last
-	// successful Save, replayed onto the file as it is now. Writing the whole
-	// list would delete what another gossms instance saved meanwhile.
+	// successful Save, replayed onto the file as it is now. Writing the whole list
+	// would delete what another gossms instance saved meanwhile.
 	ops []connOp
 
-	// base is the settings as this process last loaded or saved them, nil for
-	// a Config not from Load. Save writes a setting from c only when it
-	// differs from base — i.e. this process changed it — and otherwise keeps
-	// the file's value, which another instance may have changed.
+	// base is the settings as this process last loaded or saved them, nil for a
+	// Config not from Load. Save writes a setting from c only when it differs from
+	// base (this process changed it); otherwise it keeps the file's value, which
+	// another instance may have changed.
 	base *Config
 }
 
@@ -388,9 +384,8 @@ type XEventViewSetting struct {
 
 // DefaultXEventStoreCapacity is the Extended Events viewer's event limit absent
 // an Options override; it must agree with xevent.DefaultCapacity, which config
-// must not import (TestXEventStoreCapacityComesFromOptions in internal/tui
-// checks). The bounds keep a typo from making a viewer that holds nothing or
-// exhausts memory.
+// must not import (TestXEventStoreCapacityComesFromOptions). The bounds stop a
+// typo from making a viewer that holds nothing or exhausts memory.
 const (
 	DefaultXEventStoreCapacity = 100_000
 	MinXEventStoreCapacity     = 1_000
@@ -406,10 +401,9 @@ func ClampXEventStoreCapacity(n int) int {
 }
 
 // DefaultIndentWidth is how many spaces the query editor indents by absent an
-// Options override, and MaxIndentWidth the sanity ceiling Load and the Options
-// field clamp to. Both must agree with controls.DefaultIndentWidth /
-// controls.MaxIndentWidth in internal/tuikit/controls, which config must not
-// import; TestIndentWidthDefaultsAgree in internal/tui holds them together.
+// Options override, and MaxIndentWidth the ceiling Load and the Options field
+// clamp to. Both must agree with controls.DefaultIndentWidth / MaxIndentWidth,
+// which config must not import; TestIndentWidthDefaultsAgree holds them together.
 const (
 	DefaultIndentWidth = 4
 	MaxIndentWidth     = 16
@@ -453,11 +447,11 @@ const MaxLogSize = 5 << 20
 // past MaxLogSize to gossms.log.1 (one generation). Rotation happens only at
 // startup, so a session never loses its own lines.
 //
-// The file is 0600 like the config and key: the log records server names,
-// logins and error text. OpenFile's mode applies only at create, so a log (or
-// its .1) left 0644 by an older build is narrowed to owner-only here, the cap
-// fileutil's modeFor applies to config.json. On Windows Chmod only toggles
-// read-only, which the owner bits keep as is.
+// The file is 0600 like the config and key: the log records server names, logins
+// and error text. OpenFile's mode applies only at create, so a log (or its .1)
+// left 0644 by an older build is narrowed here, the cap fileutil's modeFor
+// applies to config.json. On Windows Chmod only toggles read-only, which the
+// owner bits keep as is.
 func OpenLogFile() (*os.File, error) {
 	path, err := LogFilePath()
 	if err != nil {
@@ -488,17 +482,17 @@ func rotateLog(path string, limit int64) {
 }
 
 // Load reads the config, returning an empty one if there is no file. Passwords
-// are decrypted (see secret.go); if the key is unavailable or one password
-// won't decrypt, that Password is "" and everything else loads.
+// are decrypted (see secret.go); if the key is unavailable or one password won't
+// decrypt, that Password is "" and everything else loads.
 //
 // A file that exists but can't be read (permissions, EIO, EMFILE) comes back
-// unreadable, and Save refuses to write it — otherwise the next unrelated Save
-// would overwrite a good file with an empty config.
+// unreadable, and Save refuses to write it, so the next unrelated Save can't
+// overwrite a good file with an empty config.
 func Load() *Config {
 	path := configPath()
-	// A save the process died in the middle of leaves its temp file — a full
-	// copy of the config — behind; WriteAtomic's own sweep only runs on a
-	// later save, which a read-only session never makes.
+	// A save killed mid-write leaves its temp file (a full config copy);
+	// WriteAtomic's sweep only runs on a later save, which a read-only session
+	// never makes.
 	fileutil.RemoveStaleTemps(path)
 	fileutil.RemoveStaleTemps(filepath.Join(filepath.Dir(path), keyFileName))
 	data, err := os.ReadFile(path)
@@ -553,14 +547,14 @@ func defaultConfig() *Config {
 // fail.
 var keepCorrupt = fileutil.KeepCorrupt
 
-// parseConfig decodes config.json's bytes, with every setting clamped, and
+// parseConfig decodes config.json's bytes, with every setting clamped and
 // passwords still sealed.
 //
-// Unparseable bytes (a hand-edit or an interrupted write) are kept aside by
+// Unparseable bytes (a hand-edit or interrupted write) are kept aside by
 // fileutil.KeepCorrupt before the config starts empty: passwords are lost but
 // server/user/database stay readable by hand. The error is non-nil only when
-// that copy could not be made: the bytes then exist nowhere else, and the
-// caller must not write over path.
+// that copy could not be made: the bytes then exist nowhere else, and the caller
+// must not write over path.
 func parseConfig(path string, data []byte) (*Config, error) {
 	cfg := new(Config)
 	var keepErr error
@@ -603,9 +597,8 @@ func (c *Config) openPasswords(key []byte, path string) {
 	}
 }
 
-// settingsSnapshot copies c without its connections or bookkeeping, for base.
-// A whole-struct copy, so a setting added to Config later is covered without
-// being listed anywhere.
+// settingsSnapshot copies c without its connections or bookkeeping, for base. A
+// whole-struct copy, so a later-added setting is covered without being listed.
 func (c *Config) settingsSnapshot() *Config {
 	snap := *c
 	snap.Connections, snap.ops, snap.base, snap.unreadable = nil, nil, nil, nil
@@ -631,8 +624,8 @@ func mergeSettings(cur, base, dst *Config) {
 	}
 }
 
-// Save writes the config. Passwords are AES-256-GCM encrypted and
-// base64-encoded (see secret.go) on disk only; c keeps plaintext.
+// Save writes the config. Passwords are AES-256-GCM encrypted and base64-encoded
+// (see secret.go) on disk only; c keeps plaintext.
 //
 // It re-reads the file and applies this process's own changes to it (connections
 // added or removed, settings changed since Load) rather than writing c whole,
@@ -641,13 +634,12 @@ func mergeSettings(cur, base, dst *Config) {
 // a changed setting takes effect when the Options dialog applies it.
 //
 // An entry whose password could not be opened keeps its ciphertext
-// (Connection.sealed), so an unrelated save does not destroy passwords a
-// restored key file could still open. An unusable key file does not stop the
-// save: stored ciphertexts are written back as they are, and only a password
-// that would need the key to seal is left out, named in the returned error.
+// (Connection.sealed). An unusable key file does not stop the save: stored
+// ciphertexts are written back as they are, and only a password that would need
+// the key to seal is left out, named in the returned error.
 //
-// Save is BeginSave, Run and EndSave on one goroutine. The UI goroutine uses
-// the three halves instead, so the lock wait, key read and fsync run off it.
+// Save is BeginSave, Run and EndSave on one goroutine. The UI goroutine uses the
+// three halves so the lock wait, key read and fsync run off it.
 func (c *Config) Save() error {
 	j := c.BeginSave()
 	err := j.Run()
@@ -655,17 +647,17 @@ func (c *Config) Save() error {
 	return err
 }
 
-// SaveJob is one Save split so its file work can run on another goroutine
-// than the one that owns the Config: BeginSave snapshots what to write, Run
-// does the re-read, merge and write touching nothing in the Config, and
-// EndSave adopts the result. Only one job per Config may be between BeginSave
-// and EndSave at a time — EndSave drops the ops the job carried by position.
+// SaveJob is one Save split so its file work can run on another goroutine than
+// the one that owns the Config: BeginSave snapshots what to write, Run does the
+// re-read, merge and write touching nothing in the Config, EndSave adopts the
+// result. Only one job per Config may be between BeginSave and EndSave —
+// EndSave drops the ops the job carried by position.
 type SaveJob struct {
 	path       string
 	unreadable error
-	// settings is the Config's settings when the job began, and base the
-	// baseline they are compared with; the maps they share with the Config
-	// are replaced there, never written into (see XEventHiddenColumns).
+	// settings is the Config's settings when the job began, and base the baseline
+	// they are compared with; the maps they share with the Config are replaced
+	// there, never written into (see XEventHiddenColumns).
 	settings, base *Config
 	ops            []connOp
 
@@ -696,8 +688,8 @@ func (j *SaveJob) Run() error {
 	}
 	dir := filepath.Dir(j.path)
 	// 0700, matching loadOrCreateKey's MkdirAll (secret.go). MkdirAll doesn't
-	// chmod an existing directory, so whichever runs first decides; both must
-	// ask for owner-only.
+	// chmod an existing directory, so whichever runs first decides; both ask for
+	// owner-only.
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
@@ -710,10 +702,10 @@ func (j *SaveJob) Run() error {
 }
 
 // EndSave adopts a job Run has finished, on the goroutine that owns c: the
-// merged connection list, with any AddOrUpdate or RemoveConnection made since
-// BeginSave replayed onto it and still pending, and the settings the job
-// wrote as the new baseline. A job that wrote nothing changes nothing, so
-// its ops stay pending for the next save; ending a job twice is a no-op.
+// merged connection list (with any AddOrUpdate or RemoveConnection made since
+// BeginSave replayed onto it and still pending) and the settings the job wrote
+// as the new baseline. A job that wrote nothing changes nothing, so its ops stay
+// pending; ending a job twice is a no-op.
 func (c *Config) EndSave(j *SaveJob) {
 	if !j.written || j.adopted {
 		return
@@ -817,15 +809,14 @@ func (j *SaveJob) mergeAndWrite(key []byte, keyErr error) error {
 const MaxSavedConnections = 30
 
 // AddOrUpdate saves a successful connection. Name is set to
-// conn.GeneratedName(), the dedup key: a match is replaced, otherwise added.
-// The entry moves to the end (most recent) and the list is trimmed from the
-// front to MaxSavedConnections. conn is taken by value; the caller's copy is
-// untouched.
+// conn.GeneratedName(), the dedup key: a match is replaced, otherwise added. The
+// entry moves to the end (most recent) and the list is trimmed from the front to
+// MaxSavedConnections. conn is taken by value.
 func (c *Config) AddOrUpdate(conn Connection) {
 	conn.Name = conn.GeneratedName()
-	// Remember Password off: the entry is saved, the password is not — and the
-	// ciphertext any earlier save left behind goes with the entry it replaces,
-	// since this copy carries neither a password nor a sealed blob.
+	// Remember Password off: the entry is saved without a password, and the
+	// ciphertext an earlier save left goes with the entry it replaces (this copy
+	// carries neither a password nor a sealed blob).
 	if !conn.RememberPassword {
 		conn.Password = ""
 	}
@@ -845,10 +836,9 @@ func addOrUpdate(list []Connection, conn Connection) []Connection {
 
 // RemoveConnection deletes the saved connection whose name matches, and reports
 // whether one was found. name is the dedup key AddOrUpdate stores (the
-// connection's GeneratedName); the entry's sealed password goes with it.
-//
-// An entry from an older build may carry a Name that is not its generated one,
-// so the generated name is matched too.
+// GeneratedName); the entry's sealed password goes with it. An entry from an
+// older build may carry a Name that is not its generated one, so the generated
+// name is matched too.
 func (c *Config) RemoveConnection(name string) bool {
 	var found bool
 	c.Connections, found = removeConnection(c.Connections, name)
@@ -858,11 +848,9 @@ func (c *Config) RemoveConnection(name string) bool {
 	return found
 }
 
-// removeConnection is RemoveConnection on a list.
-//
-// Every match goes: older configs can hold entries with distinct custom names
-// that generate the same name, and stopping at the first left a stale
-// duplicate in Recent Connections.
+// removeConnection is RemoveConnection on a list. Every match goes: older
+// configs can hold distinct custom names that generate the same name, and
+// stopping at the first left a duplicate in Recent Connections.
 func removeConnection(list []Connection, name string) ([]Connection, bool) {
 	n := len(list)
 	list = slices.DeleteFunc(list, func(existing Connection) bool {

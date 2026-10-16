@@ -16,20 +16,20 @@ import (
 // Live mode (Live Query Statistics)
 // ============================================================
 //
-// Live mode: the plan is the running statement's in-flight showplan and each
-// operator carries counters a poller merged from sys.dm_exec_query_profiles
-// (showplan.MergeProfiles). It adds a progress row above the content, a fourth
-// line to every graph tile, a rows/elapsed column to the Tree tab and live
+// The plan is the running statement's in-flight showplan and each operator
+// carries counters a poller merged from sys.dm_exec_query_profiles
+// (showplan.MergeProfiles). Live mode adds a progress row above the content, a
+// fourth line to every graph tile, a rows/elapsed column to the Tree tab and live
 // figures to the details panes; tiles and tree rows are coloured by state
-// (running / done / not started). SetPlan or SetPlanXML (the final actual
-// plan) leaves it. Nothing animates: the view repaints only when the host
-// hands it new counters.
+// (running / done / not started). SetPlan or SetPlanXML (the final actual plan)
+// leaves it. Nothing animates: the view repaints only when the host hands it new
+// counters.
 
-// SetLive shows p in live mode with counters keyed by NodeID of the statement
-// on screen (the host has already filtered its profile rows to it). Called
-// again with the same p it only swaps the counters, keeping selection, scroll
-// and tab; a different p (the batch moved on) is installed fresh but keeps the
-// tab. A nil p shows a waiting note until the first plan arrives.
+// SetLive shows p in live mode with counters keyed by NodeID of the statement on
+// screen (the host has already filtered its profile rows to it). Called again
+// with the same p it only swaps the counters, keeping selection, scroll and tab;
+// a different p (the batch moved on) is installed fresh but keeps the tab. A nil
+// p shows a waiting note until the first plan arrives.
 func (v *PlanView) SetLive(p *showplan.Plan, counters map[int]showplan.LiveCounters) {
 	wasLive := v.liveOn
 	v.liveOn = true

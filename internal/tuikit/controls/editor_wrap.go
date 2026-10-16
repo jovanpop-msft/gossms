@@ -25,10 +25,9 @@ type wrapSegment struct {
 // word longer than w still progresses). Always appends at least one segment, even
 // for an empty line, so every logical line occupies a visual row.
 //
-// Columns, not rune counts: a CJK segment holds half as many runes as ASCII, and
-// measuring in runes overflowed every wrapped row of such a line. It appends
-// rather than returning a slice so buildVisualLines can build the whole document
-// into one reused buffer (Editor.vlScratch).
+// Columns, not rune counts: a CJK segment holds half as many runes as ASCII.
+// Appends rather than returning a slice so buildVisualLines can build the whole
+// document into one reused buffer (Editor.vlScratch).
 func wrapSegments(dst []wrapSegment, line []rune, w int) []wrapSegment {
 	if w < 1 {
 		w = 1
@@ -86,10 +85,10 @@ type visualLine struct {
 // buildVisualLines flattens the document into wrap-mode visual rows at the given
 // content width, memoised against the document's version and that width.
 //
-// The memo is the point. Draw calls this once per pass, HandleMouse twice more
-// per wrap-mode event, and Draw runs on every event, so without it the whole
-// document is re-segmented several times per keystroke, mouse-move tick and timer
-// tick, however little is on screen. The cost is bounded by the document, not the
+// The memo is the point. Draw calls this once per pass, HandleMouse twice more per
+// wrap-mode event, and Draw runs on every event, so without it the whole document
+// is re-segmented several times per keystroke, mouse-move tick and timer tick,
+// however little is on screen. The cost is bounded by the document, not the
 // viewport, and wrap mode's large call site is DataGrid's cell viewer, where one
 // logical line of a varchar(max)/XML value is thousands of segments behind a
 // ~15-row window. That viewer is read-only, so its version never moves and it
@@ -97,17 +96,16 @@ type visualLine struct {
 //
 // An edit doesn't start over either: Document.changedSince names the lines the
 // edits since the memo touched, and only those are re-segmented and spliced in
-// (rewrapSpan). Rebuilding per keystroke cost 7.9 ms on a 20,000-line script
-// (BenchmarkEditorTypeWrapped20k) against 0.45 ms unwrapped. A width change, or
-// an edit changedSince can't describe, rebuilds everything.
+// (rewrapSpan). A full rebuild per keystroke costs 7.9 ms on a 20,000-line script
+// (BenchmarkEditorTypeWrapped20k) against 0.45 ms unwrapped. A width change, or an
+// edit changedSince can't describe, rebuilds everything.
 //
 // Correctness rests on Document.Version() being impossible to leave stale (see
-// Document). A mutation bypassing setLine/edit would leave this returning
-// segments for the previous text: the old document with the new one's cursor.
+// Document): a mutation bypassing setLine/edit would leave this returning segments
+// for the previous text.
 //
-// The returned slice aliases vlScratch and stays valid until the document or
-// width changes. Use it within one Draw or HandleMouse; never retain it across an
-// edit.
+// The returned slice aliases vlScratch and stays valid until the document or width
+// changes. Use it within one Draw or HandleMouse; never retain it across an edit.
 func (e *Editor) buildVisualLines(w int) []visualLine {
 	if e.vlCacheValid && e.vlCacheWidth == w {
 		if e.vlCacheVersion == e.doc.Version() {
@@ -158,12 +156,12 @@ func firstVisualOfRow(vls []visualLine, row int) int {
 	return sort.Search(len(vls), func(i int) bool { return vls[i].row >= row })
 }
 
-// visualIndexForCursor returns the index into vls of the visual row containing
-// the cursor. A cursor exactly at a wrap boundary goes to the start of the next
-// visual row, where a user expects it after typing past the wrap point, except at
-// the true end of a logical line, which has no next row. The line is found by
-// binary search: a walk from the top cost a pass over every visual row per Draw
-// with the caret near the bottom of a large script.
+// visualIndexForCursor returns the index into vls of the visual row containing the
+// cursor. A cursor exactly at a wrap boundary goes to the start of the next visual
+// row, where a user expects it after typing past the wrap point, except at the
+// true end of a logical line, which has no next row. The line is found by binary
+// search: a walk from the top would pass over every visual row per Draw with the
+// caret near the bottom of a large script.
 func visualIndexForCursor(vls []visualLine, row, col int) int {
 	for i := firstVisualOfRow(vls, row); i < len(vls) && vls[i].row == row; i++ {
 		vl := vls[i]

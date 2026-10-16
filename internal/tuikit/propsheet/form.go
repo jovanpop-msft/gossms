@@ -78,15 +78,15 @@ func (f *Form) Prepend(rows ...Row) {
 }
 
 // SetReadOnly makes the form uneditable: no row can take focus or receive a
-// press, except a Browsable row (a grid), which keeps both for browsing and
-// which ReadOnlyDrawer makes inert. Wheel scrolling and PgUp/PgDn still work,
-// and every ReadOnlyDrawer row switches to flat rendering.
+// press, except a Browsable row (a grid), which keeps both for browsing and which
+// ReadOnlyDrawer makes inert. Wheel scrolling and PgUp/PgDn still work, and every
+// ReadOnlyDrawer row switches to flat rendering.
 //
 // This presents a Properties page whose reads succeed but writes would be
 // refused. Nothing can become dirty, so Apply and Script Changes have nothing to
 // send. Dirty enforces it outright: a browsing grid's OnSelectRow may run a
-// commit-the-detail-rows-back handler, and a lossy round trip there (a size
-// shown in MB, stored in KB) must not turn a look into a write.
+// commit-the-detail-rows-back handler, and a lossy round trip there (a size shown
+// in MB, stored in KB) must not turn a look into a write.
 func (f *Form) SetReadOnly(v bool) {
 	f.readOnly = v
 	if v {
@@ -462,10 +462,9 @@ func (f *Form) HandleMouse(ev *tcell.EventMouse) bool {
 	}
 	// A press goes to the focused row first only while that row is on screen or has
 	// its overlay open. Scrolled out of view it keeps its last-drawn rect, and a
-	// DataGrid claims any press inside it: with an account picked in Database Mail >
-	// Accounts and the page scrolled to its Authentication radio, the grid swallowed
-	// every click on the radio (W14). Releases and motion still go to it so its
-	// latch is let go.
+	// DataGrid claims any press inside it: a grid scrolled off-screen would swallow
+	// clicks on whatever row now sits there. Releases and motion still go to it so
+	// its latch is let go.
 	if row := f.Focused(); row != nil && (ev.Buttons() == tcell.ButtonNone || f.OverlayActive() || f.onScreen(f.focus)) {
 		if mh, ok := row.(MouseHandler); ok && mh.HandleMouse(ev) {
 			return true

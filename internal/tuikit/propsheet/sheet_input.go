@@ -20,12 +20,12 @@ func (p *PropertySheet) focusedRowHandles(ev *tcell.EventKey) bool {
 	return ok && kh.HandleKey(ev)
 }
 
-// While an Apply, OK or Script Changes is in flight the form takes no input
-// (keys, mouse, paste, Refresh, Revert): the page's apply runs on the pipeline
-// goroutine and reads the form's rows, so a concurrent edit raced it and could
-// reach the server unvalidated. Apply reloads the page afterwards, so nothing
-// typed then would survive anyway. The page list, the button row (only Cancel
-// acts) and Escape still work. See formLocked.
+// While an Apply, OK or Script Changes is in flight the form takes no input (keys,
+// mouse, paste, Refresh, Revert): the page's apply runs on the pipeline goroutine
+// and reads the form's rows, so a concurrent edit would race it and could reach
+// the server unvalidated. Apply reloads the page afterwards, so nothing typed
+// then would survive anyway. The page list, the button row (only Cancel acts) and
+// Escape still work. See formLocked.
 func (p *PropertySheet) HandleKey(ev *tcell.EventKey) bool {
 	if !p.Visible() {
 		return false
@@ -44,9 +44,9 @@ func (p *PropertySheet) HandleKey(ev *tcell.EventKey) bool {
 	// Ctrl+Z).
 	//
 	// The focused row still gets first refusal: EditorRow's controls.Editor has a
-	// Ctrl+Z of its own, and without this an undo in a job step's T-SQL box reverted
-	// the whole page. A read-only editor refuses the key (readOnlySafeKey), so a
-	// non-T-SQL step still reverts.
+	// Ctrl+Z of its own, and otherwise an undo in a job step's T-SQL box would
+	// revert the whole page. A read-only editor refuses the key (readOnlySafeKey),
+	// so a non-T-SQL step still reverts.
 	if ev.Key() == tcell.KeyCtrlZ {
 		if p.zone == zoneForm && p.focusedRowHandles(ev) {
 			return true
@@ -146,8 +146,8 @@ func (p *PropertySheet) HandleMouse(ev *tcell.EventMouse) bool {
 	// gesture, and routing would scroll whatever the pointer drifted over and call
 	// setZone, moving the focus zone out from under a scrollbar drag. Same rule as
 	// App.handleMouse's gestureOwner (internal/tui/app_events.go); App can't cover
-	// this one since it dispatches the top dialog before its gesture check and never
-	// arms a gesture for a dialog click.
+	// this one since it dispatches the top dialog before its gesture check and
+	// never arms a gesture for a dialog click.
 	if p.dragZone != zoneNone {
 		if ev.Buttons() == tcell.Button1 {
 			p.routeDrag(ev)

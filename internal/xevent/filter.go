@@ -426,9 +426,8 @@ func tokenize(s string) ([]token, error) {
 			if matched {
 				continue
 			}
-			// A '!' ends a word only where it opens != or !~. Ending at every
-			// '!' made a lone one (hello!) an empty word that never advanced
-			// i (M1: the prompt hung, appending empty tokens forever).
+			// A '!' ends a word only where it opens != or !~; ending at every '!'
+			// made a lone one (hello!) an empty word that never advanced i.
 			j := i
 			for j < len(s) {
 				c, size := utf8.DecodeRuneInString(s[j:])

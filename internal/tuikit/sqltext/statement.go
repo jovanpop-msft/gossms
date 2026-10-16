@@ -268,29 +268,28 @@ func (s *stmtSplitter) advance(t stmtToken) {
 	}
 }
 
-// StatementAt returns the trimmed [startRow,startCol]-[endRow,endCol] span of
-// the T-SQL statement containing (row, col): what Ctrl+Enter selects, and so
-// what the next F5 runs. ok is false when that statement is only white space,
-// e.g. a blank line between two GO separators.
+// StatementAt returns the trimmed [startRow,startCol]-[endRow,endCol] span of the
+// T-SQL statement containing (row, col): what Ctrl+Enter selects, and so what
+// the next F5 runs. ok is false when that statement is only white space, e.g. a
+// blank line between two GO separators.
 //
 // Boundaries are ';', a "GO" batch separator line (IsGoSeparatorLine, the rule
-// SplitBatches executes by), and a top-level (paren-depth zero)
-// statementLeaders keyword, so scripts stacking statements with no ';' still
-// split. Continuations (a UNION-chained SELECT, a CTE's main statement,
-// INSERT ... SELECT/EXEC, a table hint's WITH (...), GRANT's permission list,
-// an ALTER TABLE's own ALTER COLUMN/DROP CONSTRAINT and the rest listed on
-// stmtSplitter) stay part of the statement. Next lexes the lines, so a
-// boundary inside a literal, quoted identifier or comment is none.
+// SplitBatches executes by), and a top-level (paren-depth zero) statementLeaders
+// keyword, so scripts stacking statements with no ';' still split. Continuations
+// (a UNION-chained SELECT, a CTE's main statement, INSERT ... SELECT/EXEC, a
+// table hint's WITH (...), GRANT's permission list, an ALTER TABLE's own ALTER
+// COLUMN/DROP CONSTRAINT and the rest listed on stmtSplitter) stay part of the
+// statement. Next lexes the lines, so a boundary inside a literal, quoted
+// identifier or comment is none.
 //
-// A missed boundary runs the statement after the cursor's too (review plan T2);
-// a false one can cut a statement short into one that still parses (T3: a
-// DELETE losing its WHERE). Where the two conflict, over-split into a fragment
-// that fails to parse.
+// A missed boundary runs the statement after the cursor's too; a false one can
+// cut a statement short into one that still parses (a DELETE losing its WHERE).
+// Where the two conflict, over-split into a fragment that fails to parse.
 //
-// This is a lexical approximation, not a parser: a statement inside a module
-// body (CREATE PROCEDURE ... AS ...) is split from the header, an IF from its
-// body, and INSERT ... VALUES followed by a separate SELECT with no ';' is
-// (rarely) missed.
+// This is a lexical approximation, not a parser: a statement inside a module body
+// (CREATE PROCEDURE ... AS ...) is split from the header, an IF from its body,
+// and INSERT ... VALUES followed by a separate SELECT with no ';' is (rarely)
+// missed.
 func StatementAt(lines [][]rune, row, col int) (startRow, startCol, endRow, endCol int, ok bool) {
 	type span struct{ sr, sc, er, ec int }
 	var segments []span

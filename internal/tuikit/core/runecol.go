@@ -17,16 +17,16 @@ import (
 //
 // The unit of width is the grapheme cluster, because that is what tcell's Put,
 // DisplayWidth and the terminal measure. Summing rune widths gets "❤️" as 1
-// column instead of 2, a flag and "👍🏽" as 4 instead of 2, a ZWJ family as 6:
-// the glyph overwrote the next cell and every later column was off (review plan
-// K1). A rune index inside a cluster maps to its cluster's start, and the cursor
-// moves by NextGrapheme/PrevGrapheme so it never lands there.
+// column instead of 2, a flag and "👍🏽" as 4 instead of 2, a ZWJ family as 6: the
+// glyph overwrites the next cell and every later column is off. A rune index
+// inside a cluster maps to its cluster's start, and the cursor moves by
+// NextGrapheme/PrevGrapheme so it never lands there.
 
 // joinFloor is the first code point that can join a neighbour into a multi-rune
 // cluster (U+0300). Below it every rune is its own cluster (Extend, ZWJ,
 // SpacingMark, Prepend, Hangul jamo, regional indicators and variation selectors
-// are all above), apart from CR LF, which text widgets never hold. T-SQL is
-// almost entirely below it, so the common case never segments.
+// are all above), apart from CR LF, which text widgets never hold. T-SQL is almost
+// entirely below it, so the common case never segments.
 const joinFloor = 0x300
 
 // GraphemeAt returns the end (exclusive rune index) and display width of the

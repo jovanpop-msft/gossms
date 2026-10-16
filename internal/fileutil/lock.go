@@ -19,11 +19,10 @@ var (
 	lockPoll = 5 * time.Millisecond
 )
 
-// WithLock runs fn while holding path's lock file, path + ".lock", so two
-// gossms instances doing a read-merge-write of the same file take turns. A
-// replayed merge (config.Save, TrackedQueries.Save) needs nothing to write
-// between its read and write; without the lock, two simultaneous saves both
-// read the old file and the later write drops the earlier change.
+// WithLock runs fn while holding path's lock file, path + ".lock", so two gossms
+// instances doing a read-merge-write of the same file take turns. Without it,
+// two simultaneous saves (config.Save, TrackedQueries.Save) both read the old
+// file and the later write drops the earlier change.
 //
 // The lock is an O_CREATE|O_EXCL create, atomic on every OS and filesystem
 // gossms runs on: portable, no flock, no GOOS branch. Advisory: only WithLock
@@ -31,8 +30,8 @@ var (
 //
 // A lock older than lockStale is removed as abandoned. Two waiters finding the
 // same stale lock can race so the second removes the lock the first just took;
-// that needs a crash and then two saves inside one poll interval, and costs
-// only the race this lock narrows, so it is accepted.
+// that needs a crash and then two saves inside one poll interval, and costs only
+// the race this lock narrows, so it is accepted.
 //
 // If a live holder keeps the lock past lockWait, WithLock returns an error
 // without running fn; callers keep their pending changes for the next save.

@@ -26,8 +26,8 @@ type Right struct {
 
 	// Membership makes Name a fixed database *role* to be a member of, in database
 	// InDB, rather than a permission to hold. It exists for SQL Agent, whose
-	// actions are permitted by msdb role membership and nothing
-	// HAS_PERMS_BY_NAME can answer.
+	// actions are permitted by msdb role membership that HAS_PERMS_BY_NAME can't
+	// answer.
 	//
 	// It cannot fail open on its own: InRole answers false for a role never asked
 	// about as for one the login is not in, so AllowsOn checks
@@ -40,20 +40,19 @@ type Right struct {
 	// backup device is added/dropped by sp_addumpdevice/sp_dropdevice, which
 	// diskadmin carries and no server permission answers for.
 	//
-	// RightsAllow checks gosmo.Capabilities.Probed before believing a false. It
-	// also asks about sysadmin: sysadmin implies membership of no other fixed role,
-	// so a sysadmin reads 0 for diskadmin while being permitted everything it
-	// carries.
+	// RightsAllow checks gosmo.Capabilities.Probed before believing a false, and
+	// also asks about sysadmin: it implies no other fixed role, so a sysadmin reads
+	// 0 for diskadmin while being permitted everything it carries.
 	ServerRole bool
 
-	// Object narrows the question to the object itself, asked of gosmo's per-object
-	// probe. It is the only right that can speak for a principal granted ALTER on
-	// one table and nothing else, who reads 0 at schema and database scope.
+	// Object narrows the question to the object itself, asked of gosmo's
+	// per-object probe. It is the only right that can speak for a principal
+	// granted ALTER on one table and nothing else, who reads 0 at schema and
+	// database scope.
 	//
 	// It can only *add* permission. gosmo's ObjectPermissions map holds a row only
 	// for an object explicitly granted, denied or owned, so silence means "no
-	// explicit grant", never "not probed"; see
-	// gosmo.DatabaseCapabilities.HasOnObject.
+	// explicit grant", never "not probed"; see gosmo.DatabaseCapabilities.HasOnObject.
 	Object bool
 
 	// Securable narrows the question to one assembly, user-defined type or XML
@@ -70,8 +69,8 @@ type Right struct {
 
 	// DeniedOnPrincipal names the DATABASE_PRINCIPAL-scope (class 4) permission
 	// whose DENY withholds this right, or "" for a right no class-4 DENY can
-	// reach. It is deliberately not Name: the right is the database-wide ALTER ANY
-	// USER, while the DENY that beats it sits on the user itself as plain ALTER.
+	// reach. Deliberately not Name: the right is the database-wide ALTER ANY USER,
+	// while the DENY that beats it sits on the user itself as plain ALTER.
 	//
 	// It also stops the principal arm of ObjectDenial firing on the wrong kind of
 	// node: ObjectDenial is asked about a table by the same name as a denied user
@@ -122,26 +121,24 @@ var (
 	ViewAnyDefinition = Right{Name: "VIEW ANY DEFINITION", Role: "sysadmin"}
 	AlterSettings     = Right{Name: "ALTER SETTINGS", Role: "serveradmin"}
 	// The login's class-101 DENY is all-or-nothing, so one arm on one right covers
-	// Login Properties, Rename and Delete alike: verified live on majors 13 and 17,
-	// DENY ALTER ON LOGIN::x withholds ALTER LOGIN (rename and password) and DROP
-	// LOGIN, every refusal Msg 15151.
+	// Login Properties, Rename and Delete alike: DENY ALTER ON LOGIN::x withholds
+	// ALTER LOGIN (rename and password) and DROP LOGIN, every refusal Msg 15151.
 	AlterAnyLogin = Right{Name: "ALTER ANY LOGIN", Role: "securityadmin",
 		DeniedOnServer: "ALTER", ServerSecurable: gosmo.ServerSecurableLogin}
-	// No DeniedOnServer twin: verified live on majors 13 and 17, ALTER SERVER ROLE
-	// ... WITH NAME and DROP SERVER ROLE succeed with DENY ALTER ON SERVER ROLE::r
-	// in place, while the same DENY refuses membership edits. Declaring it would
-	// withhold a rename and drop the server allows. See docs/decisions.md §
-	// Permission gating.
+	// No DeniedOnServer twin: ALTER SERVER ROLE ... WITH NAME and DROP SERVER ROLE
+	// succeed with DENY ALTER ON SERVER ROLE::r in place, while the same DENY
+	// refuses membership edits. Declaring it would withhold a rename and drop the
+	// server allows. See docs/decisions.md § Permission gating.
 	AlterAnyServerRole = Right{Name: "ALTER ANY SERVER ROLE", Role: "securityadmin"}
 	// AlterAnyServerRoleMembers is the same right for the page that edits a server
 	// role's *membership*, where the class-101 DENY does withhold: ALTER SERVER
-	// ROLE r ADD MEMBER is refused under DENY ALTER ON SERVER ROLE::r (Msg 15151),
-	// majors 13 and 17. The split is per action, not per object; see
-	// AlterAnyDBRole/AlterAnyDBRoleMembers one scope up.
+	// ROLE r ADD MEMBER is refused under DENY ALTER ON SERVER ROLE::r (Msg 15151).
+	// The split is per action, not per object; see AlterAnyDBRole/
+	// AlterAnyDBRoleMembers one scope up.
 	//
 	// Unlike the database scope, the *member* is not asked about: adding a login
-	// carrying a class-101 DENY to an undenied server role succeeds (majors 13 and
-	// 17), so Login Properties > Server Roles declares the plain right.
+	// carrying a class-101 DENY to an undenied server role succeeds, so Login
+	// Properties > Server Roles declares the plain right.
 	AlterAnyServerRoleMembers = Right{Name: "ALTER ANY SERVER ROLE", Role: "securityadmin",
 		DeniedOnServer: "ALTER", ServerSecurable: gosmo.ServerSecurableServerRole}
 	// ALTER ANY CREDENTIAL is server-scope only, with no database-scoped twin: a
@@ -151,9 +148,8 @@ var (
 	CreateAnyDatabase  = Right{Name: "CREATE ANY DATABASE", Role: "dbcreator"}
 	AlterAnyDatabase   = Right{Name: "ALTER ANY DATABASE", Role: "dbcreator"}
 	// The endpoint's class-105 DENY withholds ALTER ENDPOINT, refused with Msg 6004
-	// rather than the 15151 every class-101 DENY carries (verified live, majors 13
-	// and 17). One arm on the one right: the folder's New Endpoint names no
-	// securable and never reaches it.
+	// rather than the 15151 every class-101 DENY carries. One arm on the one right:
+	// the folder's New Endpoint names no securable and never reaches it.
 	AlterAnyEndpoint = Right{Name: "ALTER ANY ENDPOINT", Role: "sysadmin",
 		DeniedOnServer: "ALTER", ServerSecurable: gosmo.ServerSecurableEndpoint}
 	AlterAnyAudit = Right{Name: "ALTER ANY SERVER AUDIT", Role: "sysadmin"}
@@ -184,10 +180,10 @@ var (
 	// DatabaseEventSession is every verb on a database-scoped session (Azure SQL
 	// Database): one right, not split per verb.
 	DatabaseEventSession = Right{Name: "ALTER ANY DATABASE EVENT SESSION", Role: "db_owner", DB: true}
-	// The availability group's class-108 DENY is all-or-nothing: probed live on the
-	// two-node cluster, DENY ALTER ON AVAILABILITY GROUP::g withholds every ALTER
-	// AVAILABILITY GROUP (options SET, ADD/REMOVE DATABASE, MODIFY REPLICA,
-	// FAILOVER), each Msg 15151, with the server-wide right reading 1 throughout.
+	// The availability group's class-108 DENY is all-or-nothing: DENY ALTER ON
+	// AVAILABILITY GROUP::g withholds every ALTER AVAILABILITY GROUP (options SET,
+	// ADD/REMOVE DATABASE, MODIFY REPLICA, FAILOVER), each Msg 15151, with the
+	// server-wide right reading 1 throughout.
 	//
 	// It leaves the ALTER DATABASE ... SET HADR family alone, checked against the
 	// database instead, so Suspend/Resume, Join and Unjoin stay on plain gate; see
@@ -195,10 +191,9 @@ var (
 	AlterAnyAG = Right{Name: "ALTER ANY AVAILABILITY GROUP", Role: "sysadmin",
 		DeniedOnAG: "ALTER"}
 	// Held for a feature that does not exist yet (nothing creates or alters a
-	// linked server). Declared so permission_gate_names_test.go checks the
-	// literal against gosmo's Probed* list; a misspelled name would read
-	// CapabilityUnknown forever and gate nothing.
-	//lint:ignore U1000 declared ahead of a New/Alter Linked Server feature
+	// linked server). Declared so permission_gate_names_test.go checks the literal
+	// against gosmo's Probed* list; a misspelled name would read CapabilityUnknown
+	// forever and gate nothing.
 	AlterAnyLinkedSrv = Right{Name: "ALTER ANY LINKED SERVER", Role: "sysadmin"}
 
 	BackupDatabase = Right{Name: "BACKUP DATABASE", Role: "db_backupoperator", DB: true}
@@ -206,11 +201,10 @@ var (
 	ControlDB      = Right{Name: "CONTROL", Role: "db_owner", DB: true}
 	AlterAnyUser   = Right{Name: "ALTER ANY USER", Role: "db_accessadmin", DB: true,
 		DeniedOnPrincipal: "ALTER"}
-	// No DeniedOnPrincipal twin: verified live on majors 13, 14 and 17, DROP ROLE
-	// and ALTER ROLE ... WITH NAME succeed with DENY ALTER ON ROLE::x in place,
-	// while the same DENY on a *user* refuses both. Declaring it would make the
-	// gate refuse what the server would run. See docs/decisions.md § Permission
-	// gating.
+	// No DeniedOnPrincipal twin: DROP ROLE and ALTER ROLE ... WITH NAME succeed
+	// with DENY ALTER ON ROLE::x in place, while the same DENY on a *user* refuses
+	// both. Declaring it would make the gate refuse what the server would run. See
+	// docs/decisions.md § Permission gating.
 	AlterAnyDBRole = Right{Name: "ALTER ANY ROLE", Role: "db_securityadmin", DB: true}
 	// A database audit specification is gated at *database* scope, not by
 	// AlterAnyAudit: SQL Server checks ALTER ANY DATABASE AUDIT for CREATE/ALTER/
@@ -224,8 +218,7 @@ var (
 	AlterAnyDatabaseDDLTrigger = Right{Name: "ALTER ANY DATABASE DDL TRIGGER", Role: "db_ddladmin", DB: true}
 	// AlterAnyDBRoleMembers is the same right for the pages that edit a role's
 	// *membership*, where the class-4 DENY does withhold: ALTER ROLE r ADD MEMBER u
-	// is refused under DENY ALTER ON ROLE::r (Msg 15151), verified live on majors
-	// 13 and 17.
+	// is refused under DENY ALTER ON ROLE::r (Msg 15151).
 	//
 	// The split is per action, not per object: naming this one on the General page
 	// would withhold a rename the server allows, and naming the plain one on
@@ -263,9 +256,8 @@ var (
 	AlterAnyExtLibrary = Right{Name: "ALTER ANY EXTERNAL LIBRARY", Role: "db_ddladmin", DB: true}
 
 	// The five Service Broker rights. Each alone is enough to ALTER and DROP its
-	// family (probed live with a WITHOUT LOGIN user per right on majors 13, 14 and
-	// 17, identical throughout), and a right from one family confers nothing on
-	// another (ALTER ANY MESSAGE TYPE cannot alter a route, Msg 15151).
+	// family, and a right from one family confers nothing on another (ALTER ANY
+	// MESSAGE TYPE cannot alter a route, Msg 15151).
 	//
 	// The role is db_owner because no narrower one carries them on every supported
 	// major, and it is the name the *user* is sent to ask for. See docs/db-rules.md
@@ -273,21 +265,19 @@ var (
 	//
 	// There is deliberately no broker-priority twin: SQL Server enforces a
 	// CREATE/ALTER BROKER PRIORITY permission it does not publish
-	// (HAS_PERMS_BY_NAME answers NULL for every spelling, and
-	// sys.fn_builtin_permissions has no DATABASE-class row matching %PRIORITY%), so
-	// a right for it would read CapabilityUnknown forever. A broker priority takes
-	// ALTER on the database alone; see BrokerPriorityWriteRights.
+	// (HAS_PERMS_BY_NAME answers NULL for every spelling), so a right for it would
+	// read CapabilityUnknown forever. A broker priority takes ALTER on the
+	// database alone; see BrokerPriorityWriteRights.
 	AlterAnyMessageType = Right{Name: "ALTER ANY MESSAGE TYPE", Role: "db_owner", DB: true}
 	AlterAnyContract    = Right{Name: "ALTER ANY CONTRACT", Role: "db_owner", DB: true}
 	AlterAnyService     = Right{Name: "ALTER ANY SERVICE", Role: "db_owner", DB: true}
 	AlterAnyRoute       = Right{Name: "ALTER ANY ROUTE", Role: "db_owner", DB: true}
 	AlterAnyRSB         = Right{Name: "ALTER ANY REMOTE SERVICE BINDING", Role: "db_owner", DB: true}
 
-	// What DROP CERTIFICATE checks at database scope. Probed live 2026-09-22 on
-	// majors 13, 14 and 17 and Managed Instance, identical throughout
-	// (docs/decisions.md § Keys and certificates): the right alone drops any
-	// certificate, CREATE CERTIFICATE alone drops none it does not own, and
-	// db_ddladmin carries it on every one while db_securityadmin carries nothing.
+	// What DROP CERTIFICATE checks at database scope (docs/decisions.md § Keys and
+	// certificates): the right alone drops any certificate, CREATE CERTIFICATE
+	// alone drops none it does not own, and db_ddladmin carries it while
+	// db_securityadmin carries nothing.
 	AlterAnyCertificate = Right{Name: "ALTER ANY CERTIFICATE", Role: "db_ddladmin", DB: true}
 	// CREATE CERTIFICATE is the narrow right New Certificate needs. It is not
 	// implied by AlterAnyCertificate (the hierarchy puts it under ALTER on the
@@ -306,16 +296,15 @@ var (
 	CreateSymmetricKey   = Right{Name: "CREATE SYMMETRIC KEY", Role: "db_ddladmin", DB: true}
 
 	// What DROP FULLTEXT CATALOG, DROP FULLTEXT STOPLIST and DROP SEARCH PROPERTY
-	// LIST check at database scope: one right for all three families. Probed live
-	// 2026-10-07 on majors 14 and 17, identical (docs/decisions.md § The rest):
-	// the right alone drops any of the three, ALTER and CONTROL on the database
-	// and db_ddladmin read 1 for it and drop too, and CREATE FULLTEXT CATALOG and
-	// ALTER ANY SCHEMA drop nothing.
+	// LIST check at database scope: one right for all three families
+	// (docs/decisions.md § The rest). The right alone drops any of the three, ALTER
+	// and CONTROL on the database and db_ddladmin read 1 for it and drop too, and
+	// CREATE FULLTEXT CATALOG and ALTER ANY SCHEMA drop nothing.
 	AlterAnyFullTextCatalog = Right{Name: "ALTER ANY FULLTEXT CATALOG", Role: "db_ddladmin", DB: true}
 	// What CREATE FULLTEXT CATALOG, CREATE FULLTEXT STOPLIST and CREATE SEARCH
 	// PROPERTY LIST check: one right for all three, read 1 under ALTER ANY
-	// FULLTEXT CATALOG, ALTER and CONTROL on the database and db_ddladmin, each
-	// of which creates too (2026-10-08, majors 14 and 17, identical).
+	// FULLTEXT CATALOG, ALTER and CONTROL on the database and db_ddladmin, each of
+	// which creates too.
 	CreateFullTextCatalog = Right{Name: "CREATE FULLTEXT CATALOG", Role: "db_ddladmin", DB: true}
 
 	// A backup device is added and dropped by sp_addumpdevice/sp_dropdevice, which
@@ -400,18 +389,16 @@ var (
 	ReferencesOnFullTextStoplist   = Right{Name: "REFERENCES", DB: true, Securable: gosmo.DatabaseSecurableFullTextStoplist}
 	ReferencesOnSearchPropertyList = Right{Name: "REFERENCES", DB: true, Securable: gosmo.DatabaseSecurableSearchPropertyList}
 	// AlterOnSymmetricKey is the effective ALTER on one symmetric key, the exact
-	// test for ALTER SYMMETRIC KEY ... ADD / DROP ENCRYPTION (probed live on 13 and
-	// 17, 2026-09-22). It folds in ALTER ANY SYMMETRIC KEY, ALTER on the database
-	// and ownership, and reads 0 for CONTROL on the key with ALTER denied, which
-	// the server refuses (Msg 15151). It stands alone; ControlOnSymmetricKey
-	// beside it would over-offer.
+	// test for ALTER SYMMETRIC KEY ... ADD / DROP ENCRYPTION. It folds in ALTER ANY
+	// SYMMETRIC KEY, ALTER on the database and ownership, and reads 0 for CONTROL
+	// on the key with ALTER denied, which the server refuses (Msg 15151). It stands
+	// alone; ControlOnSymmetricKey beside it would over-offer.
 	AlterOnSymmetricKey = Right{Name: "ALTER", DB: true, Securable: gosmo.DatabaseSecurableSymmetricKey}
 	// AlterOnCertificate and AlterOnAsymmetricKey are the effective ALTER on one
 	// certificate or asymmetric key, what ALTER CERTIFICATE / ALTER ASYMMETRIC KEY
-	// ... REMOVE PRIVATE KEY checks. Probed on 13 and 17 (2026-09-22): permitted
-	// for ALTER or CONTROL on the object, ALTER ANY <family>, ALTER or CONTROL on
-	// the database and db_ddladmin (all read 1 here), refused (Msg 15151) to
-	// db_securityadmin.
+	// ... REMOVE PRIVATE KEY checks: permitted for ALTER or CONTROL on the object,
+	// ALTER ANY <family>, ALTER or CONTROL on the database and db_ddladmin (all
+	// read 1 here), refused (Msg 15151) to db_securityadmin.
 	AlterOnCertificate   = Right{Name: "ALTER", DB: true, Securable: gosmo.DatabaseSecurableCertificate}
 	AlterOnAsymmetricKey = Right{Name: "ALTER", DB: true, Securable: gosmo.DatabaseSecurableAsymmetricKey}
 

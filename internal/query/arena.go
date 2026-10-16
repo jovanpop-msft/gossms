@@ -17,8 +17,7 @@ const (
 // per-allocation overhead exceeds the text (a 3-byte cell costs a 16-byte heap
 // object plus a row slice header).
 //
-// The zero value is ready. Not concurrency-safe: one arena per scanning
-// goroutine.
+// The zero value is ready. Not concurrency-safe: one arena per scanning goroutine.
 type cellArena struct {
 	text []byte   // current text chunk; handed-out strings point into it
 	rows []string // current cell-slot chunk; handed-out rows are sub-slices

@@ -48,13 +48,12 @@ const (
 )
 
 // FlattenLinesInto joins a multi-line buffer into one rune slice with '\n'
-// separators, so the tokenizer scans linearly and a multi-line comment or
-// string literal falls out of the same state machine.
+// separators, so the tokenizer scans linearly and a multi-line comment or string
+// literal falls out of the same state machine.
 //
-// It reuses dst's capacity when big enough, else sizes a fresh allocation. This
-// runs on every keystroke while completion is open: callers keep dst across
-// keystrokes so a large script isn't copied each time (growing a nil slice
-// re-copies a dozen times).
+// It reuses dst's capacity when big enough, else allocates. This runs on every
+// keystroke while completion is open: callers keep dst across keystrokes so a
+// large script isn't copied each time.
 //
 // The result borrows dst, valid until the next call with the same dst; every
 // consumer copies what it keeps (a Token holds a string).
@@ -147,30 +146,30 @@ type lexResult struct {
 }
 
 // lexSQL is the single walk behind every scan in this file, over sqltext.Next:
-// the lexer the executor splits batches by and the editor selects statements
-// and colours text by.
+// the lexer the executor splits batches by and the editor selects statements and
+// colours text by.
 //
-// tokens, when non-nil, receives a token per identifier/keyword/punctuation;
-// nil lexes without materialising anything (the prefix pass): identifier
-// tokens are a scan's only allocating part.
+// tokens, when non-nil, receives a token per identifier/keyword/punctuation; nil
+// lexes without materialising anything (the prefix pass): identifier tokens are
+// a scan's only allocating part.
 //
 // gs, when enabled, is where bare "GO" separators are recognised. That must
-// happen inside the lexer's walk, not a separate textual pass: a "GO" alone on
-// a line inside a block comment, string literal or bracketed identifier is not
-// a separator, and treating it as one scopes completion to the wrong statement.
+// happen inside the lexer's walk, not a separate textual pass: a "GO" alone on a
+// line inside a block comment, string literal or bracketed identifier is not a
+// separator, and treating it as one scopes completion to the wrong statement.
 //
 // onBoundary, when non-nil, is called once per batch boundary crossed, in
-// ascending offset order, with the offset a scan may resume at in LexNormal
-// state and whether a "GO" line (not a top-level ';') established it.
-// lexResult keeps only the last of each; the sink is how PrefixCache collects
-// the rest, to restart a later scan from the last boundary below an edit.
+// ascending offset order, with the offset a scan may resume at in LexNormal state
+// and whether a "GO" line (not a top-level ';') established it. lexResult keeps
+// only the last of each; the sink is how PrefixCache collects the rest, to
+// restart a later scan from the last boundary below an edit.
 //
-// onLine, when non-nil, is called at every line start reached in LexNormal
-// (from itself included) with goNext the start of the line after it when it is
-// a "GO" separator inside gs, or -1. These are the positions BatchCache can
-// resume or resynchronise a scan at without saving lexer state. Returning true
-// stops the walk there, before the line is lexed: the result then describes
-// [from, start) and the state is LexNormal.
+// onLine, when non-nil, is called at every line start reached in LexNormal (from
+// itself included) with goNext the start of the line after it when it is a "GO"
+// separator inside gs, or -1. These are the positions BatchCache can resume or
+// resynchronise a scan at without saving lexer state. Returning true stops the
+// walk there, before the line is lexed: the result then describes [from, start)
+// and the state is LexNormal.
 //
 // Every scan starts in LexNormal: from is the buffer start, a ';' or "GO"
 // boundary, a statement start or a line start reached in that state.

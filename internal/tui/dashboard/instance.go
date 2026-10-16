@@ -24,17 +24,16 @@ const (
 	instanceLimitsH = 12
 )
 
-// InstanceView is everything the Instance dashboard draws: an Azure SQL
-// Managed Instance's own accounting of the resources it is allowed and the
-// resources it has used.
+// InstanceView is everything the Instance dashboard draws: an Azure SQL Managed
+// Instance's own accounting of the resources it is allowed and has used.
 //
 // Unlike the other dashboards (per-second deltas between counter readings),
-// every series here comes from sys.server_resource_stats, which the *server*
+// every series comes from sys.server_resource_stats, which the *server*
 // pre-aggregates into fixed 15-second windows kept about two weeks. One tick
-// reads the whole history, and Interval is the server's window, not the
-// panel's refresh rate.
+// reads the whole history, and Interval is the server's window, not the panel's
+// refresh rate.
 //
-// Every field may be empty, and an empty one blanks its own panel only.
+// Every field may be empty; an empty one blanks only its own panel.
 type InstanceView struct {
 	Header Header
 
@@ -98,8 +97,8 @@ func DrawInstance(s tcell.Screen, r core.Rect, v InstanceView) []ChartHit {
 
 func instanceCPU(s tcell.Screen, r core.Rect, y int, v InstanceView, hits *[]ChartHit) int {
 	// The shape rides on the CPU section's bar, not a strip of its own: SKU,
-	// generation and cores are what the CPU percentage is read against, and a
-	// row of three static things doesn't earn a line on a scrolling canvas.
+	// generation and cores are what the CPU percentage is read against, and three
+	// static things don't earn a line on a scrolling canvas.
 	body, next := section(s, r, y, instanceBodyH, "INSTANCE", append(append([]charts.KPI{}, v.Shape...), v.CPUKPIs...))
 	drawChart(s, body, "CPU %", charts.HistoryChart{
 		Series:    v.CPU,

@@ -17,7 +17,6 @@ import (
 // sys.dm_hadr_* only describes what the connected instance sees, so a secondary
 // reports empty roles, health and queue detail for other replicas. Only the
 // primary has the whole picture, and it is usually not the registered instance.
-//
 // Peers are cached for the parent's lifetime and closed with it.
 
 // ErrServerConnClosed is Peer's answer once its parent is closed: no peer,
@@ -37,10 +36,9 @@ var ErrServerConnClosed = fmt.Errorf("connection closed: %w", context.Canceled)
 // route through Peer. Once sc is closed it returns ErrServerConnClosed instead,
 // whatever the cache holds.
 //
-// One dial per instance at a time: three folders asking for the same primary
-// dial it once and the other callers wait, each bounded by its own ctx.
-// Cancelling ctx abandons the caller's wait or, for the dialling caller, the
-// dial itself, so a superseded load no longer waits out two 30s connects.
+// One dial per instance at a time: three folders asking for the same primary dial
+// it once and the others wait, each bounded by its own ctx. Cancelling ctx
+// abandons the caller's wait or, for the dialling caller, the dial itself.
 func (sc *ServerConn) Peer(ctx context.Context, server string) (*ServerConn, error) {
 	if !sc.IsOpen() {
 		return nil, ErrServerConnClosed
@@ -143,8 +141,8 @@ func (sc *ServerConn) dialPeer(ctx context.Context, server, key string, d *peerD
 	if err != nil {
 		// A resolver hit that cannot connect must not leave the instance less
 		// reachable than the parent's credentials would, so retry with the
-		// pre-resolver derivation. Costs one extra attempt against a really
-		// down instance. When both fail, report the first error: it names the
+		// pre-resolver derivation (one extra attempt against a really down
+		// instance). When both fail, report the first error: it names the
 		// credentials the user registered.
 		fallback := sc.parentPeerOptions(server)
 		if fallback == opts || dctx.Err() != nil {
@@ -156,8 +154,8 @@ func (sc *ServerConn) dialPeer(ctx context.Context, server, key string, d *peerD
 		}
 	}
 	// A peer's peers resolve through the same table: Object Explorer follows a
-	// group to its primary and reads on, and stopping at the first hop would
-	// reach a third instance with the primary's login.
+	// group to its primary and reads on, and stopping at the first hop would reach
+	// a third instance with the primary's login.
 	peer.SetPeerCredentials(sc.peerCredentials())
 	return peer, nil
 }
@@ -215,7 +213,7 @@ func (sc *ServerConn) forgetPeerFailures(key string, seen map[*ServerConn]bool) 
 // sc.recordPeerFailureLocked(...)`. peerMu must be held.
 //
 // Without it, a primary that drops packets costs the full connect timeout on
-// every call: expanding an AG's three folders stalled 45s.
+// every call (expanding an AG's three folders stalled 45s).
 func (sc *ServerConn) recordPeerFailureLocked(key string, err error) error {
 	if sc.peerFails == nil {
 		sc.peerFails = map[string]peerFailure{}
@@ -235,8 +233,8 @@ func (sc *ServerConn) recordPeerFailureLocked(key string, err error) error {
 // Database handles that set context per query.
 //
 // A saved connection is taken whole (port, auth, Entra, TLS, extra properties)
-// so future fields are not dropped; only Server and Database are overridden.
-// If a resolver hit fails to connect, Peer falls back to parentPeerOptions.
+// so future fields aren't dropped; only Server and Database are overridden. If a
+// resolver hit fails to connect, Peer falls back to parentPeerOptions.
 func (sc *ServerConn) peerOptions(server string) config.Connection {
 	if creds := sc.peerCredentials(); creds != nil {
 		if saved, ok := creds(server); ok {
@@ -252,11 +250,11 @@ func (sc *ServerConn) peerOptions(server string) config.Connection {
 // The parent's port is kept only for the parent's own instance under another
 // spelling (same host and instance name, e.g. the catalog's portless "HOST" for
 // "host,14330"). For any other instance it is another listener's port:
-// "HOSTA\SQL2017,50110" opening peer "HOSTB\PROD" dialled HOSTB:50110 and
-// bypassed SQL Browser. With Port cleared a named instance resolves through
+// "HOSTA\SQL2017,50110" opening peer "HOSTB\PROD" would dial HOSTB:50110 and
+// bypass SQL Browser. With Port cleared a named instance resolves through
 // Browser and a default instance dials 1433. A different host is a different
-// instance even when the default instance on both happens to share a port; a
-// replica on a non-default port needs a saved connection.
+// instance even if both default instances share a port; a replica on a
+// non-default port needs a saved connection.
 func (sc *ServerConn) parentPeerOptions(server string) config.Connection {
 	opts := retargetAt(sc.Opts, server)
 	if !sameInstanceApartFromPort(sc.Opts.Server, server) {
@@ -276,10 +274,10 @@ func sameInstanceApartFromPort(a, b string) bool {
 // retargetAt points a saved connection at server with no database; see
 // peerOptions.
 //
-// A port written in the saved Server moves to Port first: the catalog names an
-// instance without one, and "host\SQL2017,55253" retargeted to "HOST\SQL2017"
-// would need SQL Browser, which that host may not run. A port in server itself
-// still wins, in gosmo.
+// A port in the saved Server moves to Port first: the catalog names an instance
+// without one, and "host\SQL2017,55253" retargeted to "HOST\SQL2017" would need
+// SQL Browser, which that host may not run. A port in server itself still wins,
+// in gosmo.
 func retargetAt(opts config.Connection, server string) config.Connection {
 	if _, _, port := gosmo.ParseServerAddress(opts.Server); port != 0 {
 		opts.Port = port

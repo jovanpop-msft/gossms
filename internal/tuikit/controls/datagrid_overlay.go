@@ -190,8 +190,8 @@ func (g *DataGrid) DrawOverlay(s tcell.Screen) {
 // *DataGrid a clipboard target (see internal/tui/clipboard.go's clipboardTarget
 // and propsheet.ClipboardRow), forwarding to the viewer's read-only Editor while
 // open. HasSelection is false otherwise, so a host falling back to its own
-// row/cell copy (e.g. propsheet.GridRow.CopyText) when there's "no selection"
-// keeps doing so whenever the viewer isn't showing.
+// row/cell copy (e.g. propsheet.GridRow.CopyText) keeps doing so whenever the
+// viewer isn't showing.
 func (g *DataGrid) HasSelection() bool {
 	return g.viewOpen && g.viewEditor.HasSelection()
 }

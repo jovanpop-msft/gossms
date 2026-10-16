@@ -195,13 +195,13 @@ func hasPrefixCompletion(items []CompletionItem) bool {
 // character opens the popup from closed. The fragment touching the cursor must
 // start with a letter or a sigil a name can open with: '[' for a quoted
 // identifier, '#' or '@' for a name a host's provider may bind. Each sigil also
-// opens the popup on its own, as a name has no other first keystroke. A space,
-// '.', a digit starting a numeric literal or an empty line never auto-opens it;
+// opens the popup on its own, as a name has no other first keystroke. A space, '.',
+// a digit starting a numeric literal or an empty line never auto-opens it;
 // Ctrl+Space always can.
 //
-// What a sigil means is the provider's business; this only decides that a name
-// may be starting, and a provider with nothing to offer closes the popup on the
-// same keystroke.
+// What a sigil means is the provider's business; this only decides that a name may
+// be starting, and a provider with nothing to offer closes the popup on the same
+// keystroke.
 func (e *Editor) canAutoOpenCompletion() bool {
 	if e.cursorRow >= e.doc.Len() || e.cursorCol <= 0 {
 		return false

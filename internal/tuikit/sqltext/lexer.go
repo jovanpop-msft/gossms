@@ -79,20 +79,20 @@ type Token struct {
 	Start, End int
 }
 
-// Next lexes the token at or after buf[i], reading nothing at or past limit,
-// and returns it with the state after it. In ModeNormal it first skips white
-// space other than '\n'. It returns KindEnd, at limit, when only white space is
-// left, and leaves st as it is when i is already at limit.
+// Next lexes the token at or after buf[i], reading nothing at or past limit, and
+// returns it with the state after it. In ModeNormal it first skips white space
+// other than '\n'. It returns KindEnd, at limit, when only white space is left,
+// and leaves st as it is when i is already at limit.
 //
 // This is the one T-SQL lexer: SplitBatches, StatementAt, the syntax highlighter
 // and IntelliSense's scanner (internal/tui/sqlparse) all use it, so a ';', GO
 // line or keyword inside a comment, literal or quoted identifier means the same
-// to all four. (Separate state machines drifted: the highlighter coloured
-// keywords in [brackets], and a "/*" inside one commented out the document.)
-// A caller may lex a flat buffer, newlines included, or one line at a time with
-// the State carried across and State.NextLine applied at each line end. The two
-// agree: no two-rune delimiter ("--", "/*", "*/", a doubled quote or bracket)
-// can span a '\n'.
+// to all four (separate state machines drifted: the highlighter coloured keywords
+// in [brackets], and a "/*" inside one commented out the document). A caller may
+// lex a flat buffer, newlines included, or one line at a time with the State
+// carried across and State.NextLine applied at each line end. The two agree: no
+// two-rune delimiter ("--", "/*", "*/", a doubled quote or bracket) can span a
+// '\n'.
 func Next(buf []rune, i, limit int, st State) (Token, State) {
 	if i >= limit {
 		return Token{KindEnd, limit, limit}, st

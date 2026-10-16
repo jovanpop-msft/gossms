@@ -15,15 +15,15 @@ import (
 // where the cursor was. bytes is the approximate heap cost of old, computed once
 // so trimUndo never walks it again.
 //
-// A step is a delta rather than a whole-document snapshot because pushUndo runs
-// on every keystroke: copying the buffer costs 3.2 ms and 5 MB per character in a
+// A step is a delta rather than a whole-document snapshot because pushUndo runs on
+// every keystroke: copying the buffer costs 3.2 ms and 5 MB per character in a
 // 20,000-line script to record a one-line change.
 //
 // newLen isn't knowable when the step is pushed (the edit hasn't run), so the
 // newest step is left open and closed by finalizeStep. docLen is the document's
 // line count at push time, which makes closing possible: an edit confined to the
-// span can only have changed the count from inside it, so the span's new extent
-// is its old one plus the document's net growth.
+// span can only have changed the count from inside it, so the span's new extent is
+// its old one plus the document's net growth.
 //
 // A closed step's [row, row+newLen) must lie inside the document it is applied
 // to, since applyStep slices by it unguarded. That holds only while every
@@ -67,11 +67,11 @@ func linesBytes(lines [][]rune) int {
 // one entry per pop, so redo never holds more entries than undo did, and a new
 // edit clears it. Deliberately not bounded in bytes: applyStep's inverse carries
 // the lines being replaced (the document as it is now), so on a document that
-// grew over its history each inverse is larger than the step that produced it,
-// and redo totals exceed undo totals (48.4 MB against 46.5 MB, measured). The
-// undo stack's byte cap bounds how much history there is to walk back through, so
-// the worst case is one document's worth over maxUndoBytes, not a multiple. A
-// redoBytes cap would trade that for silently dropping the deepest redo.
+// grew over its history each inverse is larger than the step that produced it, and
+// redo totals exceed undo totals. The undo stack's byte cap bounds how much
+// history there is to walk back through, so the worst case is one document's
+// worth over maxUndoBytes, not a multiple. A redoBytes cap would trade that for
+// silently dropping the deepest redo.
 const maxUndoSteps = 500
 
 // maxUndoBytes caps the undo stack's total size, since a step count alone does
@@ -166,8 +166,8 @@ func (e *Editor) trimUndo() {
 }
 
 // applyStep puts st's saved lines back where they came from and returns the
-// closed step that reverses it, so undo and redo are the same operation and a
-// step pushed onto one stack by popping the other is always closed.
+// closed step that reverses it, so undo and redo are the same operation and a step
+// pushed onto one stack by popping the other is always closed.
 //
 // The document takes ownership of st.old rather than a copy, sound only because
 // every caller has already popped st and never applies a step twice: the reverse

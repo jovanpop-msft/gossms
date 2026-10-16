@@ -5,10 +5,10 @@ import "strings"
 // ---------------------------------------------------------------------------
 // Rowset functions: OPENJSON, OPENROWSET, OPENXML
 //
-// A rowset function in a FROM clause has no catalog object: its columns are
-// what its own WITH clause declares, shaped like a CREATE TABLE list ("name
-// type [path] [AS JSON]"). Unparsed, the WITH read as a new statement and the
-// alias was lost, so "j." offered nothing.
+// A rowset function in a FROM clause has no catalog object: its columns are what
+// its own WITH clause declares, shaped like a CREATE TABLE list ("name type
+// [path] [AS JSON]"). Unparsed, the WITH reads as a new statement and the alias
+// is lost, so "j." offers nothing.
 // ---------------------------------------------------------------------------
 
 // Rowset is the column list a rowset function puts in scope.

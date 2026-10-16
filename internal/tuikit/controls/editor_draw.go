@@ -169,9 +169,8 @@ func (r *lineRow) styleForRune(i int) tcell.Style {
 // This is the whole of Editor's rune-index-to-column mapping on the drawing side.
 // It walks by grapheme cluster (core.GraphemeAt), accumulating each cluster's
 // width rather than a column per rune: a CJK glyph or emoji spans two cells and
-// shifts everything after it, "❤️" is two runes of which neither alone is two
-// columns wide, and counting runes put the rest of the line and the caret out of
-// step. A cluster is styled by its first rune.
+// shifts everything after it, and "❤️" is two runes of which neither alone is two
+// columns wide. A cluster is styled by its first rune.
 //
 // Columns past endRune count one virtual rune each, so a linear selection running
 // on to the next line still paints the extra cell showing the line break as
@@ -335,9 +334,10 @@ func (e *Editor) cursorScreenPos() (x, y int) {
 //
 // In wrap mode the row is the cursor's visual row and x is measured from that
 // segment's start, not the logical line's: scrollRow counts visual rows there and
-// scrollCol is zero, so unwrapped arithmetic put the popup and the Ctrl+Space
-// menu on the wrong row once any line above had wrapped. A col in an earlier
-// segment (a token that wrapped mid-word) clamps to the segment's first column.
+// scrollCol is zero, so unwrapped arithmetic would put the popup and the
+// Ctrl+Space menu on the wrong row once any line above had wrapped. A col in an
+// earlier segment (a token that wrapped mid-word) clamps to the segment's first
+// column.
 func (e *Editor) cursorLineScreenPos(col int) (x, y int) {
 	contentX := e.rect.X + e.gutterWidth()
 	line := e.cursorLine()
@@ -415,15 +415,15 @@ func (e *Editor) drawWrapped(s tcell.Screen, contentX, contentW, gw int, gutterS
 			matches: e.matchSpansForLine(vl.row), matchStyle: matchStyle,
 		}
 		if e.highlight != nil {
-			// Runs are scanned per column rather than expanded into a per-rune map: wrap
-			// mode's one call site showing query data is DataGrid's cell viewer, where one
-			// logical line can be a whole varchar(max) document with ~15 rows on screen, and
-			// a per-rune style map would cost work proportional to the cell, not the viewport.
+			// Runs are scanned per column rather than expanded into a per-rune map:
+			// wrap mode's one call site showing query data is DataGrid's cell viewer,
+			// where one logical line can be a whole varchar(max) document with ~15 rows
+			// on screen, and a per-rune style map would cost work proportional to the
+			// cell, not the viewport.
 			//
-			// Only the runs overlapping this segment are passed on, since styleAt scans them
-			// all per column: one run per token over a one-line XML value is tens of
-			// thousands of runs, times every visible column. The query editor's Word Wrap
-			// reaches exactly that (it applies to XML/JSON cell-value panels too).
+			// Only the runs overlapping this segment are passed on, since styleAt scans
+			// them all per column: one run per token over a one-line XML value is tens
+			// of thousands of runs, times every visible column.
 			e.segRunScratch = runsInSpan(e.segRunScratch[:0], runs, vl.start, vl.end)
 			spec.runs = e.segRunScratch
 		}

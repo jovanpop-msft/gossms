@@ -43,9 +43,8 @@ func main() {
 	}
 }
 
-// demo holds the two dashboards and the viewport over the visible one. Canvases
-// are rendered every draw, not cached — the real panel redraws every collection
-// tick too.
+// demo holds both dashboards and the viewport over the visible one. Canvases
+// are re-rendered every draw, as the real panel does.
 type demo struct {
 	history dashboard.HistoryView
 	sample  dashboard.SampleView

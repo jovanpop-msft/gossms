@@ -258,14 +258,13 @@ func (e *Editor) wrapWidth() int {
 // Highlighter applies in wrap mode too: drawWrapped fetches runs per logical line
 // and resolves each column through styleAt.
 //
-// Switching mode resets state the modes disagree about: selBlock assumes the
-// fixed rune columns wrap mode breaks (and handleMouseWrapped never sets it, so
-// no click would clear it), scrollCol is meaningful only outside wrap mode, and
-// scrollRow indexes visual rows in wrap mode and logical lines outside it.
-// Setting the current mode is a no-op, so the construction-time call doesn't move
-// the cursor. The cursor is kept and, once laid out, the view scrolls back to it;
-// otherwise a runtime toggle deep in a long script lands on line 1 with the caret
-// off-screen.
+// Switching mode resets state the modes disagree about: selBlock assumes the fixed
+// rune columns wrap mode breaks (and handleMouseWrapped never sets it, so no click
+// would clear it), scrollCol is meaningful only outside wrap mode, and scrollRow
+// indexes visual rows in wrap mode and logical lines outside it. Setting the
+// current mode is a no-op, so the construction-time call doesn't move the cursor.
+// The cursor is kept and, once laid out, the view scrolls back to it; otherwise a
+// runtime toggle deep in a long script lands on line 1 with the caret off-screen.
 func (e *Editor) SetWrapMode(v bool) {
 	if v == e.wrapMode {
 		return

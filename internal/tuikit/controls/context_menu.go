@@ -17,15 +17,13 @@ type ContextMenu struct {
 	hover   int
 	visible bool
 
-	// drawnX, drawnY cache the on-screen column/row Draw last clamped the
-	// menu to (see geometry) — HandleMouse hit-tests against these rather
-	// than the raw x,y above, having no tcell.Screen to recompute the clamp
-	// itself. Draw runs once per event-loop iteration right after the event
-	// that called Show() and before the next input event is dispatched (see
-	// App.Run), so by the time a click can land, the cache reflects what was
-	// last painted. Without it, a menu shown near the screen's right or
-	// bottom edge draws shifted while hit-testing stays anchored to the
-	// original off-screen request.
+	// drawnX, drawnY cache the on-screen column/row Draw last clamped the menu to
+	// (see geometry); HandleMouse hit-tests against these rather than the raw x,y
+	// above, having no tcell.Screen to recompute the clamp. Draw runs once per
+	// event-loop iteration right after the event that called Show() and before the
+	// next input event (see App.Run), so by the time a click can land the cache
+	// reflects what was painted. Otherwise a menu shown near the right or bottom
+	// edge draws shifted while hit-testing stays anchored to the original request.
 	drawnX, drawnY int
 
 	// cascade holds any open submenu levels (see menuCascade). Cleared by
@@ -33,12 +31,11 @@ type ContextMenu struct {
 	// showing — the same rule ModalDialog.Show follows for its drag latch.
 	cascade menuCascade
 
-	// mouseDragging distinguishes a fresh Button1 press from a continued
-	// hold, needed once a click can leave the menu open: clicking a cascade
-	// item keeps the popup up, and tcell's all-motion tracking resends
-	// Buttons()==Button1 on every motion while the button stays down, so
-	// without the latch a press that twitches over a leaf item would fire
-	// its Action repeatedly.
+	// mouseDragging distinguishes a fresh Button1 press from a continued hold,
+	// needed once a click can leave the menu open: clicking a cascade item keeps the
+	// popup up, and tcell's all-motion tracking resends Button1 on every motion
+	// while held, so without the latch a press that twitches over a leaf item would
+	// fire its Action repeatedly.
 	mouseDragging bool
 }
 
@@ -179,12 +176,10 @@ func (cm *ContextMenu) HandleMouse(ev *tcell.EventMouse) bool {
 
 	level, row, inside := cm.cascade.hit(cm.drawnRect(), mx, my)
 	if !inside {
-		// A click outside dismisses the menu and stops there — it must not
-		// also reach whatever it landed on, or one click would both close
-		// the menu and activate the widget underneath (see
-		// ModalDialog.ConsumeOutsideClick, which likewise consumes). Motion
-		// with no button held still falls through, so hover tracking
-		// elsewhere keeps working while the menu is open.
+		// A click outside dismisses the menu and stops there: it must not also reach
+		// whatever it landed on (see ModalDialog.ConsumeOutsideClick, which likewise
+		// consumes). Motion with no button held still falls through, so hover
+		// tracking elsewhere keeps working while the menu is open.
 		if ev.Buttons() == tcell.Button1 {
 			cm.Hide()
 			return true

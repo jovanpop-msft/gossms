@@ -30,13 +30,12 @@ type MenuBar struct {
 	// menuCascade), cleared whenever the dropdown closes or switches menus.
 	cascade menuCascade
 
-	// scrollTop is the index of the first item drawn, for a dropdown taller than
-	// the rows below the bar. A dropdown hangs off its own header and can't be
-	// shifted up as a ContextMenu can, so the overflow would otherwise be out of
-	// view: Edit's 21 items need 23 rows, and on a 20-row terminal the last three
-	// would paint past the bottom edge, invisible and unreachable. Capping the
-	// height alone hides them behind a tidy border, which is worse. See
-	// drawDropdown.
+	// scrollTop is the index of the first item drawn, for a dropdown taller than the
+	// rows below the bar. A dropdown hangs off its own header and can't be shifted up
+	// as a ContextMenu can, so the overflow would otherwise be out of view (Edit's 21
+	// items need 23 rows; on a 20-row terminal the last three would paint past the
+	// bottom edge, invisible and unreachable). Capping the height alone would hide
+	// them behind a tidy border, which is worse. See drawDropdown.
 	scrollTop int
 
 	// drawnRect caches the box Draw last clamped the dropdown to, as ContextMenu

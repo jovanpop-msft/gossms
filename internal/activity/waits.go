@@ -59,8 +59,8 @@ var benignWaits = []string{
 }
 
 // benignFamilies are background-wait prefixes, excluded by family: names alone
-// let PWAIT_EXTENSIBILITY_CLEANUP_TASK through on SQL Server 2025 (300,000 ms
-// in one 2s sample, flattening the panel), and releases keep adding more.
+// let PWAIT_EXTENSIBILITY_CLEANUP_TASK through on SQL Server 2025 (300,000 ms in
+// one 2s sample), and releases keep adding more.
 var benignFamilies = []string{
 	"SLEEP", "QDS_", "XE_", "BROKER_", "PWAIT_",
 	"FT_", "PARALLEL_REDO_", "DBMIRROR", "SQLTRACE_", "CLR_",
@@ -128,12 +128,12 @@ func categorize(waitType string) WaitCategory {
 	}
 }
 
-// waitDeltas turns two cumulative samples into per-second wait time by
-// category, the signal part of it by category, and the overall signal share
-// (time runnable after the resource was ready: the DMV's view of CPU pressure).
+// waitDeltas turns two cumulative samples into per-second wait time by category,
+// the signal part by category, and the overall signal share (time runnable
+// after the resource was ready: the DMV's view of CPU pressure).
 //
 // wait_time_ms includes signal_wait_time_ms, so resource time = byCategory -
-// signalByCategory. Per-category signal time (not folded into WaitCPU) lets
+// signalByCategory. Keeping signal per category (not folded into WaitCPU) lets
 // one bar show both halves; a mostly-signal category is queueing for CPU.
 //
 // A wait type absent from prev contributes nothing (restart or new type): its

@@ -100,8 +100,8 @@ type PropertySheet struct {
 	// between gestures. tcell resends Button1 on every motion while held, so
 	// without this a drag armed in the form (its scrollbar thumb, a GridRow's
 	// selection) that wanders onto the button row would activate OK/Cancel/Apply
-	// mid-gesture. ModalDialog's mouseDragging can't stop that, being armed only by
-	// a press on a button. Cleared on the ButtonNone release.
+	// mid-gesture. ModalDialog's mouseDragging can't stop that: a press on a button
+	// arms it. Cleared on the ButtonNone release.
 	dragZone focusZone
 
 	headerLeft, headerRight string
@@ -227,13 +227,13 @@ func (p *PropertySheet) PageState(i int) PageState {
 	return p.pages[i].state
 }
 
-// SelectPage switches the visible page, starting its load if it hasn't loaded
-// and no Apply/OK/Script is running. Navigating to a loaded or loading page is
-// always allowed; starting a new load while applying is not: a dirty page's
-// apply closure runs on its own goroutine and, for pages built around a shared
-// rename pointer, writes to it, so a concurrent OnLoadPage would read that
-// pointer unsynchronized. Deferred, not dropped: SetApplying(false) starts the
-// load if the page is still selected and unloaded.
+// SelectPage switches the visible page, starting its load if it hasn't loaded and
+// no Apply/OK/Script is running. Navigating to a loaded or loading page is always
+// allowed; starting a new load while applying is not: a dirty page's apply
+// closure runs on its own goroutine and, for pages built around a shared rename
+// pointer, writes to it, so a concurrent OnLoadPage would read that pointer
+// unsynchronized. Deferred, not dropped: SetApplying(false) starts the load if
+// the page is still selected and unloaded.
 func (p *PropertySheet) SelectPage(i int) {
 	if i < 0 || i >= len(p.pages) {
 		return
@@ -301,10 +301,10 @@ func (p *PropertySheet) SetPageReadOnly(page, seq int, reason string) {
 // loaded page, so a live indent-size change reaches a box on screen. Editors
 // built later take it from controls.SetDefaultIndentWidth; the host sets both.
 //
-// Not guarded by seq or visibility: it carries no page data, so a stale call
-// only sets what the page's next load would have. Read-only rows are included
-// (their text is not re-expanded, see controls.Editor.SetIndentWidth), so a row
-// that stops being read-only isn't left on the old width.
+// Not guarded by seq or visibility: it carries no page data, so a stale call only
+// sets what the page's next load would have. Read-only rows are included (their
+// text is not re-expanded, see controls.Editor.SetIndentWidth), so a row that
+// stops being read-only isn't left on the old width.
 func (p *PropertySheet) SetEditorIndentWidth(n int) {
 	for i := range p.pages {
 		f := p.pages[i].form

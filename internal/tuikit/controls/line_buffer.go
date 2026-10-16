@@ -6,21 +6,21 @@ import (
 	"github.com/radix29/gossms/internal/tuikit/core"
 )
 
-// LineBuffer is an Editor document built somewhere other than the UI
-// goroutine, for Editor.SetLineBuffer to install in O(1).
+// LineBuffer is an Editor document built somewhere other than the UI goroutine,
+// for Editor.SetLineBuffer to install in O(1).
 //
-// SetText does three passes over its text on the UI goroutine — expand tabs,
-// split, convert each line to runes — and the first Draw after it does a
-// fourth, measuring every line for the horizontal scrollbar. On a million
-// lines that was 1.1 s in SetText and 370 ms in the Draw, with the input loop
-// frozen for both. A LineBuffer does all four as lines are appended, on
-// whichever goroutine is building it, and carries the widths along so the
-// Draw has nothing left to measure.
+// SetText does three passes over its text on the UI goroutine (expand tabs, split,
+// convert each line to runes) and the first Draw after it does a fourth, measuring
+// every line for the horizontal scrollbar. On a million lines that is 1.1 s in
+// SetText and 370 ms in the Draw, with the input loop frozen for both. A
+// LineBuffer does all four as lines are appended, on whichever goroutine is
+// building it, and carries the widths along so the Draw has nothing left to
+// measure.
 //
-// A LineBuffer is not safe for concurrent use: one goroutine builds it, then
-// hands it over. Once installed it is shared with the editor, not copied, so
-// an editor that then edits its text writes through it; install one buffer
-// more than once only into a read-only editor.
+// A LineBuffer is not safe for concurrent use: one goroutine builds it, then hands
+// it over. Once installed it is shared with the editor, not copied, so an editor
+// that then edits its text writes through it; install one buffer more than once
+// only into a read-only editor.
 type LineBuffer struct {
 	tab   string
 	lines [][]rune

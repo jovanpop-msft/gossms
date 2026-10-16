@@ -30,8 +30,7 @@ func (g *DataGrid) selectionContains(row, col int) bool {
 // from the anchor rather than start a new one. Alt as well as Shift: a VTE
 // terminal (xfce4-terminal, GNOME Terminal) holds Shift back for its own text
 // selection whenever the app has mouse reporting on, so the app never sees the
-// click; Alt+click is delivered. Key Diagnostics logs mouse events, which tells
-// a terminal that keeps a modifier from a wrong binding.
+// click; Alt+click is delivered.
 const extendSelectionMods = tcell.ModShift | tcell.ModAlt
 
 // HandleKey handles keyboard navigation.
@@ -284,12 +283,12 @@ func (g *DataGrid) HandleMouse(ev *tcell.EventMouse) bool {
 					g.mouseDragging = true
 					g.toggleRow, g.toggleCol = row, col
 					g.selCol = col
-					// Select, then activate, as the keyboard does: without the select, a click on a
-					// cell-cursor grid moves the highlight without telling the page, so a detail
-					// panel wired to OnSelectRow keeps describing the row the keyboard left it on.
-					// Gated on an actual move like the keyboard path: a page that redraws from inside
-					// OnActivateCell must not have its selection callback re-entered on every toggle
-					// of the row it is already on.
+					// Select, then activate, as the keyboard does: without the select, a
+					// click on a cell-cursor grid moves the highlight without telling the
+					// page, so a detail panel wired to OnSelectRow keeps describing the row
+					// the keyboard left it on. Gated on an actual move like the keyboard
+					// path: a page that redraws from inside OnActivateCell must not have its
+					// selection callback re-entered on every toggle of the row it is on.
 					if row != prevRow && g.OnSelectRow != nil {
 						g.OnSelectRow(row)
 					}
@@ -505,10 +504,10 @@ func (g *DataGrid) colAt(x int) (col int, ok bool) {
 // height (rect.H less the header and status rows).
 //
 // A grid not yet laid out has rect.H == 0, so dataH is negative and the second
-// test below is true for every row: the scroll would jump past the whole list
-// and the next Draw paints the header and "N rows" over blank lines. Callers
-// legitimately reach a grid before its first SetBounds (SetSelectedCell via
-// SetDataPreservingView), so the scroll is left alone until there is a viewport.
+// test below is true for every row: the scroll would jump past the whole list and
+// the next Draw paints the header and "N rows" over blank lines. Callers reach a
+// grid before its first SetBounds (SetSelectedCell via SetDataPreservingView), so
+// the scroll is left alone until there is a viewport.
 func (g *DataGrid) ensureVisible(dataH int) {
 	if dataH <= 0 {
 		return

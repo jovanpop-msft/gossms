@@ -35,13 +35,11 @@ func (b ToolbarButton) enabled() bool {
 // button's icon, for visual breathing room and a comfortable mouse target.
 const toolbarButtonPad = 1
 
-// Toolbar is a horizontal row of icon-only buttons, right-aligned within
-// its bounds — designed to sit flush against the right edge of MenuBar's
-// row, sharing the same line. Hovering a button shows a borderless
-// tooltip styled like SSMS's yellow query-execution status bar
-// (theme.StyleGridStatus). Call DrawOverlay after every other panel has
-// drawn, same as MenuBar's own dropdown, since the tooltip extends into
-// the row below the bar.
+// Toolbar is a horizontal row of icon-only buttons, right-aligned within its
+// bounds, designed to sit flush against the right edge of MenuBar's row. Hovering
+// a button shows a borderless tooltip styled like SSMS's yellow query-execution
+// status bar (theme.StyleGridStatus). Call DrawOverlay after every other panel has
+// drawn, as for MenuBar's dropdown, since the tooltip extends into the row below.
 type Toolbar struct {
 	rect    core.Rect
 	buttons []ToolbarButton
@@ -49,15 +47,12 @@ type Toolbar struct {
 	widths  []int // widths[i] is button i's total width (icon + padding); 0 = hidden
 	hover   int   // index of the hovered button, -1 = none
 
-	// mouseDragging distinguishes a fresh Button1 press (fire the button's
-	// Action) from a continued hold over the same button — mirrors
-	// MenuBar's and TreeView's field of the same name and purpose. Without
-	// it, the mouse tracking mode gossms enables (core.Init's
-	// EnableMouse()) resends Buttons()==Button1 on every motion event while
-	// the button stays down, so a click that so much as twitches before
-	// release fires Action again — visibly flickering a toggle button
-	// (e.g. Include Actual Execution Plan) back and forth instead of
-	// flipping it once.
+	// mouseDragging distinguishes a fresh Button1 press (fire the button's Action)
+	// from a continued hold over the same button (as MenuBar and TreeView). Without
+	// it, the mouse tracking mode gossms enables (core.Init's EnableMouse())
+	// resends Button1 on every motion event while the button stays down, so a click
+	// that twitches before release fires Action again, flickering a toggle button
+	// (e.g. Include Actual Execution Plan) instead of flipping it once.
 	mouseDragging bool
 }
 

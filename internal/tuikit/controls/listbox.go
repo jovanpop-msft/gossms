@@ -14,12 +14,11 @@ type ListBox struct {
 	scroll  int
 	focused bool
 
-	// mouseDragging distinguishes a fresh Button1 press from a continued
-	// hold over the same row — mirrors TreeView's/DataGrid's field of the
-	// same name and purpose. Without it, tcell's all-motion mouse tracking
-	// resends Buttons()==Button1 on every cursor motion while the button
-	// stays down, so a single physical click on an already-selected row
-	// would re-fire OnActivate on every resent event instead of once.
+	// mouseDragging distinguishes a fresh Button1 press from a continued hold over
+	// the same row (as TreeView and DataGrid). Without it, tcell's all-motion mouse
+	// tracking resends Button1 on every cursor motion while the button stays down,
+	// so a single click on an already-selected row would re-fire OnActivate on every
+	// resent event instead of once.
 	mouseDragging bool
 
 	// sbDragging is true while the user is dragging the scrollbar thumb —
@@ -42,17 +41,16 @@ func NewListBox() *ListBox {
 }
 
 // SetBounds positions the list box. A change of bounds also re-clamps scroll
-// against the new height: Show() selects the first page (and scrolls it into
-// view) before the first Draw/Layout pass ever assigns real bounds, so
-// ensureVisible's very first call runs against a zero-value rect.H and can
-// scroll one row too far — re-running it once real bounds are known
-// self-corrects that, and keeps the selection in view across any later resize.
+// against the new height: Show() selects the first page (and scrolls it into view)
+// before the first Draw/Layout pass assigns real bounds, so ensureVisible's first
+// call runs against a zero-value rect.H and can scroll one row too far; re-running
+// it once real bounds are known self-corrects that, and keeps the selection in
+// view across any later resize.
 //
-// Bounds that have not moved do nothing, deliberately. Callers lay out from
-// Draw, so the same rect is re-asserted on every frame, and re-running
-// ensureVisible there would snap scroll back onto the selection between one
-// frame and the next — the wheel appeared unable to scroll past the selected
-// row at all.
+// Bounds that have not moved do nothing, deliberately. Callers lay out from Draw,
+// so the same rect is re-asserted every frame, and re-running ensureVisible there
+// would snap scroll back onto the selection between frames: the wheel could not
+// scroll past the selected row at all.
 func (l *ListBox) SetBounds(x, y, w, h int) {
 	r := core.Rect{X: x, Y: y, W: w, H: h}
 	if r == l.rect {

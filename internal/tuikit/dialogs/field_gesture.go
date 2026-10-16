@@ -11,9 +11,8 @@ import (
 // mouseDragging latch (ARCHITECTURE.md § The mouseDragging idiom).
 //
 // It is a type, not a per-dialog idiom, because the idiom is correct only in one
-// order, not local to any of the three calls: it depends on what
-// ModalDialog.ConsumeOutsideClick and a dialog's mode switch do to the events
-// the latch needs. See Release and Replay.
+// order: it depends on what ModalDialog.ConsumeOutsideClick and a dialog's mode
+// switch do to the events the latch needs. See Release and Replay.
 type FieldGesture struct {
 	field *widgets.InputField
 }
@@ -68,11 +67,11 @@ func (g *FieldGesture) Claim(f *widgets.InputField, ev *tcell.EventMouse) {
 // Both halves, because a dialog dismissed mid-drag (Escape with the button down)
 // never sees the release, and dialogs that build their fields once (Connect,
 // Options, Find/Replace, Log Search) hand the same field back next showing. With
-// its latch still set, the first press after reopening took
-// InputField.HandleMouse's continued-drag branch, placing the cursor without
-// arming a new anchor. Invariant 4 in docs/ui-rules.md wants both latches gone,
-// and this is the only call that can reach the field's. Backup, Restore and
-// Filter rebuild their fields in show, discarding the stale one.
+// its latch still set, the first press after reopening takes InputField's
+// continued-drag branch, placing the cursor without arming a new anchor.
+// Invariant 4 in docs/ui-rules.md wants both latches gone, and this is the only
+// call that can reach the field's. Backup, Restore and Filter rebuild their
+// fields in show, discarding the stale one.
 func (g *FieldGesture) Clear() {
 	if g.field != nil {
 		g.field.CancelMouseDrag()

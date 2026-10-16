@@ -17,19 +17,18 @@ type lineMark struct {
 // re-lexing the batch on every keystroke, preceded by the temp tables the
 // batches above it carry in (CarryTempBindings).
 //
-// The batch scan runs only when a temp-table or table-variable sigil is in
-// play, but then covered the whole batch in both directions: lex forward to the
-// next "GO", then tokenize from the last one. On a 20,000-line batch that was
-// 23 ms for the forward lex and 90 ms with the tokens, per keystroke on the UI
-// goroutine (N3), past a frame at about 3,000 lines.
+// The batch scan runs only when a temp-table or table-variable sigil is in play,
+// but a whole-batch scan (lex forward to the next "GO", tokenize from the last
+// one) costs 23 ms forward plus 90 ms with tokens on a 20,000-line batch, per
+// keystroke on the UI goroutine; past a frame at about 3,000 lines.
 //
 // This keeps the token stream of everything lexed, plus every LexNormal line
 // start (lineMark), and on the next call diffs the buffer against the copy it
 // described. Only the changed window is re-lexed: the walk restarts at the last
-// mark at or before the first changed rune, and stops at the first mark past
-// the window that the previous pass also reached as a mark at the same distance
-// from the buffer end. From there the old tokens and marks are true again,
-// shifted by the length change. Three facts make that sound:
+// mark at or before the first changed rune, and stops at the first mark past the
+// window that the previous pass also reached as a mark at the same distance from
+// the buffer end. From there the old tokens and marks are true again, shifted by
+// the length change. Three facts make that sound:
 //
 //   - A mark needs no saved state: LexNormal, block-comment depth 0, nothing
 //     open. Resuming at one is exact.
@@ -41,24 +40,23 @@ type lineMark struct {
 //     (sqltext.GoSeparatorAt reads only its own line).
 //
 // Typing changes one line, so an ordinary keystroke re-lexes that line and
-// resynchronises at the next; one that opens a comment or literal re-lexes
-// until it closes. The diff and shift are O(buffer) but carry no lexing:
+// resynchronises at the next; one that opens a comment or literal re-lexes until
+// it closes. The diff and shift are O(buffer) but carry no lexing:
 // BenchmarkBatchBindingsTypingFirstLine20k measures 11 ms against its
-// reference's 95, ScanBindings itself about half of that.
+// reference's 95.
 //
-// Lexing is lazy: only far enough to find the batch end below the cursor, so
-// the first call on a long script pays for the text above and in the batch, not
+// Lexing is lazy: only far enough to find the batch end below the cursor, so the
+// first call on a long script pays for the text above and in the batch, not
 // after it.
 //
 // Every scan is a whole-buffer lex resumed in pieces, so the batch's bounds are
 // the GO lines that lex finds: the last strictly above the cursor's row and the
-// first strictly below it. That is where PrefixScan.GoStart puts the start, and
-// where the forward scan from the cursor put the end, except with the cursor
-// between the two runes of a "--" or "/*", which a scan starting there read as
-// no comment at all.
+// first strictly below it. That matches PrefixScan.GoStart and the forward scan
+// from the cursor, except with the cursor between the two runes of a "--" or
+// "/*", which a scan starting there read as no comment at all.
 //
-// The zero value is ready to use. Not safe for concurrent use: it belongs to
-// the UI goroutine.
+// The zero value is ready to use. Not safe for concurrent use: it belongs to the
+// UI goroutine.
 type BatchCache struct {
 	// text is the buffer tokens and marks describe, copied: the caller's
 	// buffer is reused across keystrokes (see FlattenLinesInto), so it cannot

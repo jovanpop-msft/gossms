@@ -1,14 +1,14 @@
-// Package dialogs provides the ModalDialog base type and generic re-usable
-// dialog implementations (AlertDialog, ConfirmDialog, TypedConfirmDialog,
-// PromptDialog, ProgressDialog, PropertiesDialog, FileDialog).
+// Package dialogs provides the ModalDialog base type and generic re-usable dialog
+// implementations (AlertDialog, ConfirmDialog, TypedConfirmDialog, PromptDialog,
+// ProgressDialog, PropertiesDialog, FileDialog).
 //
 // Every dialog embeds ModalDialog which:
 //   - Fades the underlying UI in place (keeping it visible) before its own box
 //   - Intercepts all mouse clicks outside its border (focus trap)
 //   - Cannot lose focus until explicitly dismissed
 //
-// Application-specific dialogs (ConnectDialog, HelpDialog, etc.) live in
-// the tui package and embed ModalDialog from here.
+// Application-specific dialogs (ConnectDialog, HelpDialog, etc.) live in the tui
+// package and embed ModalDialog from here.
 //
 //   - modal.go              — ModalDialog base type
 //   - common.go             — helpers shared across more than one dialog file
@@ -21,7 +21,7 @@
 //   - confirm_dialog.go     — ConfirmDialog (two-button yes/no)
 //   - typed_confirm_dialog.go — TypedConfirmDialog (retype-to-confirm)
 //   - progress_dialog.go    — ProgressDialog (spinner, elapsed time, Cancel)
-//   - file_dialog.go        — FileDialog (Open/Save file picker); split
-//     across file_dialog_draw.go (rendering), file_dialog_input.go
-//     (key/mouse handling), and file_dialog_complete.go (path completion)
+//   - file_dialog.go        — FileDialog (Open/Save file picker); split across
+//     file_dialog_draw.go (rendering), file_dialog_input.go (key/mouse handling)
+//     and file_dialog_complete.go (path completion)
 package dialogs

@@ -120,9 +120,9 @@ func readTrackedFile(path string) (map[string]map[string][]int64, error) {
 		log.Printf("tracked queries: %s did not parse (%v); kept as %s", path, err, kept)
 		return sets, nil
 	}
-	// Merged, not assigned: keys are re-folded on every read, so a file
-	// written under an older fold (ToLower(Server)) loads into today's keys and
-	// spellings naming one instance ("host", "host,1433") pool their ids.
+	// Merged, not assigned: keys are re-folded on every read, so a file written
+	// under an older fold (ToLower(Server)) loads into today's keys and spellings
+	// naming one instance ("host", "host,1433") pool their ids.
 	for server, dbs := range f.Tracked {
 		for database, ids := range dbs {
 			held := sets[serverKey(server)][database]
@@ -134,14 +134,12 @@ func readTrackedFile(path string) (map[string]map[string][]int64, error) {
 
 // serverKey folds a server address by InstanceKey, the rule peers and saved
 // credentials key by: HOST\SQL2022, host\sql2022 and host\sql2022,1500 share a
-// set, as do "host" and "host,1433", while "host,55253" is another instance.
-// Callers pass ConnectionAddress(opts), not opts.Server, which drops a
-// Port-field port.
+// set, as do "host" and "host,1433"; "host,55253" is another instance. Callers
+// pass ConnectionAddress(opts), not opts.Server, which drops a Port-field port.
 //
-// The database is deliberately not folded: database names come from
-// sys.databases in the server's spelling, and on a case-sensitive collation
-// Sales and sales are different databases. TestServerIsFoldedAndDatabaseIsNot
-// pins it.
+// The database is deliberately not folded: names come from sys.databases in the
+// server's spelling, and on a case-sensitive collation Sales and sales differ
+// (TestServerIsFoldedAndDatabaseIsNot).
 func serverKey(server string) string { return InstanceKey(server) }
 
 // SameServer reports whether two addresses name the same instance, by the same
@@ -224,10 +222,9 @@ func (t *TrackedQueries) Toggle(server, database string, id int64) (tracked bool
 }
 
 // Save writes the file, refusing to overwrite one that couldn't be read (see
-// unreadable). It re-reads the file, replays this process's unsaved Toggles
-// onto it, then adopts the result, so pins another instance saved meanwhile
-// are kept. A Toggle made during the write stays pending for the next Save,
-// replayed onto the adopted set so memory keeps it too.
+// unreadable). It re-reads the file, replays this process's unsaved Toggles onto
+// it, then adopts the result, so pins another instance saved meanwhile are kept.
+// A Toggle made during the write stays pending for the next Save.
 func (t *TrackedQueries) Save() error {
 	if t == nil {
 		return errors.New("tracked queries: no set loaded")

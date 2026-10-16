@@ -58,12 +58,11 @@ func Missing(sc *db.ServerConn, dbName, schema, object string, groups ...[]Right
 	return first, found
 }
 
-// NoteName is how a withheld item's note names one right: bare for database-
-// and server-wide rights; scoped for a right on one schema, securable or
-// object, where "needs CONTROL" would read as the far wider database-wide
-// right. Matters most for Move to Schema, the only note an object-scoped right
-// leads: "needs CONTROL" sent readers after CONTROL on the database when
-// CONTROL on the one object is the grant.
+// NoteName is how a withheld item's note names one right: bare for database- and
+// server-wide rights; scoped for a right on one schema, securable or object,
+// where "needs CONTROL" would read as the far wider database-wide right (Move to
+// Schema, the only note an object-scoped right leads, needs CONTROL on the one
+// object).
 func NoteName(r Right) string {
 	if r.Securable != "" || r.Schema || r.Object {
 		return r.nameOnly()
@@ -98,13 +97,13 @@ func ItemOnAll(item controls.MenuItem, sc *db.ServerConn, dbName, schema, object
 			item.Note = right + " denied on " + where
 		}
 		// And only when the rights are why it is disabled: an item its own
-		// predicate withheld (a failover offered on secondaries only) is grey
-		// for a reason this note doesn't describe.
+		// predicate withheld (a failover offered on secondaries only) is grey for a
+		// reason this note doesn't describe.
 		//
 		// prev alone decides: NoteWhen is consulted only while disabled
-		// (MenuItem.showsNote), and with prev passing that means allowed() said
-		// no. Asking again re-ran the whole gate on every draw of every
-		// withheld item.
+		// (MenuItem.showsNote), and with prev passing that means allowed() said no.
+		// Asking again would re-run the whole gate on every draw of every withheld
+		// item.
 		item.NoteWhen = func() bool { return prev == nil || prev() }
 	}
 	item.Enabled = func() bool {

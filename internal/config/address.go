@@ -12,11 +12,11 @@ import (
 // so tracked-query sets and per-identity caches key by the same rule as db's
 // peer resolver.
 
-// DialPort is the gosmo.ConnectionOptions.Port a saved Port dials with: 1433
-// is 0, unspecified. The driver defaults to 1433 anyway, and a port on
-// "host\instance" suppresses the SQL Browser lookup for the instance's dynamic
-// port (win10cli\sql2017 listens on 55253; a pinned 1433 reaches the default
-// instance). A port written in Server wins over it, in gosmo.
+// DialPort is the gosmo.ConnectionOptions.Port a saved Port dials with: 1433 is
+// 0, unspecified. The driver defaults to 1433, and a port on "host\instance"
+// suppresses the SQL Browser lookup for the instance's dynamic port (a pinned
+// 1433 reaches the default instance, not a named one). A port written in Server
+// wins, in gosmo.
 func DialPort(port int) int {
 	if port == 1433 {
 		return 0
@@ -24,14 +24,13 @@ func DialPort(port int) int {
 	return port
 }
 
-// ResolveServer folds the dialog's Server and Port into one address string,
-// for keys (ConnectionAddress) and the Connect dialog's display; dialling
-// passes them to gosmo separately (db.toGosmoOptions). Server may already be
-// any gosmo.ParseServerAddress form; a port it carries wins, as in gosmo.
+// ResolveServer folds the dialog's Server and Port into one address string, for
+// keys (ConnectionAddress) and the Connect dialog's display; dialling passes
+// them to gosmo separately (db.toGosmoOptions). Server may be any
+// gosmo.ParseServerAddress form; a port it carries wins, as in gosmo.
 //
-// Port 0 or 1433 is omitted (DialPort). With "\instance", a non-default port
-// is appended with a comma; gosmo reads a colon there as part of the instance
-// name.
+// Port 0 or 1433 is omitted (DialPort). With "\instance", a non-default port is
+// appended with a comma; gosmo reads a colon there as part of the instance name.
 func ResolveServer(server string, dialogPort int) string {
 	host, _, embeddedPort := gosmo.ParseServerAddress(server)
 	if embeddedPort != 0 {
@@ -51,20 +50,18 @@ func ResolveServer(server string, dialogPort int) string {
 	return fmt.Sprintf("%s%s%d", server, sep, port)
 }
 
-// InstanceKey normalizes an instance name for keying peers, credentials and
-// the tracked-query sets:
-// lowercased host, then "\instance" for a named instance, or ",port" when
-// there's no instance name and the port isn't 1433.
+// InstanceKey normalizes an instance name for keying peers, credentials and the
+// tracked-query sets: lowercased host, then "\instance" for a named instance, or
+// ",port" when there's no instance name and the port isn't 1433.
 //
 // A named instance is identified by name, so its port is dropped
 // ("host\inst,1500" = "host\inst"). Without a name the port distinguishes
-// instances on one host (win10cli vs "win10cli,55253" for SQL2017); a shared
-// key would try the other instance's login, counting toward a CHECK_POLICY
-// lockout. 1433 equals no port, as the driver dials it by default.
+// instances on one host; a shared key would try the other instance's login,
+// counting toward a CHECK_POLICY lockout. 1433 equals no port.
 //
 // The catalog reports names without ports, so a default instance saved as
-// "host,1500" doesn't answer a peer read for "HOST"; Peer then falls back to
-// the parent's settings.
+// "host,1500" doesn't answer a peer read for "HOST"; Peer then falls back to the
+// parent's settings.
 func InstanceKey(server string) string {
 	host, instance, port := gosmo.ParseServerAddress(strings.TrimSpace(server))
 	key := strings.ToLower(host)
@@ -86,13 +83,13 @@ func ConnectionAddress(c Connection) string {
 }
 
 // IdentityKey identifies the instance and the identity c signs in as: its
-// InstanceKey, then the GeneratedName identity and auth tag, NUL-separated
-// (a login name or an address may hold a comma; neither can hold a NUL).
+// InstanceKey, then the GeneratedName identity and auth tag, NUL-separated (a
+// login name or address may hold a comma; neither can hold a NUL).
 //
 // Key anything that depends on who is looking by it: the IntelliSense caches
 // (the catalog is filtered by metadata visibility) and saved OE filters. User
 // alone is empty for Windows, Entra Default/MSI and service principals, so two
-// identities on one server would share one catalog, and disconnecting either
+// identities on one server would share a catalog, and disconnecting either
 // would purge the other's. The database is left out; a per-database cache
 // appends its own.
 func (c Connection) IdentityKey() string {

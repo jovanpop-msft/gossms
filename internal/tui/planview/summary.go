@@ -173,9 +173,9 @@ func (v *PlanView) syncSummaryCopyHook() {
 
 // handleSummaryOverlayKey forwards straight to the grid, bypassing
 // handleSummaryKey's Enter handling: with a popup open Enter activates the
-// highlighted menu item, not the jump-to-tree-node shortcut. Going through
-// handleSummaryKey made Enter jump the tree and leave the menu open, so "Show
-// Value" could not be chosen by keyboard.
+// highlighted menu item, not the jump-to-tree-node shortcut (otherwise Enter
+// jumps the tree and leaves the menu open, so "Show Value" can't be chosen by
+// keyboard).
 func (v *PlanView) handleSummaryOverlayKey(ev *tcell.EventKey) bool {
 	v.syncSummaryCopyHook()
 	return v.summarySt.grid.HandleKey(ev)

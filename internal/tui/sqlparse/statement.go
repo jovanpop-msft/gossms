@@ -132,9 +132,8 @@ func (s *dmlSplitter) advance(t Token) bool {
 // containing upTo, using DMLStatementStarts on tokens (which must span the same
 // range so depth tracking starts at 0).
 //
-// Only tests call it: it is the oracle NarrowStatementForward is checked
-// against (statement_forward_test.go) and internal/tui's completion tests'
-// composition.
+// Only tests call it: it is the oracle NarrowStatementForward is checked against
+// (statement_forward_test.go) and internal/tui's completion tests' composition.
 func NarrowToDMLStatement(tokens []Token, batchStart, batchEnd, upTo int) (start, end int) {
 	start, end = batchStart, batchEnd
 	for _, off := range DMLStatementStarts(tokens) {
@@ -152,14 +151,14 @@ func NarrowToDMLStatement(tokens []Token, batchStart, batchEnd, upTo int) (start
 // NarrowToDMLStatement (the reference composition in statement_forward_test.go)
 // in one bounded pass. prefix holds the tokens of [batchStart, upTo) as
 // ScanPrefix returns them; the forward half is lexed from from (upTo, or just
-// past a bracket identifier the cursor sits in) and stops at the first
-// top-level ';', the next "GO" line below cursorRow, or the first keyword after
-// upTo that starts a new statement. It returns the cursor's statement bounds
-// and the forward tokens in [from, end).
+// past a bracket identifier the cursor sits in) and stops at the first top-level
+// ';', the next "GO" line below cursorRow, or the first keyword after upTo that
+// starts a new statement. It returns the cursor's statement bounds and the
+// forward tokens in [from, end).
 //
 // Stopping at the next statement is the point: in a script that ends no
-// statement with ';', a ';'/GO scan lexes everything below the cursor (200-250
-// ms and 53 MB per keystroke on a 20k-line script, B11). The leader test is
+// statement with ';', a ';'/GO scan lexes everything below the cursor (200-250 ms
+// and 53 MB per keystroke on a 20k-line script). The leader test is
 // DMLStatementStarts' own, seeded with the prefix, so a SELECT continuing an
 // INSERT, WITH or UNION before the cursor still continues it.
 func NarrowStatementForward(lines [][]rune, buf []rune, cursorRow, batchStart, from, upTo int, prefix []Token) (start, end int, tail []Token) {

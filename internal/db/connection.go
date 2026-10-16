@@ -17,9 +17,9 @@ import (
 	"github.com/radix29/gossms/internal/config"
 )
 
-// maxOpenConns and maxIdleConns bound gosmo's pool per connection. Detail
-// panels fan out one connection per row; gosmo's default MaxIdleConns (2) would
-// close them again and pay full setup on every refresh. sql.DB queues past
+// maxOpenConns and maxIdleConns bound gosmo's pool per connection. Detail panels
+// fan out one connection per row; gosmo's default MaxIdleConns (2) would close
+// them again and pay full setup on every refresh. sql.DB queues past
 // MaxOpenConns rather than erroring.
 const (
 	maxOpenConns = 20
@@ -101,12 +101,11 @@ type ServerConn struct {
 }
 
 // ConnectContext opens a connection for role. Cancelling ctx aborts the attempt
-// in flight; connectTimeout always applies too. ctx covers only the attempt;
-// the connection lives until Close.
+// in flight; connectTimeout always applies too. ctx covers only the attempt; the
+// connection lives until Close.
 //
 // A NeedsSignIn method signs in first under SignInTimeout (see SignIn), so the
-// connect timeout never has to cover finding a phone. An existing sign-in costs
-// nothing.
+// connect timeout never has to cover finding a phone.
 //
 // Failures are *ConnectionError, including option errors before dialling (an
 // unknown auth method, a malformed Extra Properties entry, or one naming a
@@ -159,13 +158,13 @@ func newServerConn(ctx context.Context, opts config.Connection, srv *gosmo.Serve
 // gosmo.ConnectionOptions, used by Connect and BuildConnectionString so the
 // dialog preview is exactly what's sent.
 //
-// Dialog fields do not map one-to-one: a service principal's application id is
+// Dialog fields don't map one-to-one: a service principal's application id is
 // gosmo's User (secret as Password); the app registration for Password, MFA and
-// Device Code is ApplicationClientID; only a user-assigned managed identity
-// uses ClientID. A service principal saved with its id in User is the fallback.
-// MFA's User is a login hint. Fields a method does not use (config.FieldsFor)
-// are not passed. Every Entra method gets the shared entraCache and
-// device-code prompt (entra.go).
+// Device Code is ApplicationClientID; only a user-assigned managed identity uses
+// ClientID. A service principal saved with its id in User is the fallback. MFA's
+// User is a login hint. Fields a method doesn't use (config.FieldsFor) are not
+// passed. Every Entra method gets the shared entraCache and device-code prompt
+// (entra.go).
 func toGosmoOptions(opts config.Connection, role Role) (gosmo.ConnectionOptions, error) {
 	auth, err := toGosmoAuth(opts.AuthMethod)
 	if err != nil {
@@ -343,10 +342,10 @@ func encryptString(m config.EncryptMode) string {
 }
 
 // toGosmoAuth maps config.AuthMethod to gosmo.AuthMethod with an explicit
-// switch; the enums aren't guaranteed to align. An unknown method (a
-// hand-edited config.json, or one written by a newer gossms) is refused, not
-// dialled as some other login mode: the Connect dialog opens it on its first
-// method, so picking one there and connecting is the repair.
+// switch; the enums aren't guaranteed to align. An unknown method (hand-edited
+// config.json, or written by a newer gossms) is refused, not dialled as some
+// other login mode: the Connect dialog opens it on its first method, so picking
+// one there is the repair.
 func toGosmoAuth(m config.AuthMethod) (gosmo.AuthMethod, error) {
 	switch m {
 	case config.AuthSQLServer:
@@ -417,12 +416,12 @@ func explainExtraProperty(err error) error {
 //
 // From Go 1.27 either variable makes Windows and macOS load roots from disk
 // instead of the platform store (GODEBUG x509sslcertoverrideplatform), so an
-// enterprise CA present only in the system store stops validating. The
-// variables are often set by unrelated installs (Python, corporate images).
-// The hint is also true on Linux, so there is no GOOS branch.
+// enterprise CA present only in the system store stops validating. The variables
+// are often set by unrelated installs (Python, corporate images). The hint is
+// also true on Linux, so there is no GOOS branch.
 //
-// The text match backs up the type check: go-mssqldb's Mandatory-mode
-// handshake wraps with %v (tds.go), losing the *x509.UnknownAuthorityError.
+// The text match backs up the type check: go-mssqldb's Mandatory-mode handshake
+// wraps with %v (tds.go), losing the *x509.UnknownAuthorityError.
 func certStoreHint(err error) string {
 	if os.Getenv("SSL_CERT_FILE") == "" && os.Getenv("SSL_CERT_DIR") == "" {
 		return ""

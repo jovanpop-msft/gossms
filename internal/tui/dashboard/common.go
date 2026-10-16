@@ -11,11 +11,9 @@ import (
 
 // Canvas sizes. A dashboard is always laid out at these dimensions and the
 // caller scrolls a viewport over it, so proportions don't reflow on resize.
-//
-// The widths are the narrowest fitting three side-by-side panels at the
-// mockups' density; the heights are the sections' sum. The mockups are wider
-// (~198 columns) and extra width only buys more time buckets, which a caller
-// with a wider terminal gets by passing a wider canvas.
+// Widths are the narrowest fitting three side-by-side panels; heights are the
+// sections' sum. Extra terminal width only buys more time buckets, which a
+// caller gets by passing a wider canvas.
 const (
 	HistoryCanvasW = 150
 	HistoryCanvasH = 61

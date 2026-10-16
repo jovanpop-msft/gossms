@@ -35,9 +35,9 @@ type MenuItem struct {
 	//
 	// An item can be withheld for more than one reason and Note describes one of
 	// them. "Fail Over to This Replica..." is disabled on the primary because a
-	// replica cannot fail over to itself, yet was labelled "needs ALTER ANY
-	// AVAILABILITY GROUP", a right the login may hold, sending them to ask for a
-	// permission that would change nothing.
+	// replica cannot fail over to itself; labelling it "needs ALTER ANY
+	// AVAILABILITY GROUP" would send the user to ask for a permission that changes
+	// nothing.
 	NoteWhen func() bool
 }
 

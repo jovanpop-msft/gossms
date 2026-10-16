@@ -52,8 +52,8 @@ func DrawTextClipped(s tcell.Screen, x, y, maxW int, style tcell.Style, text str
 //
 // One pass: graphemes are drawn while they fit maxW-1 columns. The first that
 // doesn't is where "…" goes if text overflows, and what follows fits in at most
-// the two columns its width allows, so up to two are held back until the
-// overflow question is answered.
+// the two columns its width allows, so up to two are held back until the overflow
+// question is answered.
 func DrawTextLine(s tcell.Screen, x, y, maxW int, style tcell.Style, text string) {
 	if maxW <= 0 {
 		return
@@ -338,9 +338,9 @@ func DrawScrollbar(s tcell.Screen, x, y, h, total, visible, offset int, style, t
 }
 
 // scrollThumb returns the thumb's length and its start within a track of length
-// n, for total > visible. The start spans the free track, n-length, in step
-// with offset's span, total-visible, so the last offset puts the thumb's end on
-// Placing it at offset*n/total left rounding to decide and stopped short of the
+// n, for total > visible. The start spans the free track, n-length, in step with
+// offset's span, total-visible, so the last offset puts the thumb's end on the
+// track's end. offset*n/total leaves rounding to decide and stops short of the
 // bottom (a 10-row track over 30 rows, 10 visible, ended at row 8).
 func scrollThumb(n, total, visible, offset int) (length, start int) {
 	length = Clamp(n*visible/total, 1, n)
@@ -382,9 +382,9 @@ func DrawScrollbarH(s tcell.Screen, x, y, w, total, visible, offset int, style, 
 }
 
 // HandleScrollbarDrag is the mouse-side counterpart of DrawScrollbar: given the
-// same x/y/h/total, it handles a Button1 press or drag on the bar. It takes one
-// h as both track length and visible count (every caller passes the same); a
-// caller with a different visible count needs its own drag math.
+// same x/y/h/total, it handles a Button1 press or drag on the bar. It takes one h
+// as both track length and visible count (every caller passes the same); a caller
+// with a different visible count needs its own drag math.
 //
 // *dragging latches for the whole gesture: set on the qualifying initial press,
 // so every call while the button stays down controls *scroll even once the mouse

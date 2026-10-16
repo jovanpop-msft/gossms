@@ -36,28 +36,28 @@ type boundary struct {
 //
 // ScanPrefix lexes the whole prefix on every keystroke just to locate two
 // boundaries (the offset after the last top-level ';' and the line after the
-// last bare "GO" above the cursor), then tokenizes from the later one. That
-// pass is O(script): 0.57 ms on a 100-statement script, 5.9 ms on 1000, on the
-// UI goroutine, per keystroke while the popup is open.
+// last bare "GO" above the cursor), then tokenizes from the later one. That pass
+// is O(script): 0.57 ms on a 100-statement script, 5.9 ms on 1000, on the UI
+// goroutine, per keystroke while the popup is open.
 //
-// This keeps every boundary the previous pass crossed and restarts from the
-// last one *before* the edit, making the pass O(statement) for ordinary typing.
-// Sound because:
+// This keeps every boundary the previous pass crossed and restarts from the last
+// one *before* the edit, making the pass O(statement) for ordinary typing. Sound
+// because:
 //
 //   - Every boundary is a LexNormal position, so resuming needs no saved lexer
 //     state (see boundary).
-//   - A boundary before the edit keeps its offset: only text at or after the
-//     edit point moves. Unlike controls.prefixStates, which is indexed by line
-//     and must start over whenever the line count changes.
+//   - A boundary before the edit keeps its offset: only text at or after the edit
+//     point moves. Unlike controls.prefixStates, which is indexed by line and
+//     must start over whenever the line count changes.
 //   - Restarting mid-buffer cannot miss a "GO" line. A separator must start a
 //     line; the line holding the restart offset began before it and was already
 //     scanned, and every later line start is still walked.
 //
 // The zero value is an empty cache and every method falls back to a full scan
 // when it cannot justify a resume, so a caller never resets it: a different
-// document, or a revision more than one version ahead, costs one cold scan.
-// That fallback is the kill switch: make validPrefix return (0, 0)
-// unconditionally and this is ScanPrefix again.
+// document, or a revision more than one version ahead, costs one cold scan. That
+// fallback is the kill switch: make validPrefix return (0, 0) unconditionally and
+// this is ScanPrefix again.
 //
 // Not safe for concurrent use; it belongs to the UI goroutine.
 type PrefixCache struct {
@@ -73,10 +73,10 @@ type PrefixCache struct {
 	// scannedTo) with one gap that cannot matter: "GO" detection stops at the
 	// cursor's own row, since a separator the cursor sits inside is half written
 	// and must not be judged from its prefix. That row is the only line start in
-	// [rowStart, scannedTo), and a real separator line holds no ';', so no
-	// boundary is recorded above rowStart when that row is a separator. A later
-	// scan with the cursor further down reaches past scannedTo, resumes at or
-	// below that row, and re-examines it.
+	// [rowStart, scannedTo), and a real separator line holds no ';', so no boundary
+	// is recorded above rowStart when that row is a separator. A later scan with
+	// the cursor further down reaches past scannedTo, resumes at or below that row,
+	// and re-examines it.
 	scannedTo int
 
 	// bounds is every boundary crossed below scannedTo, ascending by offset. "GO"
@@ -87,10 +87,10 @@ type PrefixCache struct {
 	// starts is every DML statement start (DMLStatementStarts) in [startsFrom,
 	// startsTo), ascending, where startsFrom is the batch start the splitter that
 	// found them began at. They bound the work in a batch with no ';': without
-	// them the boundary pass resumed at offset 0 and tokenized the whole prefix
-	// per keystroke (B11's backward half). A start is a LexNormal position at
-	// paren depth 0, and the splitter's state just past it depends on its keyword
-	// alone, so both passes can resume there exactly; see stmtStart.
+	// them the boundary pass resumes at offset 0 and tokenizes the whole prefix per
+	// keystroke. A start is a LexNormal position at paren depth 0, and the
+	// splitter's state just past it depends on its keyword alone, so both passes
+	// can resume there exactly; see stmtStart.
 	starts               []stmtStart
 	startsFrom, startsTo int
 }
@@ -141,10 +141,10 @@ func (c *PrefixCache) Scan(lines [][]rune, buf []rune, cursorRow, upTo int, rev 
 
 	// bounds may reach past the cursor (a cursor moved up leaves the boundaries
 	// below it recorded and still true), so both reads stop at upTo. For a "GO"
-	// boundary that bound *is* ScanPrefix's "strictly above the cursor's row"
-	// rule: the boundary is the start of the line after the separator, and the
-	// only line start at or below upTo and above rowStart would be a newline
-	// inside the cursor's own row.
+	// boundary that bound *is* ScanPrefix's "strictly above the cursor's row" rule:
+	// the boundary is the start of the line after the separator, and the only line
+	// start at or below upTo and above rowStart would be a newline inside the
+	// cursor's own row.
 	lastSemi, lastGo := 0, 0
 	for _, b := range c.bounds {
 		if b.off > upTo {
@@ -206,15 +206,15 @@ func (c *PrefixCache) Scan(lines [][]rune, buf []rune, cursorRow, upTo int, rev 
 	}
 }
 
-// validPrefix reports how far bounds is still complete and true for rev, and
-// how many of its entries reach that far; (0, 0) when the cache cannot justify
-// a resume, which starts the next scan from offset 0.
+// validPrefix reports how far bounds is still complete and true for rev, and how
+// many of its entries reach that far; (0, 0) when the cache cannot justify a
+// resume, which starts the next scan from offset 0.
 //
 // The invalidation rule is controls.prefixStates': the document's identity as
 // well as its version (two documents number versions independently from zero),
-// and a version exactly one ahead (DirtyFrom describes one mutation only).
-// Typing is a single setLine and so hits; a keystroke that first deletes a
-// selection bumps the version twice and costs one cold scan.
+// and a version exactly one ahead (DirtyFrom describes one mutation only). Typing
+// is a single setLine and so hits; a keystroke that first deletes a selection
+// bumps the version twice and costs one cold scan.
 func (c *PrefixCache) validPrefix(lines [][]rune, rev TextRevision) (validTo, keep int) {
 	if !c.valid || rev.Doc == nil || c.doc != rev.Doc {
 		return 0, 0

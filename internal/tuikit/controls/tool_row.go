@@ -13,11 +13,11 @@ const ToolRowMoreLabel = "More ▾"
 // ToolCell is one clickable cell of a ToolRow.
 //
 // Selected, Disabled and Reason are for the host's drawing and gating: the row
-// neither draws nor enforces them. A host that dims a cell still refuses the
-// click itself, since a dimmed control that acts on a click is the failure the
-// context-gating rule exists to prevent. A host whose gate is a predicate
-// asked per draw and per click (one that depends on a probe not yet run when
-// the row was built) leaves them unset.
+// neither draws nor enforces them. A host that dims a cell still refuses the click
+// itself, since a dimmed control that acts on a click is the failure the
+// context-gating rule exists to prevent. A host whose gate is a predicate asked
+// per draw and per click (one that depends on a probe not yet run when the row was
+// built) leaves them unset.
 type ToolCell struct {
 	Label    string
 	Selected bool
@@ -61,18 +61,18 @@ type ToolRow struct {
 	NoOverflow bool
 }
 
-// Layout places the cells left to right inside r, after prefix (a label the
-// host draws, such as "Refresh rate:"), and returns the column past the last
-// cell placed plus one gap — More included — which is where a host puts
-// whatever shares the row (a filter field, a right-aligned status).
+// Layout places the cells left to right inside r, after prefix (a label the host
+// draws, such as "Refresh rate:"), and returns the column past the last cell
+// placed plus one gap — More included — which is where a host puts whatever shares
+// the row (a filter field, a right-aligned status).
 //
-// Cells that do not fit are hidden right to left by the same policy Toolbar
-// uses (hideToFit), with room for More taken out of the row first, or the
-// cell that stands in for the overflow would overflow. More is placed even
-// when it holds the whole row: a menu that is the entire toolbar still reaches
-// every action. It also takes the prefix's place on a row too narrow for both
-// — a label naming controls that are not on the row is worse than no label.
-// Only a row too narrow for More itself goes without (see PrefixShown).
+// Cells that do not fit are hidden right to left by the same policy Toolbar uses
+// (hideToFit), with room for More taken out of the row first, or the cell that
+// stands in for the overflow would overflow. More is placed even when it holds the
+// whole row: a menu that is the entire toolbar still reaches every action. It also
+// takes the prefix's place on a row too narrow for both, since a label naming
+// controls that are not on the row is worse than no label. Only a row too narrow
+// for More itself goes without (see PrefixShown).
 func (tr *ToolRow) Layout(r core.Rect, prefix string) int {
 	tr.More, tr.Hidden = ToolCell{}, nil
 	for i := range tr.Cells {
@@ -173,13 +173,12 @@ func (tr *ToolRow) OverflowItems(disabled func(int) bool, reason func(int) strin
 		if tr.Cells[i].Selected {
 			label = "• " + label
 		}
-		// Note is fixed when the menu is built, while Enabled is asked on every
-		// draw. Ask reason only for a cell withheld right now: a reason function
-		// is free to answer for a state the cell isn't in (Query Store's returns
-		// the permission text whenever the login can't force a plan, including
-		// for cells that don't need the permission), and an enabled item never
-		// shows its note anyway. A menu is modal, so nothing underneath it
-		// changes while it is open.
+		// Note is fixed when the menu is built, while Enabled is asked on every draw.
+		// Ask reason only for a cell withheld right now: a reason function may answer
+		// for a state the cell isn't in (Query Store's returns the permission text
+		// whenever the login can't force a plan, including for cells that don't need
+		// it), and an enabled item never shows its note anyway. A menu is modal, so
+		// nothing underneath it changes while it is open.
 		note := ""
 		if disabled(i) {
 			note = reason(i)

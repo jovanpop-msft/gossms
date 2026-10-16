@@ -55,9 +55,9 @@ type counterSet map[counterKey]counterValue
 // counterNames are the counters collected each tick; filtering in SQL keeps a
 // few dozen of the thousands of rows.
 //
-// Logins/sec, Logouts/sec, Full Scans/sec, Page Splits/sec, Workfiles
-// Created/sec, Worktables Created/sec, Page lookups/sec, Readahead pages/sec
-// and Memory Grants Outstanding aren't shown yet (increment 2).
+// Not shown yet: Logins/sec, Logouts/sec, Full Scans/sec, Page Splits/sec,
+// Workfiles Created/sec, Worktables Created/sec, Page lookups/sec, Readahead
+// pages/sec, Memory Grants Outstanding.
 var counterNames = []string{
 	// SQL Statistics
 	"Batch Requests/sec", "SQL Compilations/sec", "SQL Re-Compilations/sec",
@@ -80,9 +80,9 @@ var counterNames = []string{
 	"Cache Hit Ratio", "Cache Hit Ratio Base",
 }
 
-// counterInstances are the instance names read. Databases publishes a row
-// per database and Plan Cache one per cache type, but Derive and deriveTempDB
-// use only the unnamed instance or "_Total".
+// counterInstances are the instance names read. Databases and Plan Cache publish
+// a row per database / cache type, but Derive and deriveTempDB use only the
+// unnamed instance or "_Total".
 var counterInstances = []string{"", totalInstance}
 
 // collectCounterSet reads one sample of the named counters. gosmo strips the
@@ -102,10 +102,8 @@ func collectCounterSet(ctx context.Context, src Source, names []string) (counter
 
 // value decodes a counter row by its own cntr_type (the wrong rule gives a
 // plausible wrong number). prev and elapsed (seconds) are used only by types
-// that need them.
-//
-// A counter missing from either sample, non-positive elapsed, or a counter that
-// went backwards (restart resets to zero) reads 0, not a spike.
+// that need them. A counter missing from either sample, non-positive elapsed, or
+// a counter that went backwards (restart resets to zero) reads 0, not a spike.
 func (c counterSet) value(prev counterSet, object, counter, instance string, elapsed float64) float64 {
 	key := counterKey{object, counter, instance}
 	cur, ok := c[key]
@@ -129,18 +127,17 @@ func (c counterSet) value(prev counterSet, object, counter, instance string, ela
 		// SQL Server 17.0.1135.8); neither is the cumulative-since-startup
 		// average the formula looks like:
 		//
-		// Buffer Manager's "Buffer cache hit ratio" is a window over recent
-		// page lookups. Bases across a DBCC DROPCLEANBUFFERS and a 1.5 GB scan
-		// read 104, 3728, 33057, 29511, 87411, 21375, 126, 218, so a delta
-		// divides one window by the change in another's size (100.09% across
-		// 29511 -> 87411).
+		// Buffer Manager's "Buffer cache hit ratio" is a window over recent page
+		// lookups. Bases across a DBCC DROPCLEANBUFFERS and a 1.5 GB scan read
+		// 104, 3728, 33057, 29511, 87411, 21375, 126, 218, so a delta divides one
+		// window by the change in another's size (100.09% across 29511 -> 87411).
 		//
 		// Plan Cache's "Cache Hit Ratio" at _Total sums five cache stores' rows,
 		// each restarting at zero when its store is trimmed. The sum steps
-		// backwards by an arbitrary mix of hits and lookups under ordinary
-		// churn (-1229 value against -1717 base), and a delta reads 104% and
-		// 672% when only some stores restart. The average decays fast enough
-		// to be live anyway (90.68% to 54.24% over one ad-hoc burst).
+		// backwards by an arbitrary mix of hits and lookups (-1229 value against
+		// -1717 base), and a delta reads 104% and 672% when only some stores
+		// restart. The average decays fast enough to be live anyway (90.68% to
+		// 54.24% over one ad-hoc burst).
 		//
 		// docs/decisions.md § Activity Monitor has the full readings.
 		base, ok := c.base(object, counter, instance)
@@ -172,12 +169,12 @@ func (c counterSet) value(prev counterSet, object, counter, instance string, ela
 }
 
 // base finds counter's PERF_LARGE_RAW_BASE row: same object and instance, name
-// + " base". Matched case-insensitively because SQL Server spells it
-// inconsistently ("Buffer cache hit ratio base", "Cache Hit Ratio Base").
+// + " base". Case-insensitive because SQL Server spells it inconsistently
+// ("Buffer cache hit ratio base", "Cache Hit Ratio Base").
 //
-// A trailing " (ms)" is dropped from some base names and kept in others:
-// "Average Wait Time (ms)" has "Average Wait Time Base"; "Avg Disk Read IO (ms)"
-// has "Avg Disk Read IO (ms) Base". Either is accepted, or the first reads 0.
+// A trailing " (ms)" is dropped from some base names and kept in others
+// ("Average Wait Time Base" vs "Avg Disk Read IO (ms) Base"); either is
+// accepted, or the first reads 0.
 func (c counterSet) base(object, counter, instance string) (int64, bool) {
 	want := strings.ToLower(counter + " base")
 	unitless := strings.ToLower(strings.TrimSuffix(counter, " (ms)") + " base")

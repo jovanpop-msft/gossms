@@ -178,12 +178,12 @@ type groupID struct {
 	null  bool
 }
 
-// equalityKey is the one key per class of values the filter's = treats as
-// equal, so a group and its Terms agree: a number (1, 1.0, " 1") keys by its
-// value, anything else by its lowered text (App, app). Grouping by the exact
-// text made App and app two groups whose `= App` filters each matched both.
-// The group shows the first value seen; its Key uses this, so a group keeps
-// its expanded state whichever spelling arrived first.
+// equalityKey is the one key per class of values the filter's = treats as equal,
+// so a group and its Terms agree: a number (1, 1.0, " 1") keys by its value,
+// anything else by its lowered text (App, app); exact text would make App and
+// app two groups whose `= App` filters each match both. The group shows the first
+// value seen; its Key uses this, so a group keeps its expanded state whichever
+// spelling arrived first.
 func equalityKey(s string) string {
 	if f, ok := parseNumber(s); ok {
 		if f == 0 {

@@ -20,9 +20,9 @@ import (
 //
 // A linear selection that ends at column 0 of a later row leaves that row out:
 // Shift+Down from a line start, or a drag to the start of a line, selects up to
-// and including the previous line's break and none of the row it stops on, so
-// acting on that row too commented, indented, moved or deleted a line the user
-// never selected (Visual Studio, SSMS and Notepad++ all exclude it).
+// the previous line's break and none of the row it stops on, so acting on that row
+// would comment, indent, move or delete a line the user never selected (Visual
+// Studio, SSMS and Notepad++ all exclude it).
 func (e *Editor) affectedLineRange() (startRow, endRow int) {
 	if e.HasSelection() {
 		sr, _, er, ec := e.selectionBounds()
@@ -215,11 +215,11 @@ var sqlIndentKeywords = map[string]bool{"select": true, "from": true, "where": t
 func (e *Editor) SetSmartIndent(v bool) { e.smartIndent = v }
 
 // smartIndentBonus reports the extra indent Enter adds beyond the line's own
-// leading whitespace: one level when the text left of the cursor ends with an
-// open parenthesis or with one of sqlIndentKeywords as its last token. "Last
-// token" keeps indentation from drifting right across a query: `SELECT` alone
-// indents the column list that follows, `SELECT a, b` does not, so the next
-// clause starts at the same column as the one above.
+// leading whitespace: one level when the text left of the cursor ends with an open
+// parenthesis or with one of sqlIndentKeywords as its last token. "Last token"
+// keeps indentation from drifting right across a query: `SELECT` alone indents the
+// column list that follows, `SELECT a, b` does not, so the next clause starts at
+// the same column as the one above.
 func (e *Editor) smartIndentBonus() int {
 	if !e.smartIndent || e.cursorRow < 0 || e.cursorRow >= e.doc.Len() {
 		return 0
@@ -407,8 +407,8 @@ func (e *Editor) ToggleLineComments() {
 // branching on selBlock as SelectedText does. No-op with no selection. The
 // rewritten lines go back through setLine even though the slice header is
 // unchanged: the version counter tells the highlighters and wrap cache the text
-// moved, and skipping it would leave an uppercased keyword in its old
-// non-keyword colour until some unrelated edit bumped the version.
+// moved, and skipping it would leave an uppercased keyword in its old non-keyword
+// colour until some unrelated edit bumped the version.
 func (e *Editor) transformSelection(fn func(rune) rune) {
 	if !e.HasSelection() {
 		return

@@ -170,12 +170,12 @@ func (e *Editor) HandleKey(ev *tcell.EventKey) bool {
 		if hadSelection {
 			e.deleteSelection()
 		}
-		// Auto-indent lives here, in the key handler, never in insertNewline: Paste and
-		// blockPaste drive insertNewline once per pasted line, so indenting there would
-		// re-indent each line on top of the indentation it carries (paste becomes a
-		// staircase). Block editing keeps its plain split. The indent is measured before
-		// the split, and the spaces go in under the pushUndoLocal above, so one Ctrl+Z
-		// undoes the whole Enter.
+		// Auto-indent lives here, in the key handler, never in insertNewline: Paste
+		// and blockPaste drive insertNewline once per pasted line, so indenting there
+		// would re-indent each line on top of the indentation it carries (paste
+		// becomes a staircase). Block editing keeps its plain split. The indent is
+		// measured before the split, and the spaces go in under the pushUndoLocal
+		// above, so one Ctrl+Z undoes the whole Enter.
 		indent := 0
 		if !wasBlock {
 			indent = e.leadingIndentForNewLine() + e.smartIndentBonus()
@@ -339,24 +339,25 @@ func (e *Editor) HandleKey(ev *tcell.EventKey) bool {
 // unwrapped branch and handleMouseWrapped differ only in how they derive (row,
 // col) (a clamp plus runeColAtScreenX against a physical row, versus a
 // visual-line lookup plus RuneIndexAtColumn against a segment). One copy stops
-// them drifting, as they did when only the unwrapped one set selBlock. Always
-// reports true: a Button1 press over the content area is handled.
+// them drifting. Always reports true: a Button1 press over the content area is
+// handled.
 func (e *Editor) applyMousePress(row, col int, ev *tcell.EventMouse) bool {
 	if !e.mouseDragging {
 		// Fresh click: reposition the cursor. Without Shift, arm a new anchor here;
 		// HasSelection() stays false until the drag moves off this point. With Shift,
-		// keep the active anchor (or the pre-click cursor) and move only the cursor, the
-		// usual click-to-extend. Alt on the press picks block vs. linear selection for the
-		// whole drag, best-effort since terminals vary in reporting it, and never in wrap
-		// mode, which breaks the fixed rune columns a block selection assumes, so the
-		// press clears it there rather than leaving what the previous mode armed.
+		// keep the active anchor (or the pre-click cursor) and move only the cursor,
+		// the usual click-to-extend. Alt on the press picks block vs. linear selection
+		// for the whole drag, best-effort since terminals vary in reporting it, and
+		// never in wrap mode, which breaks the fixed rune columns a block selection
+		// assumes, so the press clears it there rather than leaving what the previous
+		// mode armed.
 		e.mouseDragging = true
 		// A second unmodified press on the same spot selects the word under it.
-		// mouseDragging is latched above, so resends while held land in the drag branch
-		// and extend from the word. pressIsDouble runs for every fresh press, modified or
-		// not, so a Shift- or Alt-clicked press still counts as "the previous press";
-		// hence the modifier test lives inside it, not in an && here that would discard
-		// the press before consulting it.
+		// mouseDragging is latched above, so resends while held land in the drag
+		// branch and extend from the word. pressIsDouble runs for every fresh press,
+		// modified or not, so a Shift- or Alt-clicked press still counts as "the
+		// previous press"; the modifier test lives inside it, not in an && here that
+		// would discard the press before consulting it.
 		if e.pressIsDouble(row, col, ev.When(), ev.Modifiers()) {
 			if e.OnDoubleClick == nil || !e.OnDoubleClick(row) {
 				e.selectWordAt(row, col)
@@ -422,10 +423,9 @@ func (e *Editor) HandleMouse(ev *tcell.EventMouse) bool {
 
 	// Scrollbar drag/click outranks text-click handling: the bar is drawn over the
 	// rightmost content column and would read as a click positioning the cursor at
-	// that line's end. total mirrors what drawScrollbar passed to
-	// core.DrawScrollbar (visual rows in wrap mode, logical lines otherwise).
-	// handleMouseWrapped reuses vls below rather than recomputing the same
-	// O(document) slice.
+	// that line's end. total mirrors what drawScrollbar passed to core.DrawScrollbar
+	// (visual rows in wrap mode, logical lines otherwise). handleMouseWrapped reuses
+	// vls below rather than recomputing the same O(document) slice.
 	var vls []visualLine
 	haveVLS := false
 	if ev.Buttons() == tcell.Button1 {
