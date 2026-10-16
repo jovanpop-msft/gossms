@@ -311,6 +311,11 @@ func TestScriptingEachFamilyReachesTheRightObject(t *testing.T) {
 			if !strings.Contains(text, c.want) {
 				t.Errorf("the script does not name %s:\n%s", c.want, text)
 			}
+			// Review plan X14: a script read away from the database it was taken
+			// in must still run there.
+			if want := "USE [" + brokerDB + "];\nGO\n"; !strings.HasPrefix(text, want) {
+				t.Errorf("the script does not open with %q:\n%s", want, text)
+			}
 		})
 	}
 }

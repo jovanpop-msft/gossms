@@ -512,6 +512,11 @@ func eventSessionScriptVerbs() []scriptVerb {
 }
 
 // ddl binds a Scripter method to one verb.
+//
+// The script opens with USE [db] for every destination, as SSMS's does: a
+// CREATE pasted into a window on master otherwise lands in master, and a DROP
+// copied from one database and run in another drops that database's namesake.
+// A database's own script switches to master itself, so takes none.
 func ddl(v gosmo.ScriptVerb, f scriptFn) scriptGen {
 	return func(ctx context.Context, sc *db.ServerConn, n nodeData) (string, error) {
 		d, err := sc.Server.DatabaseByName(ctx, n.DBName)
@@ -520,7 +525,12 @@ func ddl(v gosmo.ScriptVerb, f scriptFn) scriptGen {
 		}
 		opts := gosmo.DefaultScriptOptions()
 		opts.Verb = v
-		return f(gosmo.NewScripter(d, opts), ctx, n)
+		s := gosmo.NewScripter(d, opts)
+		text, err := f(s, ctx, n)
+		if err != nil || n.Type == NodeDatabase {
+			return text, err
+		}
+		return s.DatabaseContext() + text, nil
 	}
 }
 

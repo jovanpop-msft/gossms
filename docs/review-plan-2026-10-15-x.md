@@ -406,8 +406,63 @@ gosmo changes go in first and are built and tested inside `~/go/gosmo`
    new one deletes it; the OFFLINE one shows the note, is deleted, and its
    two files were indeed left on disk (removed by hand).
 6. **X14** — gosmo option + gossms wiring; removes a wrong-database DROP risk.
+   **DONE 2026-10-16**, not as a `ScriptOptions` field: the ~55 `Scripter`
+   methods share no exit point, so an option would mean a wrapper at every
+   return. Instead gosmo exports `Scripter.DatabaseContext()` (the existing
+   `scriptUse` batch, `USE [db];` + GO, `]` doubled), and gossms's `ddl`, the
+   one generator every database-scoped DDL and DML verb goes through, prefixes
+   it for all three destinations. A database's own script (it switches to
+   master itself) and every `serverDDL` verb take none; the index/statistic
+   maintenance verbs already got USE from `ScriptCollector.String`. Azure SQL
+   Database is not exempt: `USE` of the current database is allowed there, and
+   one run elsewhere fails rather than landing in the wrong database. Tests:
+   gosmo `TestScripterDatabaseContextQuotesTheName`; gossms
+   `TestScriptToFileAndClipboardOpensInTheObjectsDatabase` (Clipboard and File
+   through the real destinations), the USE prefix added to
+   `TestScriptingEachFamilyReachesTheRightObject` (seven families),
+   `TestScriptOfAServerScopedObjectTakesNoUse`; mutation-checked (prefix
+   removed → the first two fail). Live A/B on win10cli 17 (scratch config,
+   throwaway `x14db.dbo.X14T` plus a decoy `master.dbo.X14T`): Script Table
+   as → DROP To → Clipboard from the old binary has no USE and, run from a
+   master session, dropped master's decoy; the new binary's opens
+   `USE [x14db];` and, run the same way, left the decoy alone and acted on
+   x14db's table. Script Database as → CREATE gained no USE. Both objects
+   dropped afterwards.
 7. **X7 + X8** — the Availability Group dialogs together (gosmo breaking:
-   `*int`); verify X7 with `PARSEONLY` on the 2016 instance.
+   `*int`); verify X7 with `PARSEONLY` on the 2016 instance. **DONE
+   2026-10-16**. X7: `RequiredSynchronizedSecondariesToCommit` is now `*int`
+   (nil omits); `createStatement(major)` writes CLUSTER_TYPE and required sync
+   only from 14 — below it WSFC and a zero are dropped, EXTERNAL/NONE, a
+   positive count and a replica's FAILOVER_MODE = EXTERNAL (also 2017 syntax,
+   not in the finding) are refused with `ErrUnsupportedVersion`; CONTAINED is
+   refused below 16; the setter refuses below 14 as well. gossms's General page
+   on < 14 shows Cluster type as a static WSFC with its own note, has no
+   Required sync row, and defaults the primary's failover mode to MANUAL
+   (EXTERNAL was the default, which a WSFC group refuses); Contained only on
+   ≥ 16; Availability Group Properties hides Required sync on < 14. X8: gosmo
+   `Server.AvailabilityDatabaseCandidates` (one read: state, recovery,
+   read-only, snapshot, user access, AUTO_CLOSE, mirroring, log chain)
+   replaces the `Databases` + `DatabaseRecoveryStatuses` pair in both pickers;
+   `agEligibleDatabases` excludes a snapshot, read-only, SINGLE_USER,
+   AUTO_CLOSE and a mirrored database, each with its own reason line. Probed
+   with ADD DATABASE on AAG1 (ubusql2, 2025) first: read-only and snapshot
+   fail Msg 1466, AUTO_CLOSE 1469, SINGLE_USER 1488, but RESTRICTED_USER
+   joins, so it stays offered; mirroring could not be set up here and is from
+   the documentation. Tests: gosmo `TestCreateAvailabilityGroupStatementByVersion`
+   (13/14/15/16, text and refusals) and `TestSetRequiredSyncRefusedBefore2017`,
+   mutation-checked (gate disabled → 9 cases fail); livedb
+   `TestLiveAvailabilityDatabaseCandidates` green on 17 and 13; gossms
+   `TestNewAGOffersOnlyWhatTheVersionCanCreate` (page rows plus the scripted
+   CREATE through gosmo on 13/14/16/unknown; fails with the page gate removed)
+   and `TestAGEligibleDatabasesExcludesWhatTheJoinRefuses` (each of four
+   exclusions mutation-checked). Live: under `SET PARSEONLY ON` the old
+   dialog's default CREATE fails Msg 156 on SQL2016 and the new one parses;
+   CONTAINED fails Msg 155 on SQL2017 and parses on 17. A/B in tmux on
+   ubusql2 with throwaway read-only and AUTO_CLOSE databases: old binary's Add
+   Database offers both, new one lists them under Not offered with reasons; New
+   Availability Group's page on 17 unchanged. Not driven in the binary: the
+   2016 page itself — SQL2016 has HADR off, so the dialog stops at its
+   blocker there. Everything dropped afterwards.
 8. **X9 + X1** — both in `~/go/gosmo/tempdb_usage.go`; one live pass.
 9. **X12** — Login Properties Script Changes.
 10. **X2 + X3** — table detail and space reads (gosmo breaking for X2).

@@ -9,6 +9,7 @@ import (
 
 	gosmo "github.com/radix29/gosmo"
 	"github.com/radix29/gossms/internal/db"
+	"github.com/radix29/gossms/internal/tuikit/propsheet"
 )
 
 // New Availability Group's real risk is not the statement text — gosmo pins
@@ -110,7 +111,7 @@ func TestNewAGRequest(t *testing.T) {
 	d := &NewAGDialog{
 		groupName:        "  AAG2  ",
 		clusterType:      "EXTERNAL",
-		requiredSync:     0,
+		requiredSync:     new(0),
 		dbFailover:       true,
 		backupPreference: "SECONDARY_ONLY",
 		replicas:         newAGReplicaPair(),
@@ -129,11 +130,10 @@ func TestNewAGRequest(t *testing.T) {
 	if req.Name != "AAG2" {
 		t.Errorf("name = %q, want the trimmed %q", req.Name, "AAG2")
 	}
-	// Zero is a real value for this option and gosmo omits it only when
-	// negative, so the dialog's 0 has to survive as 0.
-	if req.RequiredSynchronizedSecondariesToCommit != 0 {
-		t.Errorf("required synchronized secondaries = %d, want 0",
-			req.RequiredSynchronizedSecondariesToCommit)
+	// Zero is a real value for this option and gosmo omits it only when nil,
+	// so the dialog's 0 has to survive as 0.
+	if n := req.RequiredSynchronizedSecondariesToCommit; n == nil || *n != 0 {
+		t.Errorf("required synchronized secondaries = %v, want 0", n)
 	}
 	if got, want := strings.Join(req.Databases, ","), "testdb_1,payroll"; got != want {
 		t.Errorf("databases = %q, want only the included ones %q", got, want)
@@ -149,6 +149,88 @@ func TestNewAGRequest(t *testing.T) {
 	}
 	if req.AutomatedBackupPreference != "SECONDARY_ONLY" {
 		t.Errorf("backup preference = %q, want the page's", req.AutomatedBackupPreference)
+	}
+}
+
+// newAGPagesOn builds New Availability Group's pages as the prefetch of an
+// instance of the given major version would, with one secondary added, and
+// returns the request the General page then produces.
+func newAGPagesOn(t *testing.T, major int) (*NewAGDialog, gosmo.CreateAvailabilityGroupRequest) {
+	t.Helper()
+	d := &NewAGDialog{}
+	d.pages = []string{"General", "Backup Preferences"}
+	d.forms = make([]*propsheet.Form, 2)
+	d.applyFns = make([]propApply, 2)
+	d.buildPages(&newAGPrefetch{
+		primaryName: "ubusql1", primaryEndpoint: "tcp://ubusql1:5022",
+		existingGroups: newNameSet(""), major: major,
+	})
+	d.replicas = append(d.replicas, &newAGReplica{name: "ubusql2", endpointURL: "tcp://ubusql2:5022",
+		failoverMode: d.replicas[0].failoverMode, seedingMode: "AUTOMATIC"})
+	req, err := d.request()
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	req.Name = "AAG2"
+	if err := validateNewAG(req.Name, d.clusterType, d.replicas, newNameSet("")); err != nil {
+		t.Fatalf("the page's defaults do not validate: %v", err)
+	}
+	return d, req
+}
+
+// X7: CLUSTER_TYPE, REQUIRED_SYNCHRONIZED_SECONDARIES_TO_COMMIT and FAILOVER_MODE
+// = EXTERNAL are 2017 syntax and CONTAINED is 2022's, so a page offering them
+// everywhere made every create on SQL Server 2016 a syntax error. The page's
+// untouched defaults must give a CREATE the instance parses — gosmo refuses one
+// it cannot, so the scripted create succeeding is the assertion.
+func TestNewAGOffersOnlyWhatTheVersionCanCreate(t *testing.T) {
+	for _, tt := range []struct {
+		major                 int
+		wantRows, absentRows  []string
+		wantIn, absentFromSQL []string
+	}{
+		{13, nil, []string{"Required sync secondaries", "Contained"},
+			[]string{"FAILOVER_MODE = MANUAL"}, []string{"CLUSTER_TYPE", "REQUIRED_SYNCHRONIZED", "EXTERNAL", "CONTAINED"}},
+		{14, []string{"Required sync secondaries"}, []string{"Contained"},
+			[]string{"CLUSTER_TYPE = EXTERNAL", "REQUIRED_SYNCHRONIZED_SECONDARIES_TO_COMMIT = 0", "FAILOVER_MODE = EXTERNAL"}, nil},
+		{16, []string{"Required sync secondaries", "Contained"}, nil, []string{"CLUSTER_TYPE = EXTERNAL"}, nil},
+		{0, []string{"Required sync secondaries", "Contained"}, nil, []string{"CLUSTER_TYPE = EXTERNAL"}, nil},
+	} {
+		t.Run(fmt.Sprint(tt.major), func(t *testing.T) {
+			d, req := newAGPagesOn(t, tt.major)
+			labels := rowLabels(d.forms[0])
+			for _, l := range tt.wantRows {
+				if !slicesContains(labels, l) {
+					t.Errorf("General page lacks %q: %v", l, labels)
+				}
+			}
+			for _, l := range tt.absentRows {
+				if slicesContains(labels, l) {
+					t.Errorf("General page offers %q, which this version cannot create", l)
+				}
+			}
+
+			info := serverInfoResponse()
+			if tt.major != 0 {
+				info.rows[0][2] = fmt.Sprintf("%d.0.6300.2", tt.major)
+			}
+			sc, _ := newFakeConnFrom(t, []fakeResponse{info, sysInfoResponse()})
+			ctx, script := gosmo.WithScript(context.Background())
+			if _, err := sc.Server.CreateAvailabilityGroup(ctx, req); err != nil {
+				t.Fatalf("CreateAvailabilityGroup on major %d: %v", tt.major, err)
+			}
+			got := strings.Join(script.Statements(), "\n")
+			for _, w := range tt.wantIn {
+				if !strings.Contains(got, w) {
+					t.Errorf("statement lacks %q:\n%s", w, got)
+				}
+			}
+			for _, w := range tt.absentFromSQL {
+				if strings.Contains(got, w) {
+					t.Errorf("statement carries %q, which major %d cannot parse:\n%s", w, tt.major, got)
+				}
+			}
+		})
 	}
 }
 

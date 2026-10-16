@@ -89,6 +89,12 @@ type newAGPrefetch struct {
 	primaryName     string
 	primaryEndpoint string
 
+	// major is the instance's major version (0 unknown = newest). Below SQL
+	// Server 2017 every group is WSFC and has no required-sync setting, and
+	// contained groups are 2022+; the General page offers only what CREATE
+	// there can parse.
+	major int
+
 	// blocker is why a group cannot be created from this instance at all (Always On
 	// disabled, or no usable database mirroring endpoint); empty if none. Reported
 	// on the page rather than as a load error because the reason is the useful part.
@@ -116,7 +122,7 @@ type NewAGDialog struct {
 	// assembled. Backup preference is the Backup Preferences page's.
 	groupName         string
 	clusterType       string
-	requiredSync      int
+	requiredSync      *int // nil when the page has no such row (before SQL Server 2017)
 	dbFailover        bool
 	dtcSupport        bool
 	contained         bool
@@ -168,7 +174,7 @@ func (d *NewAGDialog) show(sc *db.ServerConn, node *explorerNode) {
 }
 
 func (d *NewAGDialog) fetchPrefetch(ctx context.Context, sc *db.ServerConn) (*newAGPrefetch, error) {
-	pf := &newAGPrefetch{primaryName: sc.Server.Name(), existingGroups: newNameSet(serverCollation(sc))}
+	pf := &newAGPrefetch{primaryName: sc.Server.Name(), existingGroups: newNameSet(serverCollation(sc)), major: serverMajor(sc)}
 
 	if info := sc.Server.Info(); info != nil && !info.IsHADREnabled {
 		pf.blocker = fmt.Sprintf("Always On availability groups are not enabled on %s. Enable the feature and restart the instance first — on Linux, `mssql-conf set hadr.hadrenabled 1`.", sc.Opts.Server)
@@ -205,22 +211,13 @@ func (d *NewAGDialog) fetchPrefetch(ctx context.Context, sc *db.ServerConn) (*ne
 		}
 	}
 
-	// Log backup chain state of every database in one read: CREATE AVAILABILITY
-	// GROUP ... FOR DATABASE enforces the same prerequisite as ADD DATABASE.
-	statuses, err := sc.Server.DatabaseRecoveryStatuses(ctx)
+	// Every fact the join checks, in one read: CREATE AVAILABILITY GROUP ... FOR
+	// DATABASE enforces the same prerequisites as ADD DATABASE.
+	cands, err := sc.Server.AvailabilityDatabaseCandidates(ctx)
 	if err != nil {
 		return nil, err
 	}
-	logChain := newNameMap[bool](serverCollation(sc))
-	for _, st := range statuses {
-		logChain.Set(st.DatabaseName, st.LogBackupChainStarted)
-	}
-
-	dbs, err := sc.Server.Databases(ctx)
-	if err != nil {
-		return nil, err
-	}
-	eligible, excluded := agEligibleDatabases(agCandidatesFrom(dbs, logChain), inGroup)
+	eligible, excluded := agEligibleDatabases(agCandidatesFrom(cands), inGroup)
 	for _, name := range eligible {
 		pf.databases = append(pf.databases, newAGDatabase{name: name})
 	}
@@ -243,8 +240,8 @@ func (d *NewAGDialog) request() (gosmo.CreateAvailabilityGroupRequest, error) {
 		DBFailover:                d.dbFailover,
 		DTCSupport:                d.dtcSupport,
 		Contained:                 d.contained,
-		// Zero is legitimate, so the omit sentinel is negative; the dialog always has
-		// a number, so it is always written.
+		// Zero is legitimate, so only nil omits it: the page's number is always
+		// written where the page has the row at all.
 		RequiredSynchronizedSecondariesToCommit: d.requiredSync,
 	}
 	for _, db := range d.databases {

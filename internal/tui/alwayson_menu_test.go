@@ -174,6 +174,49 @@ func TestAGEligibleDatabases(t *testing.T) {
 	}
 }
 
+// X8: the picker promised ineligible databases "are listed below rather than
+// offered" but checked only recovery, state, group and log chain. Each case
+// here is a database ADD DATABASE refuses (Msgs 1466, 1469, 1488 driven live on
+// 2025; mirroring from the documentation), and each gets its own reason line.
+// RESTRICTED_USER joined live, so it stays offered.
+func TestAGEligibleDatabasesExcludesWhatTheJoinRefuses(t *testing.T) {
+	ok := agDBCandidate{RecoveryModel: "FULL", State: "ONLINE", UserAccess: "MULTI_USER", LogChainStarted: true}
+	with := func(name string, edit func(*agDBCandidate)) agDBCandidate {
+		c := ok
+		c.Name = name
+		edit(&c)
+		return c
+	}
+	dbs := []agDBCandidate{
+		with("ro", func(c *agDBCandidate) { c.IsReadOnly = true }),
+		with("snap", func(c *agDBCandidate) { c.IsSnapshot, c.IsReadOnly = true, true }),
+		with("single", func(c *agDBCandidate) { c.UserAccess = "SINGLE_USER" }),
+		with("autoclose", func(c *agDBCandidate) { c.IsAutoCloseOn = true }),
+		with("mirrored", func(c *agDBCandidate) { c.IsMirrored = true }),
+		with("restricted", func(c *agDBCandidate) { c.UserAccess = "RESTRICTED_USER" }),
+		with("fine", func(*agDBCandidate) {}),
+	}
+	eligible, excluded := agEligibleDatabases(dbs, nil)
+	if want := []string{"restricted", "fine"}; !slices.Equal(eligible, want) {
+		t.Errorf("eligible = %v, want %v", eligible, want)
+	}
+	want := []string{
+		"ro — database is read-only",
+		"snap — database snapshot",
+		"single — database is SINGLE_USER",
+		"autoclose — AUTO_CLOSE is on",
+		"mirrored — database mirroring is configured",
+	}
+	if len(excluded) != len(want) {
+		t.Fatalf("excluded = %q, want one line each for %d databases", excluded, len(want))
+	}
+	for i, w := range want {
+		if !strings.HasPrefix(excluded[i], w) {
+			t.Errorf("excluded[%d] = %q, want it to start %q", i, excluded[i], w)
+		}
+	}
+}
+
 // The log backup chain is the one prerequisite the database's metadata doesn't
 // reveal: FULL, ONLINE and ungrouped can still fail with Msg 1475 without a
 // full backup since entering FULL (verified live for ADD DATABASE and CREATE

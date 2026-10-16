@@ -31,33 +31,38 @@ type agAddDBPrefetch struct {
 	excluded []string
 }
 
-// agDBCandidate is a database reduced to the four facts eligibility depends on.
-// gosmo.Database hides its metadata behind methods, so the rule is written
-// against this, testable without a server.
+// agDBCandidate is a database reduced to the facts eligibility depends on, so
+// the rule is testable without a server.
 type agDBCandidate struct {
 	Name          string
 	RecoveryModel string
 	State         string
 	IsSystem      bool
+	IsReadOnly    bool
+	IsSnapshot    bool
+	UserAccess    string
+	IsAutoCloseOn bool
+	IsMirrored    bool
 
-	// LogChainStarted is DatabaseRecoveryStatus.LogBackupChainStarted: a full
-	// backup since entering FULL recovery. Read separately; gosmo.Database
-	// carries no backup state.
+	// LogChainStarted is a full backup since entering FULL recovery.
 	LogChainStarted bool
 }
 
-// agCandidatesFrom pairs each database with its log chain state, keyed by
-// name under the server's collation.
-func agCandidatesFrom(dbs []*gosmo.Database, logChain *nameMap[bool]) []agDBCandidate {
-	out := make([]agDBCandidate, 0, len(dbs))
-	for _, d := range dbs {
-		started, _ := logChain.Get(d.Name)
+// agCandidatesFrom reduces gosmo's candidate read to agDBCandidate.
+func agCandidatesFrom(cands []*gosmo.AvailabilityDatabaseCandidate) []agDBCandidate {
+	out := make([]agDBCandidate, 0, len(cands))
+	for _, c := range cands {
 		out = append(out, agDBCandidate{
-			Name:            d.Name,
-			RecoveryModel:   string(d.RecoveryModel),
-			State:           d.State,
-			IsSystem:        d.IsSystem(),
-			LogChainStarted: started,
+			Name:            c.Name,
+			RecoveryModel:   string(c.RecoveryModel),
+			State:           c.State,
+			IsSystem:        c.IsSystem(),
+			IsReadOnly:      c.IsReadOnly,
+			IsSnapshot:      c.IsSnapshot,
+			UserAccess:      c.UserAccess,
+			IsAutoCloseOn:   c.IsAutoCloseOn,
+			IsMirrored:      c.IsMirrored,
+			LogChainStarted: c.LogBackupChainStarted,
 		})
 	}
 	return out
@@ -70,18 +75,31 @@ func agCandidatesFrom(dbs []*gosmo.Database, logChain *nameMap[bool]) []agDBCand
 // is sys.database_recovery_status.last_log_backup_lsn (gosmo's
 // LogBackupChainStarted), not msdb backup history, which is wrong both ways
 // (verified live): purged history still joins, and a backup before a SIMPLE
-// round trip fails with Msg 1475.
+// round trip fails with Msg 1475. Read-only (every snapshot is), AUTO_CLOSE and
+// SINGLE_USER are refused too (Msgs 1466, 1469, 1488, live on 2025), and so is a
+// mirroring partner; RESTRICTED_USER is accepted, so it is not excluded. The
+// snapshot case comes first so the line says snapshot, not read-only.
 func agEligibleDatabases(dbs []agDBCandidate, inGroup *nameSet) (eligible, excluded []string) {
 	for _, d := range dbs {
 		switch {
 		case d.IsSystem:
 			// Silent: nobody expects master here.
+		case d.IsSnapshot:
+			excluded = append(excluded, d.Name+" — database snapshot")
 		case inGroup.Has(d.Name):
 			excluded = append(excluded, d.Name+" — already in an availability group")
 		case !strings.EqualFold(d.RecoveryModel, string(gosmo.RecoveryModelFull)):
 			excluded = append(excluded, fmt.Sprintf("%s — recovery model is %s, must be FULL", d.Name, d.RecoveryModel))
 		case d.State != "" && !strings.EqualFold(d.State, "ONLINE"):
 			excluded = append(excluded, fmt.Sprintf("%s — database is %s", d.Name, strings.ToLower(d.State)))
+		case d.IsReadOnly:
+			excluded = append(excluded, d.Name+" — database is read-only; set it READ_WRITE")
+		case strings.EqualFold(d.UserAccess, "SINGLE_USER"):
+			excluded = append(excluded, d.Name+" — database is SINGLE_USER; set it MULTI_USER")
+		case d.IsAutoCloseOn:
+			excluded = append(excluded, d.Name+" — AUTO_CLOSE is on; turn it off")
+		case d.IsMirrored:
+			excluded = append(excluded, d.Name+" — database mirroring is configured; remove it first")
 		case !d.LogChainStarted:
 			excluded = append(excluded, d.Name+" — no full backup since it entered the FULL recovery model; back it up first")
 		default:
@@ -137,8 +155,7 @@ func (d *AGAddDatabaseDialog) fetchPrefetch(ctx context.Context, sc *db.ServerCo
 	if err != nil {
 		return nil, err
 	}
-	collation := instanceCollation(primary)
-	inGroup := newNameSet(collation)
+	inGroup := newNameSet(instanceCollation(primary))
 	for _, g := range groups {
 		dbs, err := g.Databases(ctx)
 		if err != nil {
@@ -149,21 +166,12 @@ func (d *AGAddDatabaseDialog) fetchPrefetch(ctx context.Context, sc *db.ServerCo
 		}
 	}
 
-	// One server-wide read of every database's log chain state.
-	statuses, err := primary.DatabaseRecoveryStatuses(ctx)
+	// One server-wide read of every fact the join checks, log chain included.
+	cands, err := primary.AvailabilityDatabaseCandidates(ctx)
 	if err != nil {
 		return nil, err
 	}
-	logChain := newNameMap[bool](collation)
-	for _, st := range statuses {
-		logChain.Set(st.DatabaseName, st.LogBackupChainStarted)
-	}
-
-	dbs, err := primary.Databases(ctx)
-	if err != nil {
-		return nil, err
-	}
-	eligible, excluded := agEligibleDatabases(agCandidatesFrom(dbs, logChain), inGroup)
+	eligible, excluded := agEligibleDatabases(agCandidatesFrom(cands), inGroup)
 	return &agAddDBPrefetch{primary: ag.PrimaryReplicaServerName, eligible: eligible, excluded: excluded}, nil
 }
 
@@ -187,7 +195,7 @@ func (d *AGAddDatabaseDialog) buildPages(pf *agAddDBPrefetch) {
 	}
 	rows = append(rows,
 		propsheet.Section("Prerequisites"),
-		propsheet.Note("The database must be in the FULL recovery model and have a full backup taken since — both are checked, and a database missing either is listed above rather than offered."),
+		propsheet.Note("The database must be in the FULL recovery model and have a full backup taken since, read-write, multi-user, with AUTO_CLOSE off and no mirroring — all are checked, and a database failing one is listed above rather than offered."),
 		propsheet.Note("Back one up from the database's Tasks > Back Up, then reopen this dialog."),
 		propsheet.Note("A secondary set to AUTOMATIC seeding seeds itself. One set to MANUAL needs the database restored there WITH NORECOVERY and then joined."),
 	)

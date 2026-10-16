@@ -1,8 +1,13 @@
 package tui
 
 import (
+	"os"
+	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
+
+	"github.com/radix29/gossms/internal/tuikit/controls"
 )
 
 // The Script cascade is the only way to script an object, so a node type
@@ -116,5 +121,81 @@ func TestScriptMenuItemsOnSystemObjects(t *testing.T) {
 	master.data.IsSystem = true
 	if items := (&App{}).scriptMenuItems(master); len(items) != 1 {
 		t.Errorf("system database offers %v, want the Script cascade", labelsOf(items))
+	}
+}
+
+// TestScriptToFileAndClipboardOpensInTheObjectsDatabase pins review plan X14:
+// File... and Clipboard wrote the bare object script, so a DROP copied from
+// one database and run in a window on another dropped that database's
+// namesake. Every destination is handed the same text, and it opens with USE.
+func TestScriptToFileAndClipboardOpensInTheObjectsDatabase(t *testing.T) {
+	const want = "USE [" + brokerDB + "];\nGO\n"
+	n := nodeData{Type: NodeMessageType, DBName: brokerDB, Name: "//claims/Submit"}
+	newApp := func(t *testing.T) (*App, controls.MenuItem) {
+		sc, _ := newFakeConn(t, brokerDBResp(), brokerRowByArg(messageTypeResp(), n.Name, 1))
+		a := newClipboardTestApp()
+		dests := a.scriptDestinations(sc, n, scriptables[NodeMessageType].verbs[1]) // DROP To
+		return a, controls.MenuItem{Sub: dests}
+	}
+	dest := func(m controls.MenuItem, label string) func() {
+		for _, d := range m.Sub {
+			if d.Label == label {
+				return d.Action
+			}
+		}
+		t.Fatalf("no %q destination", label)
+		return nil
+	}
+
+	t.Run("Clipboard", func(t *testing.T) {
+		got := make(chan string, 1)
+		old := clipboardWriter
+		clipboardWriter = func(text string) bool { got <- text; return true }
+		defer func() { clipboardWriter = old }()
+		a, m := newApp(t)
+		dest(m, "Clipboard")()
+		var text string
+		drainUntil(t, a, func() bool {
+			select {
+			case text = <-got:
+				return true
+			default:
+				return false
+			}
+		}, "the clipboard write")
+		if !strings.HasPrefix(text, want) || !strings.Contains(text, "DROP MESSAGE TYPE") {
+			t.Errorf("clipboard text does not open with %q:\n%s", want, text)
+		}
+	})
+
+	t.Run("File", func(t *testing.T) {
+		a, m := newApp(t)
+		dest(m, "File...")()
+		drainUntil(t, a, a.fileDialog.Visible, "the save prompt")
+		path := filepath.Join(t.TempDir(), "drop.sql")
+		a.fileDialog.OnChoose(path)
+		b, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if text := string(b); !strings.HasPrefix(text, want) || !strings.Contains(text, "DROP MESSAGE TYPE") {
+			t.Errorf("file text does not open with %q:\n%s", want, text)
+		}
+	})
+}
+
+// A server-scoped object belongs to no database, so its script takes no USE:
+// one would pin it to whatever database the menu happened to be opened from.
+func TestScriptOfAServerScopedObjectTakesNoUse(t *testing.T) {
+	sc, _ := newFakeConn(t, serverRoleResponses()...)
+	n := nodeData{Type: NodeServerRole, Name: principalSrvRole}
+	for _, v := range scriptables[NodeServerRole].verbs {
+		text, err := v.gen(t.Context(), sc, n)
+		if err != nil {
+			t.Fatalf("%s: %v", v.label, err)
+		}
+		if strings.Contains(text, "USE ") {
+			t.Errorf("%s carries a USE:\n%s", v.label, text)
+		}
 	}
 }

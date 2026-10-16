@@ -304,13 +304,20 @@ func pageAGGeneral(sc *db.ServerConn, agName string) propPage {
 				propsheet.Static("Synchronization health", orDefault(ag.SynchronizationHealth, "(unknown)")),
 				propsheet.Static("Basic availability group", boolStr(ag.BasicFeatures)),
 				propsheet.Static("Contained", boolStr(ag.IsContained)),
-				requiredSyncRow,
+			}
+			// REQUIRED_SYNCHRONIZED_SECONDARIES_TO_COMMIT is SQL Server 2017+; before
+			// it the row would only offer a SET the server cannot parse. Left off,
+			// it is never dirty, so apply never sends it.
+			if agClusterTypeChoosable(serverMajor(sc)) {
+				rows = append(rows, requiredSyncRow)
+			}
+			rows = append(rows,
 				dbFailoverRow,
 				dtcRow,
 				propsheet.Section("Health detection"),
 				failureLevelRow,
 				healthTimeoutRow,
-			}
+			)
 			if len(failoverModeItems) == 1 {
 				rows = append(rows, propsheet.Note(fmt.Sprintf("Cluster type %s %s, so every replica's failover mode must be %s — the dropdown offers nothing else.",
 					strings.ToUpper(orDefault(string(ag.ClusterType), "WSFC")), clusterWhy, failoverModeItems[0])))

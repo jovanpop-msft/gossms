@@ -23,15 +23,35 @@ import (
 // the server's default and the only one that works with none stated.
 var agClusterTypeItems = []string{"EXTERNAL", "WSFC", "NONE"}
 
+// agClusterTypeChoosable reports whether CREATE AVAILABILITY GROUP takes a
+// CLUSTER_TYPE on an instance of this major version (0 unknown = newest). Before
+// SQL Server 2017 the clause does not parse and WSFC is the only kind there is.
+func agClusterTypeChoosable(major int) bool {
+	return major == 0 || major >= int(gosmo.SQLServer2017)
+}
+
+// agContainedOffered reports whether a contained group can be created: SQL
+// Server 2022+.
+func agContainedOffered(major int) bool {
+	return major == 0 || major >= int(gosmo.SQLServer2022)
+}
+
 func (d *NewAGDialog) buildPages(pf *newAGPrefetch) {
 	d.databases = append([]newAGDatabase(nil), pf.databases...)
 	d.replicas = nil
 	if pf.blocker == "" {
+		// The primary's failover mode is the one the default cluster type takes:
+		// EXTERNAL where the type can be chosen (it is offered first), MANUAL on a
+		// WSFC-only instance, which has no EXTERNAL mode either.
+		failoverMode := agDefaultFailoverMode(agClusterTypeItems[0])
+		if !agClusterTypeChoosable(pf.major) {
+			failoverMode = agDefaultFailoverMode("WSFC")
+		}
 		d.replicas = []*newAGReplica{{
 			name:             pf.primaryName,
 			endpointURL:      pf.primaryEndpoint,
 			availabilityMode: "SYNCHRONOUS_COMMIT",
-			failoverMode:     "EXTERNAL",
+			failoverMode:     failoverMode,
 			seedingMode:      "AUTOMATIC",
 			primaryRole:      "ALL",
 			secondaryRole:    "NO",
@@ -81,6 +101,12 @@ func (d *NewAGDialog) buildGeneralPage(pf *newAGPrefetch) {
 	dtcRow := propsheet.Check("Per database DTC support", false)
 	containedRow := propsheet.Check("Contained", false)
 
+	// Rows an older instance cannot take are left off rather than disabled:
+	// CREATE there is a syntax error for each, and the server's message names
+	// only the keyword.
+	choosable := agClusterTypeChoosable(pf.major)
+	contained := agContainedOffered(pf.major)
+
 	dbGridRow, includeRow, commitDatabases := d.databaseRows()
 	replicaRows, commitReplicas := d.replicaRows()
 
@@ -88,24 +114,40 @@ func (d *NewAGDialog) buildGeneralPage(pf *newAGPrefetch) {
 		commitDatabases()
 		commitReplicas()
 		d.groupName = nameRow.Value()
-		d.clusterType = clusterRow.Value()
+		d.clusterType = "WSFC"
+		d.requiredSync = nil
+		if choosable {
+			d.clusterType = clusterRow.Value()
+			if n, err := requiredSyncRow.IntValue(); err == nil {
+				d.requiredSync = new(int(n))
+			}
+		}
 		d.dbFailover = dbFailoverRow.Checked()
 		d.dtcSupport = dtcRow.Checked()
-		d.contained = containedRow.Checked()
-		if n, err := requiredSyncRow.IntValue(); err == nil {
-			d.requiredSync = int(n)
-		}
+		d.contained = contained && containedRow.Checked()
 	}
-	rows := []propsheet.Row{
-		propsheet.Section("Availability group"),
-		nameRow, clusterRow, requiredSyncRow,
-		dbFailoverRow, dtcRow, containedRow,
-		propsheet.Note("Cluster type EXTERNAL is an externally managed cluster — Pacemaker on Linux, which then owns failover. NONE is a read-scale group with no cluster manager and only forced failover. WSFC needs a Windows Server Failover Cluster under the instance."),
-		propsheet.Note("The cluster type fixes every replica's failover mode: EXTERNAL requires EXTERNAL, NONE requires MANUAL, WSFC takes MANUAL or AUTOMATIC. Set each replica's below to match."),
+	rows := []propsheet.Row{propsheet.Section("Availability group"), nameRow}
+	if choosable {
+		rows = append(rows, clusterRow, requiredSyncRow)
+	} else {
+		rows = append(rows, propsheet.Static("Cluster type", "WSFC"))
+	}
+	rows = append(rows, dbFailoverRow, dtcRow)
+	if contained {
+		rows = append(rows, containedRow)
+	}
+	if choosable {
+		rows = append(rows,
+			propsheet.Note("Cluster type EXTERNAL is an externally managed cluster — Pacemaker on Linux, which then owns failover. NONE is a read-scale group with no cluster manager and only forced failover. WSFC needs a Windows Server Failover Cluster under the instance."),
+			propsheet.Note("The cluster type fixes every replica's failover mode: EXTERNAL requires EXTERNAL, NONE requires MANUAL, WSFC takes MANUAL or AUTOMATIC. Set each replica's below to match."))
+	} else {
+		rows = append(rows, propsheet.Note("Before SQL Server 2017 every availability group runs on a Windows Server Failover Cluster: there is no cluster type to choose and no required-synchronized-secondaries setting. Each replica's failover mode is MANUAL or AUTOMATIC."))
+	}
+	rows = append(rows,
 		propsheet.Section("Availability databases"),
 		dbGridRow, includeRow,
-		propsheet.Note("Each database must be in the FULL recovery model and have a full backup taken since — one missing either is listed below rather than offered. Databases can also be added after the group exists."),
-	}
+		propsheet.Note("Each database must be in the FULL recovery model with a full backup taken since, read-write, multi-user, with AUTO_CLOSE off and no mirroring — one failing any is listed below rather than offered. Databases can also be added after the group exists."),
+	)
 	if len(pf.excluded) > 0 {
 		rows = append(rows, propsheet.Section("Databases not offered"))
 		for _, line := range pf.excluded {
