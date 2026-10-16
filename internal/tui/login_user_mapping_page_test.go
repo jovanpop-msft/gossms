@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/radix29/gosmo"
+
 	"github.com/radix29/gossms/internal/tuikit/propsheet"
 )
 
@@ -66,7 +68,9 @@ func mappingResponses() []fakeResponse {
 			{"db_owner", int64(2), true, "dbo", nil},
 		}},
 
-		// The by-name user read apply makes before a schema change.
+		// A by-name user read, answered for appdb only: salesdb has no user, so a
+		// read there after a mapping only Script Changes collected finds nothing.
+		fakeResponse{match: "sp.sid = dp.sid", db: "salesdb", cols: 11, rows: nil},
 		fakeResponse{match: "sp.sid = dp.sid", cols: 11, rows: [][]driver.Value{
 			{"appuser", int64(7), "SQL_USER", "sales", time.Now(), time.Now(), "INSTANCE", []byte{0x01, 0x02}, "appuser", false, nil},
 		}},
@@ -235,5 +239,35 @@ func TestUserMappingWritesNothingWhenUntouched(t *testing.T) {
 	}
 	if stmts := inst.Statements(); len(stmts) != 0 {
 		t.Fatalf("an untouched page wrote:\n%s", strings.Join(stmts, "\n"))
+	}
+}
+
+// TestUserMappingScriptsANewMappingWithItsSchemaAndRole: mapping a database,
+// setting its default schema and ticking a role, then Script Changes. The
+// CREATE USER is only collected there, so a schema set by reading the new user
+// back failed "database user not found"; the schema belongs in the CREATE.
+func TestUserMappingScriptsANewMappingWithItsSchemaAndRole(t *testing.T) {
+	_, apply, form := loadMappingPage(t)
+	g := plainGrid(t, form)
+	activateGridCell(t, g, mapDatabaseCol, "salesdb", mapCheckCol)
+	selectGridRow(t, g, mapDatabaseCol, "salesdb")
+	editText(t, form, "Default schema", "reporting")
+	toggleByName(t, toggleGrid(t, form), "db_owner", 0)
+
+	ctx, col := gosmo.WithScript(context.Background())
+	if err := apply(ctx); err != nil {
+		t.Fatalf("apply under WithScript: %v", err)
+	}
+	script := col.String()
+	for _, want := range []string{
+		"CREATE USER [appuser] FOR LOGIN [appuser] WITH DEFAULT_SCHEMA = [reporting]",
+		"ALTER ROLE [db_owner] ADD MEMBER [appuser]",
+	} {
+		if !strings.Contains(script, want) {
+			t.Errorf("script lacks %q:\n%s", want, script)
+		}
+	}
+	if strings.Contains(script, "ALTER USER") {
+		t.Errorf("a new mapping's schema was set by a separate ALTER USER:\n%s", script)
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -1105,6 +1106,54 @@ func TestOpenLogFileRotatesOnlyPastTheLimit(t *testing.T) {
 	}
 	if fi.Mode().Perm() != 0o600 {
 		t.Errorf("fresh log mode = %v, want 0600", fi.Mode().Perm())
+	}
+}
+
+// A log (and its .1) created 0644 by an older build comes back owner-only:
+// OpenFile's 0600 applies only when it creates the file. The result is capped
+// at 0600, never widened to it.
+func TestOpenLogFileNarrowsAnOlderWorldReadableLog(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows has no group/other permission bits")
+	}
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	path, err := LogFilePath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range []string{path, path + ".1"} {
+		if err := os.WriteFile(p, []byte("old\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(p, 0o644); err != nil { // past the umask
+			t.Fatal(err)
+		}
+	}
+	f, err := OpenLogFile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+	for _, p := range []string{path, path + ".1"} {
+		fi, err := os.Stat(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if fi.Mode().Perm() != 0o600 {
+			t.Errorf("%s mode = %v, want 0600", filepath.Base(p), fi.Mode().Perm())
+		}
+	}
+
+	if err := os.Chmod(path, 0o204); err != nil {
+		t.Fatal(err)
+	}
+	f, err = OpenLogFile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+	if fi, _ := os.Stat(path); fi.Mode().Perm() != 0o200 {
+		t.Errorf("a 0204 log became %v, want 0200 (capped, not widened)", fi.Mode().Perm())
 	}
 }
 

@@ -149,7 +149,8 @@ func tempdbObjectCountBars(s activity.TempDBSample) []charts.Bar {
 }
 
 // tempdbFileBars is one bar per file split used/free, so full and empty files
-// of equal size look different.
+// of equal size look different. The log's bar says so where it fits: a full
+// tempdb log is a different incident from full data files.
 func tempdbFileBars(s activity.TempDBSample) []charts.Bar {
 	cyan, _, _, _, _, _, neutral := chartColors()
 	files := s.Files
@@ -162,8 +163,12 @@ func tempdbFileBars(s activity.TempDBSample) []charts.Bar {
 		if free < 0 {
 			free = 0
 		}
+		label := f.Name
+		if f.Type == "LOG" {
+			label += " (log)"
+		}
 		bars = append(bars, charts.Bar{
-			Label: f.Name,
+			Label: label,
 			Short: f.Name,
 			Parts: []charts.BarPart{
 				{Value: f.UsedMB, Color: cyan},

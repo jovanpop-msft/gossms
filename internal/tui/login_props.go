@@ -567,7 +567,10 @@ func pageLoginUserMapping(sc *db.ServerConn, loginName *string) propPage {
 						continue
 					}
 					if e.mapped {
-						if err := l.MapToDatabase(ctx, e.dbName, e.user, ""); err != nil {
+						// The schema goes into the CREATE USER, as New Login does: a separate
+						// ALTER would have to read the user back first, and under Script
+						// Changes the CREATE is only collected, so that read found no user.
+						if err := l.MapToDatabase(ctx, e.dbName, e.user, e.schema); err != nil {
 							return err
 						}
 					} else {
@@ -580,16 +583,13 @@ func pageLoginUserMapping(sc *db.ServerConn, loginName *string) propPage {
 					if !e.mapped {
 						continue
 					}
-					if e.schema != e.origSchema {
+					if e.origMapped && e.schema != e.origSchema {
 						d, err := sc.Server.DatabaseByName(ctx, e.dbName)
 						if err != nil {
 							return err
 						}
-						u, err := d.UserByName(ctx, e.user)
-						if err != nil {
-							return err
-						}
-						if err := u.SetDefaultSchema(ctx, e.schema); err != nil {
+						// UserRef: ALTER USER needs only the name.
+						if err := d.UserRef(e.user).SetDefaultSchema(ctx, e.schema); err != nil {
 							return err
 						}
 					}

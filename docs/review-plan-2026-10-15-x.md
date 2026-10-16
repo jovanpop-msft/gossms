@@ -464,9 +464,73 @@ gosmo changes go in first and are built and tested inside `~/go/gosmo`
    2016 page itself — SQL2016 has HADR off, so the dialog stops at its
    blocker there. Everything dropped afterwards.
 8. **X9 + X1** — both in `~/go/gosmo/tempdb_usage.go`; one live pass.
-9. **X12** — Login Properties Script Changes.
+   **DONE 2026-10-16**. X9: `TempDBFiles` now runs in tempdb (`DatabaseRef("tempdb").query`,
+   since `FILEPROPERTY` answers for the current database only) and reads
+   every file's used space as `FILEPROPERTY(name, 'SpaceUsed')`, log included;
+   the `dm_db_file_space_usage` join is gone. gossms labels the log's bar
+   "templog (log)" (Short stays the bare name). X1: `TempDBObjects` sums
+   `row_count` only for `index_id < 2`; reserved/used pages still sum every
+   index. Tests: gosmo `TestTempDBReadsConvertPagesToMB` (log UsedMB, the
+   `USE [tempdb]` prefix, the `index_id < 2` sum) and livedb
+   `live_tempdb_test.go` — `TestLiveTempDBObjectsCountsRowsOnce` (a #table
+   with clustered + two nonclustered indexes and 1000 rows grows the
+   local-temp count by 1000) and `TestLiveTempDBFilesReadsLogUsage`; green on
+   17, 14 and 13, and with the old `tempdb_usage.go` they fail (3000 rows;
+   templog 0.00 MB). gossms `TestTempDBFileBarsMarkTheLog`, mutation-checked.
+   Live A/B in tmux on 17 with a sqlcmd session holding an open transaction
+   over a #table (tempdb log 164.8 of 200 MB per FILEPROPERTY): the old
+   binary's templog bar is all free; the new one's "templog (log)" splits at
+   column 107.1 of 131 (≈164 MB). Note: FILEPROPERTY's data-file numbers can
+   differ by a few pages from `dm_db_file_space_usage`'s (304 vs 296 on
+   temp2) — it counts allocated pages, not extents.
+9. **X12** — Login Properties Script Changes. **DONE 2026-10-16**: a new
+   mapping passes the edited schema to `MapToDatabase` (into the CREATE USER,
+   as New Login does) and skips the separate set; an already mapped user's
+   schema change goes through `d.UserRef(e.user)`, no user read. Test
+   `TestUserMappingScriptsANewMappingWithItsSchemaAndRole` (map + schema +
+   role under `WithScript`: `CREATE USER … WITH DEFAULT_SCHEMA`, the
+   `ALTER ROLE`, no `ALTER USER`; the fake now answers salesdb's user read
+   empty), mutation-checked (old code → "database user not found"; the
+   `origMapped` gate dropped → a stray ALTER USER). Live A/B in tmux on 17
+   (scratch config, throwaway `x12login`/`x12db` with schema `rpt`): map x12db,
+   schema rpt, db_accessadmin, Script Changes — old binary fails `database
+   user "x12login" not found in "x12db"`, new one scripts `USE [x12db]`,
+   `CREATE USER … WITH DEFAULT_SCHEMA = [rpt]`, `ALTER ROLE`, which ran
+   cleanly from the window (catalog confirmed); then a real Apply of schema
+   guest on the now-mapped user set it with the role kept. Both dropped.
 10. **X2 + X3** — table detail and space reads (gosmo breaking for X2).
-11. **X15** — log file mode.
+    **DONE 2026-10-16**. X2: `TableDetail.SchemaOwner` is gone; `Owner` joins
+    `database_principals` on `COALESCE(t.principal_id, s.principal_id)` and
+    `OwnedBySchemaOwner` is `t.principal_id IS NULL`. gossms's Owner row
+    reads `x2_owner`, or `dbo (schema owner)` when inherited
+    (`tableOwnerText`). X3: `index_kb` counts allocation types 1 and 3 only,
+    in both `SpaceUsed` and `TableSpaceUsedAll`; every LOB_DATA unit stays in
+    `lob_kb`, said on `TableSpaceInfo`. Tests: golden `table_detail.sql`
+    regenerated and the ledger test's column count 10 → 11; livedb
+    `live_table_detail_test.go` — `TestLiveTableDetailOwner` (re-owned to a
+    `WITHOUT LOGIN` user, plus an inherited one) and
+    `TestLiveTableSpacePartsSumToReserved` (NC index INCLUDEing a filled
+    `nvarchar(max)`, both reads), green on 17, 14 and 13, and both fail with
+    either fix reverted (Owner `dbo`; parts 24168 KB vs reserved 16160);
+    gossms `TestTableOwnerTextMarksAnInheritedOwner`. Live A/B in tmux on 17
+    (scratch config, throwaway `x2db`): old binary's Table Properties shows
+    Owner `dbo` for the re-owned table and Storage Indexes 8048 KB (the NC
+    index's LOB counted twice); new one shows `x2_owner` / `dbo (schema
+    owner)` and Indexes 40 KB, 40+40+16016+64 = 16160 reserved. Dropped
+    afterwards. Note: the Tables folder's details grid shows Data/Index/Unused
+    but no LOB column, so a table's LOB space (base or, now, NC-included) is
+    in none of its columns — left as is.
+11. **X15** — log file mode. **DONE 2026-10-16**: `OpenLogFile` caps an
+    existing gossms.log at `mode & 0600` after opening (`f.Chmod`), and
+    gossms.log.1 the same way — rotation renames the old file with its mode,
+    and an older build's .1 holds the same server names and logins. Bits
+    already inside 0600 are kept, never widened. Test
+    `TestOpenLogFileNarrowsAnOlderWorldReadableLog` (0644 log and .1 → 0600;
+    0204 → 0200; skipped on Windows), mutation-checked (either chmod removed;
+    the cap replaced by a flat 0600). Live: the built binary under a scratch
+    `XDG_CONFIG_HOME` with both files pre-created 0644 leaves them 0600.
+    `~/.config/gossms/gossms.log` is still 0644 until the next run of a build
+    with this fix.
 
 Each item ends with `gofmt -w .`, `go vet ./...` and `go test ./...` in every
 repository it touched, the live step it names, and its line here marked

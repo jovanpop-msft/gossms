@@ -75,7 +75,7 @@ func pageTableGeneral(sc *db.ServerConn, dbName, schema, name string) propPage {
 				propsheet.Section("Table information"),
 				propsheet.Static("Name", t.Name),
 				propsheet.Static("Schema", t.Schema),
-				propsheet.Static("Owner", detail.SchemaOwner),
+				propsheet.Static("Owner", tableOwnerText(detail)),
 				propsheet.Static("Created", formatSQLDate(t.CreateDate)),
 				propsheet.Static("Last modified", formatSQLDate(t.ModifyDate)),
 				propsheet.Static("Table type", "User table"),
@@ -99,6 +99,16 @@ func pageTableGeneral(sc *db.ServerConn, dbName, schema, name string) propPage {
 			return f, nil, nil
 		},
 	}
+}
+
+// tableOwnerText names the table's owner, marking one the table takes from
+// its schema — SSMS shows only the name, which leaves a reader to guess
+// whether ALTER AUTHORIZATION ON OBJECT:: was ever run.
+func tableOwnerText(d *gosmo.TableDetail) string {
+	if d.OwnedBySchemaOwner {
+		return d.Owner + " (schema owner)"
+	}
+	return d.Owner
 }
 
 // pageTableColumns is a read-only grid with a "selected column" detail

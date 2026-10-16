@@ -676,7 +676,7 @@ func amWithTempDBSamples(am *ActivityMonitor, n int) {
 			Files: []activity.TempDBFile{
 				{FileID: 1, Name: "tempdev", Type: "ROWS", SizeMB: 72, UsedMB: 4},
 				{FileID: 3, Name: "tempdev2", Type: "ROWS", SizeMB: 72, UsedMB: 1},
-				{FileID: 2, Name: "templog", Type: "LOG", SizeMB: 8},
+				{FileID: 2, Name: "templog", Type: "LOG", SizeMB: 8, UsedMB: 6},
 			},
 			Sessions: []activity.TempDBSession{
 				{SessionID: 57, Host: "APP01", Program: "loadtest", Login: "sa", UserMB: 3, InternalMB: 1, TotalMB: 4},
@@ -703,6 +703,23 @@ func TestActivityMonitorTempDBTabDrawsItsSections(t *testing.T) {
 		if !amRowsContain(rows, want) {
 			t.Errorf("the TempDB tab is missing %q", want)
 		}
+	}
+}
+
+// The log file's bar is labelled as the log and drawn with its used space.
+func TestTempDBFileBarsMarkTheLog(t *testing.T) {
+	am := newTestActivityMonitor(160, 45)
+	amWithTempDBSamples(am, 1)
+	latest, _ := am.tdStore.Latest()
+	bars := tempdbFileBars(latest)
+	if len(bars) != 3 {
+		t.Fatalf("got %d file bars, want 3", len(bars))
+	}
+	if bars[0].Label != "tempdev" || bars[2].Label != "templog (log)" {
+		t.Errorf("labels = %q, %q; want the data file plain and the log marked", bars[0].Label, bars[2].Label)
+	}
+	if bars[2].Short != "templog" || bars[2].Parts[0].Value != 6 || bars[2].Parts[1].Value != 2 {
+		t.Errorf("log bar = %+v, want 6 MB used of 8", bars[2])
 	}
 }
 

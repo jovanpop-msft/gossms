@@ -454,14 +454,27 @@ const MaxLogSize = 5 << 20
 // startup, so a session never loses its own lines.
 //
 // The file is 0600 like the config and key: the log records server names,
-// logins and error text.
+// logins and error text. OpenFile's mode applies only at create, so a log (or
+// its .1) left 0644 by an older build is narrowed to owner-only here, the cap
+// fileutil's modeFor applies to config.json. On Windows Chmod only toggles
+// read-only, which the owner bits keep as is.
 func OpenLogFile() (*os.File, error) {
 	path, err := LogFilePath()
 	if err != nil {
 		return nil, err
 	}
 	rotateLog(path, MaxLogSize)
-	return os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+	if err != nil {
+		return nil, err
+	}
+	if fi, err := f.Stat(); err == nil && fi.Mode().Perm()&^0o600 != 0 {
+		_ = f.Chmod(fi.Mode().Perm() & 0o600)
+	}
+	if fi, err := os.Stat(path + ".1"); err == nil && fi.Mode().Perm()&^0o600 != 0 {
+		_ = os.Chmod(path+".1", fi.Mode().Perm()&0o600)
+	}
+	return f, nil
 }
 
 // rotateLog renames path to path+".1" when larger than limit. Best effort: a
