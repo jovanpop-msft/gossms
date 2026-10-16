@@ -18,6 +18,11 @@ func TestCategorizeGroupsByWaitFamily(t *testing.T) {
 		"SOS_SCHEDULER_YIELD": WaitCPU,
 		"CXPACKET":            WaitCPU,
 		"SOMETHING_BRAND_NEW": WaitOther,
+
+		// An AG primary's commit latency is log latency.
+		"HADR_SYNC_COMMIT":            WaitLog,
+		"HADR_DATABASE_FLOW_CONTROL":  WaitLog,
+		"HADR_TRANSPORT_FLOW_CONTROL": WaitLog,
 	} {
 		if got := categorize(wait); got != want {
 			t.Errorf("categorize(%q) = %s, want %s", wait, WaitCategoryNames[got], WaitCategoryNames[want])
@@ -102,6 +107,14 @@ func TestBackgroundWaitsAreExcluded(t *testing.T) {
 		"WAITFOR", "SLEEP_TASK", "QDS_ASYNC_QUEUE", "HADR_WORK_QUEUE",
 		"BROKER_TO_FLUSH", "SQLTRACE_WAIT_ENTRIES", "CLR_AUTO_EVENT",
 		"WAIT_XTP_HOST_WAIT", "CHECKPOINT_QUEUE",
+		// Idle HADR waits; ~10 M ms/day each on an idle AG replica.
+		"HADR_CLUSAPI_CALL", "HADR_FILESTREAM_IOMGR_IOCOMPLETION", "HADR_LOGCAPTURE_WAIT",
+		"HADR_NOTIFICATION_DEQUEUE", "HADR_TIMER_TASK",
+		// The AG health check's sp_server_diagnostics: ~500 ms/sec, forever,
+		// on every replica.
+		"PREEMPTIVE_SP_SERVER_DIAGNOSTICS", "PREEMPTIVE_XE_DISPATCHER",
+		// Accelerated database recovery's version-store preallocator (2019+).
+		"PVS_PREALLOCATE", "AZURE_IMDS_VERSIONS",
 	} {
 		if !isBenignWait(w) {
 			t.Errorf("%s is not excluded; it accumulates constantly on an idle server", w)
@@ -114,6 +127,8 @@ func TestRealWaitsSurviveTheExclusions(t *testing.T) {
 	for _, w := range []string{
 		"LCK_M_X", "PAGEIOLATCH_SH", "WRITELOG", "SOS_SCHEDULER_YIELD",
 		"CXPACKET", "RESOURCE_SEMAPHORE", "ASYNC_NETWORK_IO", "THREADPOOL",
+		// An AG primary's commit and throttling waits.
+		"HADR_SYNC_COMMIT", "HADR_DATABASE_FLOW_CONTROL", "HADR_TRANSPORT_FLOW_CONTROL",
 	} {
 		if isBenignWait(w) {
 			t.Errorf("%s is excluded, but it is a wait worth showing", w)

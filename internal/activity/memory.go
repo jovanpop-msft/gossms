@@ -28,20 +28,21 @@ var memoryOrder = []string{
 }
 
 // clerkGroups maps a clerk type to its display group. Unlisted clerks go to
-// Other, so components sum to total memory.
+// Other, so components sum to total memory — which also hides a misspelt key,
+// so TestLiveEveryClerkGroupKeyExists checks each against the server.
 var clerkGroups = map[string]string{
-	"MEMORYCLERK_SQLBUFFERPOOL":    memBuffer,
-	"MEMORYCLERK_SQLGENERAL":       memStolen,
-	"MEMORYCLERK_SQLCLR":           memStolen,
-	"MEMORYCLERK_SQLOPTIMIZER":     memStolen,
-	"MEMORYCLERK_SOSNODE":          memStolen,
-	"MEMORYCLERK_XTP":              memInMemOLTP,
-	"CACHESTORE_SQLCP":             memPlanSQL,
-	"CACHESTORE_OBJCP":             memPlanObjects,
-	"CACHESTORE_PHDR":              memPlanObjects,
-	"MEMORYCLERK_SQLQUERYPLAN":     memPlanSQL,
-	"MEMORYCLERK_COLUMNSTOREOBJEC": memColumnstore,
-	"MEMORYCLERK_SQLQERESERVATION": memQueryGrants,
+	"MEMORYCLERK_SQLBUFFERPOOL":        memBuffer,
+	"MEMORYCLERK_SQLGENERAL":           memStolen,
+	"MEMORYCLERK_SQLCLR":               memStolen,
+	"MEMORYCLERK_SQLOPTIMIZER":         memStolen,
+	"MEMORYCLERK_SOSNODE":              memStolen,
+	"MEMORYCLERK_XTP":                  memInMemOLTP,
+	"CACHESTORE_SQLCP":                 memPlanSQL,
+	"CACHESTORE_OBJCP":                 memPlanObjects,
+	"CACHESTORE_PHDR":                  memPlanObjects,
+	"MEMORYCLERK_SQLQUERYPLAN":         memPlanSQL,
+	"CACHESTORE_COLUMNSTOREOBJECTPOOL": memColumnstore,
+	"MEMORYCLERK_SQLQERESERVATIONS":    memQueryGrants,
 }
 
 // collectMemory reads memory clerks grouped for the composition bar, in display

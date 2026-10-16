@@ -81,6 +81,7 @@ func loadDatabasesChildren(l loaderCtx, node *explorerNode) ([]*explorerNode, er
 		}
 		n := l.node(agLabelForDatabase(d.Name, agStates), NodeDatabase, "", d.Name, d.Name)
 		n.data.IsOffline = d.State != "ONLINE"
+		n.data.DBState = d.State
 		n.data.CreateDate = d.CreateDate
 		userDBs = append(userDBs, n)
 	}
@@ -128,6 +129,7 @@ func loadSystemDatabasesChildren(l loaderCtx, node *explorerNode) ([]*explorerNo
 		if d.IsSystem() {
 			n := l.node(d.Name, NodeDatabase, "", d.Name, d.Name)
 			n.data.IsOffline = d.State != "ONLINE"
+			n.data.DBState = d.State
 			n.data.CreateDate = d.CreateDate
 			n.data.IsSystem = true
 			out = append(out, n)

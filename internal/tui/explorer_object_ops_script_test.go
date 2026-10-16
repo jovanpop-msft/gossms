@@ -156,3 +156,36 @@ func TestScriptingATypedDeleteNeedsNoTypedName(t *testing.T) {
 		t.Errorf("the query window holds %q, want the database's DROP", got)
 	}
 }
+
+// Delete Database names what SQL Server leaves on disk when it drops a
+// database it cannot open: an OFFLINE database's data and log files, an
+// EMERGENCY one's log (X5, probed on 17). Any other state, RESTORING included,
+// deletes the files and says nothing more.
+func TestDeleteDatabaseSaysWhichFilesAnOfflineDropLeaves(t *testing.T) {
+	sc, inst := newFakeConn(t)
+	for state, want := range map[string]string{
+		"OFFLINE":   "It is OFFLINE, so its data and log files stay on disk.",
+		"EMERGENCY": "It is in EMERGENCY mode, so its log file stays on disk.",
+		"ONLINE":    "",
+		"RESTORING": "",
+	} {
+		a := newTestApp()
+		a.confirmDeleteObjects(sc, []nodeData{{Type: NodeDatabase, Name: "Sales", DBName: "Sales", DBState: state, IsOffline: state != "ONLINE"}}, func() {})
+		if !a.confirmTypedDialog.Visible() {
+			t.Fatalf("%s: no typed confirmation", state)
+		}
+		msg := a.confirmTypedDialog.Message()
+		if !strings.HasPrefix(msg, `Delete database "Sales"? This cannot be undone. Existing connections to it will be closed.`) {
+			t.Errorf("%s: message %q lost the question or the shared warning", state, msg)
+		}
+		if want != "" && !strings.HasSuffix(msg, " "+want) {
+			t.Errorf("%s: message %q, want it to end %q", state, msg, want)
+		}
+		if want == "" && strings.Contains(msg, "stay on disk") {
+			t.Errorf("%s: message %q says files stay on disk", state, msg)
+		}
+	}
+	if stmts := inst.Statements(); len(stmts) != 0 {
+		t.Errorf("ran %q before the name was typed", stmts)
+	}
+}

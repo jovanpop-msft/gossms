@@ -520,6 +520,10 @@ func (a *App) toggleDatabaseOffline(sc *db.ServerConn, node *explorerNode) {
 					return
 				}
 				node.data.IsOffline = goOffline
+				node.data.DBState = "ONLINE"
+				if goOffline {
+					node.data.DBState = "OFFLINE"
+				}
 				a.explorer.Reload(node)
 				a.explorer.rebuild() // repaint node's own icon immediately even when it's collapsed (Reload only rebuilds once an expanded reload completes)
 				a.setStatus(fmt.Sprintf("Database %q is now %s", dbName, word))

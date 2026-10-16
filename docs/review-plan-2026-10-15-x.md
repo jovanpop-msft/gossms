@@ -353,9 +353,58 @@ gosmo changes go in first and are built and tested inside `~/go/gosmo`
    window (win10cli 17, scratch config): `a b c d`, Shift+Down ×2 from the top
    — old binary comments/indents/dedents/duplicates/deletes/moves three lines,
    new one two. Toggle comment is Ctrl+/ in gossms (not Ctrl+K,C).
-3. **X10** — two map keys; trivial, live-confirmed already.
-4. **X11 + X13** — the benign-wait list, one file, one review.
+3. **X10** — two map keys; trivial, live-confirmed already. **DONE
+   2026-10-15**: keys now `CACHESTORE_COLUMNSTOREOBJECTPOOL` and
+   `MEMORYCLERK_SQLQERESERVATIONS`. Tests `memory_test.go` (every group fills
+   from its real type name) and livedb `TestLiveEveryClerkGroupKeyExists`
+   (every `clerkGroups` key is a type the server reports); both fail with the
+   old keys. All twelve keys confirmed present on 13, 14 and 17 (livedb green
+   on all three); on 17 the two groups hold 0.03 MB / 1 MB, so both slices now
+   draw instead of going to Other.
+4. **X11 + X13** — the benign-wait list, one file, one review. **DONE
+   2026-10-15**: the `HADR_` family is gone; the six idle HADR waits are
+   listed by name, and `HADR_SYNC_COMMIT` plus both flow-control waits go to
+   Log (no new bucket). Added from the sqlskills list, each seen accumulating
+   live: `PVS_PREALLOCATE` (23.6 M ms on win10cli),
+   `PREEMPTIVE_SP_SERVER_DIAGNOSTICS` (~500 ms/sec, forever, on both AG
+   replicas — the AG health check), `PREEMPTIVE_XE_DISPATCHER` (39 M ms on
+   ubusql1), `AZURE_IMDS_VERSIONS`, plus `PREEMPTIVE_HADR_LEASE_MECHANISM`,
+   `UCS_SESSION_REGISTRATION`, `VDI_CLIENT_OTHER`. Tests in `waits_test.go`
+   (categorize and benign/real rows), mutation-checked (family restored, Log
+   mapping dropped, PVS removed). Live: 20 s idle deltas on ubusql1/2,
+   win10cli and SQL2016 leave no background wait above ~25 ms/sec in Other;
+   A/B on the AAG1 primary (ubusql2) under a single-row commit loop, Sample
+   tab — old binary's Log bar ~260 ms/sec (WRITELOG alone), new ~540 ms/sec
+   (HADR_SYNC_COMMIT 8 s of every 20 s). Left for the author: on Linux the log
+   flush also shows as `PREEMPTIVE_OS_FLUSHFILEBUFFERS` (8 s/20 s under the
+   same loop), which lands in Other; it is commit latency there, but on
+   Windows the wait comes from file creation and backups, so it was not moved
+   to Log.
 5. **X5** — gosmo batch change plus a live run; unblocks a common cleanup.
+   **DONE 2026-10-15**: probed on 17 first, which corrected the finding —
+   only RESTORING (Msg 5052) and RECOVERY_PENDING (Msg 5181) refuse SET
+   SINGLE_USER; OFFLINE, EMERGENCY and STANDBY take it, and the old forced
+   drop already deleted those. `exclusiveBatch` (used by Drop and Detach) now
+   tests the state in the batch: ONLINE read-write or EMERGENCY → SINGLE_USER
+   as before; STANDBY → kill its sessions (the restore's branch), no access
+   mode touched; anything else → op as it is. The CATCH releases only a
+   database the batch closed (`@closed`). Detach with DropConnections of a
+   RESTORING database now detaches (probed). Rename is out of reach: MODIFY
+   NAME itself refuses RESTORING (Msg 927) and RECOVERY_PENDING (Msg 945), so
+   no gate helps. Also probed: SQL Server keeps an OFFLINE database's files,
+   an EMERGENCY one's log and a STANDBY one's undo file on drop — said on
+   `Drop`, and gossms's Delete Database confirmation adds "It is OFFLINE, so
+   its data and log files stay on disk." (or the EMERGENCY line) from a new
+   `nodeData.DBState`. Tests: gosmo `TestExclusiveBatchTakesSingleUserOnlyWhereTheStateAcceptsIt`
+   plus the reshaped `assertExclusiveBatch`, mutation-checked (ELSE branch,
+   `@closed` guard, `state IN (0, 5)`); livedb
+   `TestLiveForcedDropDeletesADatabaseInAnyState` (RESTORING, STANDBY with a
+   reader connected, OFFLINE) green on 13, 14 and 17, RESTORING failing on
+   the old code; gossms `TestDeleteDatabaseSaysWhichFilesAnOfflineDropLeaves`
+   (mutation-checked), via a new `TypedConfirmDialog.Message()`. Live A/B in
+   tmux on 17: old binary's Delete of a RESTORING database fails Msg 5052,
+   new one deletes it; the OFFLINE one shows the note, is deleted, and its
+   two files were indeed left on disk (removed by hand).
 6. **X14** — gosmo option + gossms wiring; removes a wrong-database DROP risk.
 7. **X7 + X8** — the Availability Group dialogs together (gosmo breaking:
    `*int`); verify X7 with `PARSEONLY` on the 2016 instance.

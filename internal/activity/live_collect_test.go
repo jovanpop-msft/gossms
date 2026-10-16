@@ -141,6 +141,26 @@ func TestLiveCollectReadsEverything(t *testing.T) {
 		s.TotalServerMemoryMB, s.TargetServerMemMB, s.Sched.Schedulers, s.CPU)
 }
 
+// Every grouped clerk type must be one the server reports: a misspelt key reads
+// as an empty group and its memory lands in Other with no error. All twelve
+// exist on 13, 14 and 17.
+func TestLiveEveryClerkGroupKeyExists(t *testing.T) {
+	db, ctx := liveDB(t)
+	clerks, err := liveServer(t, ctx, db).MemoryClerks(ctx)
+	if err != nil {
+		t.Fatalf("MemoryClerks: %v", err)
+	}
+	have := map[string]bool{}
+	for _, c := range clerks {
+		have[c.Type] = true
+	}
+	for typ, group := range clerkGroups {
+		if !have[typ] {
+			t.Errorf("clerk type %q (%s) is not in sys.dm_os_memory_clerks here", typ, group)
+		}
+	}
+}
+
 func TestLiveCollectTempDB(t *testing.T) {
 	db, ctx := liveDB(t)
 

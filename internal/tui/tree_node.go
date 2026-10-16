@@ -468,6 +468,10 @@ type nodeData struct {
 	Loaded       bool
 	IsPrimaryKey bool
 	IsOffline    bool
+	// DBState is a NodeDatabase's sys.databases state_desc (ONLINE, OFFLINE,
+	// RESTORING, …), read at load time; IsOffline is DBState != "ONLINE". The
+	// delete confirmation names what a drop in that state leaves on disk.
+	DBState string
 	// IsSystem marks an object SQL Server owns: a system database, a sys-schema
 	// view/procedure/function, a SQL-Server-created Agent job. The System * folder
 	// loaders emit the same node types as the user ones, so without this flag

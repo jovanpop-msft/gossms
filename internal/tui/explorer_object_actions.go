@@ -96,6 +96,11 @@ func (a *App) confirmDeleteObjects(sc *db.ServerConn, objs []nodeData, after fun
 		if op.warning != "" {
 			msg += " " + op.warning
 		}
+		if op.warningFor != nil {
+			if w := op.warningFor(n); w != "" {
+				msg += " " + w
+			}
+		}
 		title := "Delete " + op.noun
 		if typedDelete(op, n) {
 			if op.typedWarning != "" {

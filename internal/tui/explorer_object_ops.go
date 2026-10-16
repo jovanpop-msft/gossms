@@ -31,8 +31,10 @@ type objectOp struct {
 	drop   func(ctx context.Context, sc *db.ServerConn, n nodeData) error
 	rename func(ctx context.Context, sc *db.ServerConn, n nodeData, newName string) error
 	// warning is appended to the delete confirmation when the drop does
-	// something beyond removing the object itself.
-	warning string
+	// something beyond removing the object itself. warningFor, when set, adds
+	// what depends on the one object (a database's state), after warning.
+	warning    string
+	warningFor func(n nodeData) string
 	// typed gates the delete behind retyping the object's name, for drops with
 	// a bigger blast radius. It implies solo.
 	typed bool
@@ -83,15 +85,31 @@ func tableOf(sc *db.ServerConn, n nodeData) *gosmo.Table {
 	return sc.Server.DatabaseRef(n.DBName).TableRef(n.Schema, n.TableName)
 }
 
+// databaseDropLeftovers is the Delete Database confirmation's note on the
+// files SQL Server does not delete with a database it cannot open: all of an
+// OFFLINE one's, an EMERGENCY one's log (probed on 17, 2026-10-15).
+func databaseDropLeftovers(n nodeData) string {
+	switch n.DBState {
+	case "OFFLINE":
+		return "It is OFFLINE, so its data and log files stay on disk."
+	case "EMERGENCY":
+		return "It is in EMERGENCY mode, so its log file stays on disk."
+	}
+	return ""
+}
+
 // objectOps is the per-type table. Entries call a method on the gosmo handle
 // (Drop, Rename, Transfer); gosmo picks the statement and class (sp_rename
 // 'OBJECT', 'USERDATATYPE' for alias types, TRANSFER's TYPE:: and XML SCHEMA
 // COLLECTION:: prefixes).
 var objectOps = map[NodeType]objectOp{
 	NodeDatabase: {
-		noun:    "Database",
-		warning: "Existing connections to it will be closed.",
-		typed:   true,
+		noun:       "Database",
+		warning:    "Existing connections to it will be closed.",
+		warningFor: databaseDropLeftovers,
+		typed:      true,
+		// gosmo drops a RESTORING, RECOVERY_PENDING or OFFLINE database as it
+		// is, since those refuse SET SINGLE_USER and have nobody connected.
 		drop: func(ctx context.Context, sc *db.ServerConn, n nodeData) error {
 			return dbOf(sc, n).Drop(ctx, gosmo.TerminationRollbackImmediate)
 		},

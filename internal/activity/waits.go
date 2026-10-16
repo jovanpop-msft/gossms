@@ -47,14 +47,22 @@ var benignWaits = []string{
 	"RESOURCE_QUEUE", "SERVER_IDLE_CHECK", "SNI_HTTP_ACCEPT", "SOS_WORK_DISPATCHER",
 	"SP_SERVER_DIAGNOSTICS_SLEEP", "WAIT_FOR_RESULTS", "WAITFOR", "WAITFOR_TASKSHUTDOWN",
 	"WAIT_ON_SYNC_STATISTICS_REFRESH", "PREEMPTIVE_XE_GETTARGETSTATE",
-	"PREEMPTIVE_OS_DMV_PDH_QUERY",
+	"PREEMPTIVE_OS_DMV_PDH_QUERY", "PREEMPTIVE_XE_DISPATCHER",
+	"PREEMPTIVE_SP_SERVER_DIAGNOSTICS", "PREEMPTIVE_HADR_LEASE_MECHANISM",
+	"PVS_PREALLOCATE", "AZURE_IMDS_VERSIONS", "UCS_SESSION_REGISTRATION",
+	"VDI_CLIENT_OTHER",
+	// The idle HADR waits by name, not the HADR_ family: HADR_SYNC_COMMIT is a
+	// primary's commit waiting on synchronous secondaries, and the flow-control
+	// waits are real throttling — on an AG primary, where the time goes.
+	"HADR_CLUSAPI_CALL", "HADR_FILESTREAM_IOMGR_IOCOMPLETION", "HADR_LOGCAPTURE_WAIT",
+	"HADR_NOTIFICATION_DEQUEUE", "HADR_TIMER_TASK", "HADR_WORK_QUEUE",
 }
 
 // benignFamilies are background-wait prefixes, excluded by family: names alone
 // let PWAIT_EXTENSIBILITY_CLEANUP_TASK through on SQL Server 2025 (300,000 ms
 // in one 2s sample, flattening the panel), and releases keep adding more.
 var benignFamilies = []string{
-	"SLEEP", "QDS_", "XE_", "BROKER_", "HADR_", "PWAIT_",
+	"SLEEP", "QDS_", "XE_", "BROKER_", "PWAIT_",
 	"FT_", "PARALLEL_REDO_", "DBMIRROR", "SQLTRACE_", "CLR_",
 	"WAIT_XTP_",
 }
@@ -101,7 +109,9 @@ func categorize(waitType string) WaitCategory {
 		strings.HasPrefix(w, "TREE"):
 		return WaitLatch
 	case strings.HasPrefix(w, "WRITELOG"), strings.HasPrefix(w, "LOGBUFFER"),
-		strings.HasPrefix(w, "LOGMGR"), w == "LOG_RATE_GOVERNOR":
+		strings.HasPrefix(w, "LOGMGR"), w == "LOG_RATE_GOVERNOR",
+		// Commit latency an AG adds: the log hardening on secondaries.
+		w == "HADR_SYNC_COMMIT", w == "HADR_DATABASE_FLOW_CONTROL", w == "HADR_TRANSPORT_FLOW_CONTROL":
 		return WaitLog
 	case strings.HasPrefix(w, "RESOURCE_SEMAPHORE"), w == "CMEMTHREAD", w == "MEMORY_GRANT_UPDATE",
 		strings.HasPrefix(w, "MEMORY_"):
