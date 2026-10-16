@@ -3,7 +3,9 @@ package activity
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
+	"regexp"
 )
 
 // ProcLocation says which database holds a helper procedure.
@@ -121,4 +123,38 @@ func (p *Proc) Install(ctx context.Context, db *sql.DB, l ProcLocation) error {
 		return fmt.Errorf("install %s: %w", p.Qualified(l), err)
 	}
 	return nil
+}
+
+// Current reports whether the copy at l (not ProcNone) is the one Install
+// writes, by its stored definition — false for an earlier gossms's body, or
+// when the definition can't be read (no VIEW DEFINITION). An install that
+// keeps the copy current is what carries a fix to a server that already has
+// one: Find alone stops at "it exists" (review plan 2026-10-16, U1).
+func (p *Proc) Current(ctx context.Context, db *sql.DB, l ProcLocation) (bool, error) {
+	database := l.Database()
+	if database == "" {
+		return false, fmt.Errorf("check %s: no target database", p.MasterName)
+	}
+	q := "select definition from " + database + ".sys.sql_modules where object_id = object_id(@p1, 'P')"
+	var def sql.NullString
+	err := db.QueryRowContext(ctx, q, p.Qualified(l)).Scan(&def)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("check %s: %w", p.Qualified(l), err)
+	}
+	return def.Valid && storedHead(def.String) == storedHead(p.Script(l)), nil
+}
+
+// procHead matches a procedure's CREATE head in either form.
+var procHead = regexp.MustCompile(`(?i)create\s+(or\s+alter\s+)?procedure`)
+
+// storedHead puts every CREATE head in one form. The server stores CREATE OR
+// ALTER's as "create   procedure" (verified live, 13 and 17), so a stored
+// definition otherwise never equals the script that made it. Every
+// occurrence, on both sides: whoisactive.sql's leading comment quotes the
+// head too, and the server leaves that one alone.
+func storedHead(def string) string {
+	return procHead.ReplaceAllString(def, "create procedure")
 }

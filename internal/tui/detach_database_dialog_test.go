@@ -173,13 +173,13 @@ func TestDetachFileGridStartsAtThePrimaryDataFile(t *testing.T) {
 // here, so the database-scoped read fails the way a real one does.
 func TestDetachOnAnOfflineDatabaseStillListsTheFiles(t *testing.T) {
 	sc, _ := newFakeConn(t,
-		fakeResponse{match: "FROM sys.databases", arg: "AppDB", cols: 10, rows: [][]driver.Value{
-			{"AppDB", int64(7), "OFFLINE", "FULL", int64(160), "SQL_Latin1_General_CP1_CI_AS", "SQL_Latin1_General_CP1_CI_AS", false, time.Now(), int64(0)},
+		fakeResponse{match: "FROM sys.databases", arg: "AppDB", cols: 11, rows: [][]driver.Value{
+			{"AppDB", int64(7), "OFFLINE", "FULL", int64(160), "SQL_Latin1_General_CP1_CI_AS", "SQL_Latin1_General_CP1_CI_AS", false, time.Now(), int64(0), false},
 		}},
-		fakeResponse{match: "sys.master_files", cols: 9, rows: [][]driver.Value{
-			{int64(1), "AppDB", `C:\Data\AppDB.mdf`, "ROWS", "ONLINE", int64(8192), int64(-1), int64(65536), false},
-			{int64(2), "AppDB_log", `C:\Logs\AppDB_log.ldf`, "LOG", "ONLINE", int64(8192), int64(-1), int64(65536), false},
-			{int64(3), "AppDB_2", `C:\Data\AppDB_2.ndf`, "ROWS", "ONLINE", int64(8192), int64(-1), int64(65536), false},
+		fakeResponse{match: "sys.master_files", cols: 10, rows: [][]driver.Value{
+			{int64(1), "AppDB", `C:\Data\AppDB.mdf`, "ROWS", "ONLINE", int64(8192), int64(-1), int64(65536), false, nil},
+			{int64(2), "AppDB_log", `C:\Logs\AppDB_log.ldf`, "LOG", "ONLINE", int64(8192), int64(-1), int64(65536), false, nil},
+			{int64(3), "AppDB_2", `C:\Data\AppDB_2.ndf`, "ROWS", "ONLINE", int64(8192), int64(-1), int64(65536), false, nil},
 		}},
 	)
 
@@ -224,15 +224,15 @@ func TestDetachOnAnOfflineDatabaseStillListsTheFiles(t *testing.T) {
 // answers, and the server catalog is not asked at all.
 func TestDetachOnAnOnlineDatabaseDoesNotReadTheServerCatalog(t *testing.T) {
 	sc, _ := newFakeConn(t,
-		fakeResponse{match: "FROM sys.databases", arg: "AppDB", cols: 10, rows: [][]driver.Value{
-			{"AppDB", int64(7), "ONLINE", "FULL", int64(160), "SQL_Latin1_General_CP1_CI_AS", "SQL_Latin1_General_CP1_CI_AS", false, time.Now(), int64(0)},
+		fakeResponse{match: "FROM sys.databases", arg: "AppDB", cols: 11, rows: [][]driver.Value{
+			{"AppDB", int64(7), "ONLINE", "FULL", int64(160), "SQL_Latin1_General_CP1_CI_AS", "SQL_Latin1_General_CP1_CI_AS", false, time.Now(), int64(0), false},
 		}},
 		fakeResponse{match: "sys.database_files", cols: 10, rows: [][]driver.Value{
 			{int64(1), "AppDB", `C:\Data\AppDB.mdf`, "ROWS", "PRIMARY", "ONLINE", int64(8192), int64(-1), int64(65536), false},
 		}},
 		// Deliberately not scripted: if the fallback runs anyway, this
 		// answer is wrong on purpose and the assertion below catches it.
-		fakeResponse{match: "sys.master_files", cols: 9, rows: [][]driver.Value{
+		fakeResponse{match: "sys.master_files", cols: 10, rows: [][]driver.Value{
 			{int64(9), "wrong", `C:\Nowhere\wrong.mdf`, "ROWS", "ONLINE", int64(8192), int64(-1), int64(65536), false},
 		}},
 	)

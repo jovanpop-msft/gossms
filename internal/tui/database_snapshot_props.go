@@ -18,10 +18,12 @@ import (
 // are its context menu's, not a form's. Both pages are named in
 // prop_page_requires_test.go's pagesThatOnlyRead.
 //
-// The Files page reads the snapshot's own sys.database_files, which lists the
-// sparse files, not the source's. Their size is what the snapshot has copied so
-// far (it starts near empty and grows as its source changes), so it is the one
-// figure here that moves.
+// The Files page reads the snapshot's own rows of sys.master_files, which list
+// the sparse files, not the source's. Their catalog size is only a ceiling —
+// the source file's size when the snapshot was taken — so the page shows the
+// on-disk size beside it: that is what the snapshot has copied so far (it
+// starts near empty and grows as its source changes), the one figure here
+// that moves.
 
 func findDatabaseSnapshot(ctx context.Context, sc *db.ServerConn, name string) (*gosmo.DatabaseSnapshot, error) {
 	return sc.Server.DatabaseSnapshotByName(ctx, name)
@@ -71,11 +73,11 @@ func pageDatabaseSnapshotFiles(sc *db.ServerConn, name string) propPage {
 			if err != nil {
 				return nil, nil, err
 			}
-			cols := []string{"Logical Name", "Type", "Size (MB)", "Path"}
+			cols := []string{"Logical Name", "Type", "Size on disk", "Maximum size", "Path"}
 			rows := make([][]string, 0, len(files))
 			for _, fl := range files {
 				rows = append(rows, []string{
-					fl.Name, fl.Type, core.FormatThousands(fl.SizeKB / 1024), fl.PhysicalName,
+					fl.Name, fl.Type, snapshotFileSizeOnDisk(fl), formatBytes(fl.SizeKB * 1024), fl.PhysicalName,
 				})
 			}
 			grid := controls.NewDataGrid()
@@ -84,7 +86,7 @@ func pageDatabaseSnapshotFiles(sc *db.ServerConn, name string) propPage {
 				propsheet.Section("Sparse files"),
 				propsheet.NewGridRow(grid, 10),
 			)
-			f.Add(propsheet.Note("A snapshot's files are sparse: each starts near empty and grows as pages change in the source database. A snapshot has no transaction log."))
+			f.Add(propsheet.Note("A snapshot's files are sparse: each starts near empty and grows as pages change in the source database, up to its maximum size — the source file's size when the snapshot was taken. Size on disk needs VIEW SERVER STATE. A snapshot has no transaction log."))
 			return f, nil, nil
 		},
 	}

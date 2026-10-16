@@ -24,14 +24,22 @@ var snapshotCreated = time.Date(2026, 9, 1, 14, 15, 0, 0, time.UTC)
 // databasesListResp answers Server.Databases. The last column is
 // source_database_id, which is what makes a row a snapshot.
 func databasesListResp(rows ...[]driver.Value) fakeResponse {
-	return fakeResponse{match: "compatibility_level, collation_name", cols: 10, rows: rows}
+	return fakeResponse{match: "compatibility_level, collation_name", cols: 11, rows: rows}
 }
 
 func databaseRow(id int, name string, sourceID int) []driver.Value {
 	return []driver.Value{
 		name, int64(id), "ONLINE", "FULL", int64(160), "SQL_Latin1_General_CP1_CI_AS", "SQL_Latin1_General_CP1_CI_AS", false,
-		snapshotCreated, int64(sourceID),
+		snapshotCreated, int64(sourceID), false,
 	}
+}
+
+// distributionRow is databaseRow for a Distributor's distribution database
+// (sys.databases.is_distributor = 1, the last column).
+func distributionRow(id int, name string) []driver.Value {
+	r := databaseRow(id, name, 0)
+	r[len(r)-1] = true
+	return r
 }
 
 // snapshotListResp answers Server.DatabaseSnapshots.
@@ -170,10 +178,9 @@ func TestDatabaseSnapshotPropertiesAreReadOnly(t *testing.T) {
 		// Server.DatabaseFiles reads sys.master_files, not
 		// sys.database_files: a snapshot's own files are recorded there and
 		// the read needs no connection into the snapshot.
-		fakeResponse{match: "FROM   sys.master_files mf", cols: 9, rows: [][]driver.Value{
-			{int64(1), "appdb_data", `C:\data\appdb_data_appdb_snapshot.ss`, "ROWS",
-				"ONLINE", int64(8192), int64(-1), int64(1024), false},
-		}},
+		// The catalog size (64 MB) is the sparse file's ceiling; the
+		// footprint (128 KB) is the DMV's — the probe's figures.
+		snapshotFilesResp(int64(128)),
 	)
 	pages := databaseSnapshotPropPages(sc, "appdb_snapshot")
 	if len(pages) != 2 {
@@ -206,8 +213,51 @@ func TestDatabaseSnapshotPropertiesAreReadOnly(t *testing.T) {
 	if len(fileRows) != 1 {
 		t.Fatalf("the Files page shows %d files, want 1", len(fileRows))
 	}
-	if fileRows[0][0] != "appdb_data" || fileRows[0][3] != `C:\data\appdb_data_appdb_snapshot.ss` {
+	if fileRows[0][0] != "appdb_data" || fileRows[0][4] != `C:\data\appdb_data_appdb_snapshot.ss` {
 		t.Errorf("file row = %v", fileRows[0])
+	}
+	if grid.ColumnIndex("Size on disk") != 2 || grid.ColumnIndex("Maximum size") != 3 ||
+		fileRows[0][2] != "128.0 KB" || fileRows[0][3] != "64.0 MB" {
+		t.Errorf("row %v: want Size on disk 128.0 KB beside Maximum size 64.0 MB", fileRows[0])
+	}
+}
+
+// snapshotFilesResp is one 64 MB-ceiling sparse file whose on-disk size is
+// onDiskKB (nil: unknown, the reading without VIEW SERVER STATE).
+func snapshotFilesResp(onDiskKB any) fakeResponse {
+	return fakeResponse{match: "FROM   sys.master_files mf", cols: 10, rows: [][]driver.Value{
+		{int64(1), "appdb_data", `C:\data\appdb_data_appdb_snapshot.ss`, "ROWS",
+			"ONLINE", int64(65536), int64(-1), int64(1024), false, onDiskKB},
+	}}
+}
+
+// The Detail Browser's view of one snapshot reports what the sparse files
+// occupy, not the catalog size — which for a snapshot is only the ceiling,
+// and once read as "Size on disk" showed a 128 KB snapshot as 64 MB.
+func TestDatabaseSnapshotDetailShowsSizeOnDisk(t *testing.T) {
+	for _, c := range []struct {
+		name     string
+		onDiskKB any
+		want     string
+	}{
+		{"known", int64(128), "128.0 KB"},
+		{"no VIEW SERVER STATE", nil, "N/A"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			sc, _ := newFakeConn(t, snapshotListResp(snapshotRow(9, "appdb_snapshot", "appdb", 7)), snapshotFilesResp(c.onDiskKB))
+			_, rows, err := databaseSnapshotDetail(context.Background(), sc,
+				&explorerNode{data: nodeData{Type: NodeDatabaseSnapshot, Name: "appdb_snapshot", conn: sc}})
+			if err != nil {
+				t.Fatalf("databaseSnapshotDetail: %v", err)
+			}
+			got := map[string]string{}
+			for _, r := range rows {
+				got[r[0]] = r[1]
+			}
+			if got["Size on disk"] != c.want || got["Maximum size"] != "64.0 MB" {
+				t.Errorf("Size on disk %q, Maximum size %q; want %q and 64.0 MB", got["Size on disk"], got["Maximum size"], c.want)
+			}
+		})
 	}
 }
 

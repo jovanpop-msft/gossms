@@ -1,8 +1,20 @@
 package activity
 
-// BlockProc is the blocking-chain procedure behind the Block tab. It reads
-// sys.sysprocesses, the one view with both spid and blocking spid in a row; a
-// recursive CTE walks that pairing into the indented tree.
+// BlockProc is the blocking-chain procedure behind the Block tab. It builds
+// one row per session with the session it is blocked by; a recursive CTE
+// walks that pairing into the indented tree.
+//
+// The blocker comes from sys.dm_os_waiting_tasks, the rule gosmo's
+// sessionBlockerJoin uses for RequestActivity, BlockedRequests and
+// ActiveSessions: the longest-waiting task blocked by another session, else
+// dm_exec_requests.blocking_session_id. A request running a parallel plan
+// waits on its workers (CXCONSUMER, blocking_session_id 0) while the lock wait
+// sits on a worker. The proc once read sys.sysprocesses, where that worker is
+// an ecid > 0 row with a zero sql_handle: CROSS APPLYing the text dropped the
+// row, the parallel reader showed as unblocked and its idle head blocker was
+// filtered out — the Block tab showed nothing (review plan 2026-10-16, U1).
+// Rejoining sysprocesses by spid also repeated every tree row once per
+// thread, so nothing below reads it.
 var BlockProc = &Proc{
 	MasterName: "sp_block",
 	TempDBName: "usp_block",
@@ -18,59 +30,92 @@ begin
     drop table if exists #blkchain;
     drop table if exists #result;
 
+    -- One row per session. An idle session has no request; its text is the
+    -- connection's most recent batch.
     select
-        spid
-        ,blocked
-        ,replace (replace (st.text, char(10), ' '), char (13), ' ' ) as batch
+         s.session_id as spid
+        ,coalesce(wb.blocking_session_id, nullif(r.blocking_session_id, r.session_id), 0) as blocked
+        ,s.is_user_process
+        ,isnull(coalesce(wb.wait_type, r.wait_type), N'') as wait_type
+        ,isnull(rtrim(s.host_name), N'') as host_name
+        ,isnull(coalesce(wb.resource_description, r.wait_resource), N'') as wait_resource
+        ,isnull(r.command, N'AWAITING COMMAND') as command
+        ,coalesce(wb.wait_duration_ms, r.wait_time, 0) as wait_time
+        ,st.text as sql_text
     into #blkchain
     from
-        sys.sysprocesses spr
-        cross apply sys.dm_exec_sql_text(spr.sql_handle) st;
+        sys.dm_exec_sessions s
+        left join sys.dm_exec_requests r
+            on r.session_id = s.session_id
+        left join (
+            select   session_id, blocking_session_id, wait_type, wait_duration_ms, resource_description
+                    ,row_number() over (partition by session_id
+                                        order by wait_duration_ms desc, blocking_session_id) as rn
+            from     sys.dm_os_waiting_tasks
+            where    blocking_session_id > 0
+              and    blocking_session_id <> session_id
+        ) wb
+            on wb.session_id = r.session_id and wb.rn = 1
+        outer apply (
+            select top (1) c.most_recent_sql_handle
+            from   sys.dm_exec_connections c
+            where  c.session_id = s.session_id
+              and  c.parent_connection_id is null
+        ) mc
+        outer apply sys.dm_exec_sql_text(isnull(r.sql_handle, mc.most_recent_sql_handle)) st;
 
 
-    ;with blktree(spid, blocking_spid, [level], batch)    as
+    -- A root is a session no other session blocks; a negative blocker
+    -- (-2 orphaned DTC, -4 latch owner) is not a session, so it is a root too.
+    ;with blktree(spid, blocking_spid, [level])    as
     (
         select   blc.spid
                 ,blc.blocked
                 ,cast (replicate ('0', 4-len (cast (blc.spid as varchar))) + cast (blc.spid as varchar)+ '#' as varchar (1000)) as [level]
-                ,blc.batch
         from    #blkchain blc
-        where   (blc.blocked = 0 or blc.blocked = spid)
+        where   blc.blocked <= 0
 
         union all
 
         select   blc.spid
                 ,blc.blocked
                 ,cast(bt.[level] + right (cast ((1000 + blc.spid) as varchar (100)), 4) as varchar (1000)) as [level]
-                ,blc.batch
         from    #blkchain as blc
             inner join blktree bt
                 on    blc.blocked = bt.spid
-        where   blc.blocked > 0 and
-                blc.blocked <> blc.spid
+        where   blc.blocked > 0
     )
     select
         N'' + isnull(replicate (N'|         ', len (level)/4 - 2),'')
             + case when (len(level)/4 - 1) = 0 then '' else '|------  ' end
             + cast (bt.spid as nvarchar (10)) as blktree
-            ,rtrim(spr.lastwaittype)   as [type]
-            ,rtrim(spr.hostname)       as [hostname]
-            ,try_cast('<?query --' + char(13) + char(10) + st.text + char(13) + char(10) + '--?>'  as xml)  as [sql text]
-            ,rtrim(spr.waitresource)   as [wait resource]
-            ,rtrim(spr.cmd)            as [command]
-            ,rtrim(spr.waittime)       as [waittime]
+            ,blc.wait_type             as [type]
+            ,blc.host_name             as [hostname]
+            ,try_cast('<?query --' + char(13) + char(10) + blc.sql_text + char(13) + char(10) + '--?>'  as xml)  as [sql text]
+            ,blc.wait_resource         as [wait resource]
+            ,blc.command               as [command]
+            ,rtrim(blc.wait_time)      as [waittime]
             ,blocking_spid
             ,left([level],charindex('#',[level],1)-1) as root
             ,level
     into #result
     from blktree bt
-        left outer join sys.sysprocesses spr on    spr.spid = bt.spid
-        cross apply sys.dm_exec_sql_text(spr.sql_handle) st
+        inner join #blkchain blc on blc.spid = bt.spid
     where
+        -- An idle session in no chain is noise, and so is a system session
+        -- in none.
         not (
-            rtrim(spr.cmd) = 'AWAITING COMMAND' and
+            blc.command = N'AWAITING COMMAND' and
             blocking_spid  = 0 and
             not exists (select 1 from #blkchain blc3 where bt.spid = blc3.blocked)
+        )
+        -- "!=", and no less-than or ampersand from here on: this text is
+        -- the [sql text] of the session running it, and past the PI close
+        -- above either is markup that fails the xml cast, blanking that row.
+        and (
+            blc.is_user_process = 1 or
+            blocking_spid != 0 or
+            exists (select 1 from #blkchain blc4 where bt.spid = blc4.blocked)
         )
     order by level asc
 

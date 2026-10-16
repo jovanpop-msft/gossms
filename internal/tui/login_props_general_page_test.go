@@ -40,10 +40,10 @@ func loginGeneralResponses(name, loginType string) []fakeResponse {
 			time.Now(), time.Now(), int64(0), time.Now(),
 			"us_english", "cred_old", "GRANT",
 		}}},
-		{match: "FROM sys.databases", cols: 10, rows: [][]driver.Value{
-			{"master", int64(1), "ONLINE", "SIMPLE", int64(160), "SQL_Latin1_General_CP1_CI_AS", "SQL_Latin1_General_CP1_CI_AS", false, time.Now(), int64(0)},
-			{"appdb", int64(5), "ONLINE", "FULL", int64(160), "SQL_Latin1_General_CP1_CI_AS", "SQL_Latin1_General_CP1_CI_AS", false, time.Now(), int64(0)},
-			{"reporting", int64(6), "ONLINE", "FULL", int64(160), "SQL_Latin1_General_CP1_CI_AS", "SQL_Latin1_General_CP1_CI_AS", false, time.Now(), int64(0)},
+		{match: "FROM sys.databases", cols: 11, rows: [][]driver.Value{
+			{"master", int64(1), "ONLINE", "SIMPLE", int64(160), "SQL_Latin1_General_CP1_CI_AS", "SQL_Latin1_General_CP1_CI_AS", false, time.Now(), int64(0), false},
+			{"appdb", int64(5), "ONLINE", "FULL", int64(160), "SQL_Latin1_General_CP1_CI_AS", "SQL_Latin1_General_CP1_CI_AS", false, time.Now(), int64(0), false},
+			{"reporting", int64(6), "ONLINE", "FULL", int64(160), "SQL_Latin1_General_CP1_CI_AS", "SQL_Latin1_General_CP1_CI_AS", false, time.Now(), int64(0), false},
 		}},
 		{match: "FROM sys.syslanguages", cols: 3, rows: [][]driver.Value{
 			{int64(0), "us_english", "English"},

@@ -35,9 +35,9 @@ const (
 // replPublishedDB answers LocalPublications' database list with one online
 // database.
 func replPublishedDB(name string) fakeResponse {
-	return fakeResponse{match: replPublishedDBsRead, cols: 10, rows: [][]driver.Value{{
+	return fakeResponse{match: replPublishedDBsRead, cols: 11, rows: [][]driver.Value{{
 		name, int64(5), "ONLINE", "FULL", int64(160), "SQL_Latin1_General_CP1_CI_AS",
-		"SQL_Latin1_General_CP1_CI_AS", false, time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC), int64(0),
+		"SQL_Latin1_General_CP1_CI_AS", false, time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC), int64(0), false,
 	}}}
 }
 
@@ -101,12 +101,12 @@ func TestLocalPublicationsListsAndExplains(t *testing.T) {
 					[]driver.Value{"SalesDB", true, false, false, true})),
 			[]string{"[SalesDB]: pubA", "[HiddenDB]: not visible (offline, or no access)"}},
 		{"no distributor and nothing published",
-			slices.Concat([]fakeResponse{{match: replPublishedDBsRead, cols: 10}}, replInfo(nil)),
+			slices.Concat([]fakeResponse{{match: replPublishedDBsRead, cols: 11}}, replInfo(nil)),
 			[]string{replicationNotConfiguredLabel}},
 		// A distributor and nothing published is an ordinary empty folder:
 		// the instance can publish, it just does not.
 		{"a distributor and nothing published",
-			slices.Concat([]fakeResponse{{match: replPublishedDBsRead, cols: 10}}, replInfo("SRV")),
+			slices.Concat([]fakeResponse{{match: replPublishedDBsRead, cols: 11}}, replInfo("SRV")),
 			nil},
 		// The explanation is all ReplicationInfo is read for; its failure
 		// must not cost the list.

@@ -135,3 +135,35 @@ func TestProcTempDBNameIsNotSpPrefixed(t *testing.T) {
 		t.Errorf("Exec(ProcNone) = %q, want empty", got)
 	}
 }
+
+// Current compares the stored definition with this build's script, so an
+// earlier gossms's tempdb copy is found out and replaced.
+func TestProcCurrentComparesTheStoredDefinition(t *testing.T) {
+	p := BlockProc
+	q := "select definition from tempdb.sys.sql_modules where object_id = object_id(@p1, 'P')"
+	for _, tc := range []struct {
+		name string
+		rows [][]driver.Value
+		want bool
+	}{
+		// As the server stores it: CREATE OR ALTER's head rewritten.
+		{"this build's", [][]driver.Value{{strings.Replace(p.Script(ProcTempDB), "create or alter procedure", "create   procedure", 1)}}, true},
+		{"this build's, head as sent", [][]driver.Value{{p.Script(ProcTempDB)}}, true},
+		{"one byte off", [][]driver.Value{{p.Script(ProcTempDB) + " "}}, false},
+		{"an earlier body", [][]driver.Value{{"create or alter procedure dbo.usp_block as select 1"}}, false},
+		{"unreadable definition", [][]driver.Value{{nil}}, false},
+		{"no such procedure", nil, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			db, _ := scriptedDB(t, map[string]reply{q: {cols: []string{"definition"}, rows: tc.rows}})
+			got, err := p.Current(context.Background(), db, ProcTempDB)
+			if err != nil || got != tc.want {
+				t.Errorf("Current = %v, %v; want %v", got, err, tc.want)
+			}
+		})
+	}
+	db, log := scriptedDB(t, nil)
+	if _, err := p.Current(context.Background(), db, ProcNone); err == nil || len(log.qs) != 0 {
+		t.Errorf("Current(ProcNone) = %v after %d statements, want an error and none", err, len(log.qs))
+	}
+}

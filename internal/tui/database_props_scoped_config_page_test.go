@@ -57,8 +57,8 @@ func scopedConfigResponses() []fakeResponse {
 		}
 	}
 	return []fakeResponse{
-		{match: "FROM sys.databases", arg: "appdb", cols: 10, rows: [][]driver.Value{
-			{"appdb", int64(5), "ONLINE", "FULL", int64(160), "SQL_Latin1_General_CP1_CI_AS", "SQL_Latin1_General_CP1_CI_AS", false, time.Now(), int64(0)},
+		{match: "FROM sys.databases", arg: "appdb", cols: 11, rows: [][]driver.Value{
+			{"appdb", int64(5), "ONLINE", "FULL", int64(160), "SQL_Latin1_General_CP1_CI_AS", "SQL_Latin1_General_CP1_CI_AS", false, time.Now(), int64(0), false},
 		}},
 		{match: "FROM   sys.database_scoped_configurations", cols: 7, rows: rows},
 	}

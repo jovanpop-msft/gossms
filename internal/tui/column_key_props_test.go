@@ -31,8 +31,8 @@ func cekPageResponses(values ...string) []fakeResponse {
 		rows = append(rows, []driver.Value{"CEK2", int64(2), cmk, "RSA_OAEP", []byte{byte(i + 1)}})
 	}
 	return []fakeResponse{
-		{match: "compatibility_level, collation_name", cols: 10, rows: [][]driver.Value{{
-			"appdb", int64(7), "ONLINE", "FULL", int64(160), "SQL_Latin1_General_CP1_CI_AS", "SQL_Latin1_General_CP1_CI_AS", false, time.Now(), int64(0)}}},
+		{match: "compatibility_level, collation_name", cols: 11, rows: [][]driver.Value{{
+			"appdb", int64(7), "ONLINE", "FULL", int64(160), "SQL_Latin1_General_CP1_CI_AS", "SQL_Latin1_General_CP1_CI_AS", false, time.Now(), int64(0), false}}},
 		// Scoped by arg, and ahead of the fallback: both reads are the same
 		// SELECT a WHERE apart, so without this the by-name read is served
 		// the other key's rows and the page silently rotates CEK1.

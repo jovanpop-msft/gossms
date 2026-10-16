@@ -72,7 +72,7 @@ func loadDatabasesChildren(l loaderCtx, node *explorerNode) ([]*explorerNode, er
 	var userDBs []*explorerNode
 	hasSystem := false
 	for _, d := range dbs {
-		if d.IsSystem() {
+		if inSystemDatabases(d) {
 			hasSystem = true
 			continue
 		}
@@ -118,7 +118,16 @@ func loadDatabaseSnapshotsChildren(l loaderCtx, node *explorerNode) ([]*explorer
 		})
 }
 
-// loadSystemDatabasesChildren lists master/tempdb/model/msdb.
+// inSystemDatabases reports whether d belongs in the System Databases folder
+// rather than among the user databases: the four built-ins and, as in SSMS, a
+// Distributor's distribution database(s), whose nodes are IsSystem too.
+// Database.IsSystem alone means the four built-ins, so the distribution
+// database would otherwise be listed — and offered Delete, Detach and Rename —
+// as a user database.
+func inSystemDatabases(d *gosmo.Database) bool { return d.IsSystem() || d.IsDistributor }
+
+// loadSystemDatabasesChildren lists master/tempdb/model/msdb and any
+// distribution database (see inSystemDatabases).
 func loadSystemDatabasesChildren(l loaderCtx, node *explorerNode) ([]*explorerNode, error) {
 	dbs, err := l.sc.Server.Databases(l.ctx)
 	if err != nil {
@@ -126,12 +135,13 @@ func loadSystemDatabasesChildren(l loaderCtx, node *explorerNode) ([]*explorerNo
 	}
 	var out []*explorerNode
 	for _, d := range dbs {
-		if d.IsSystem() {
+		if inSystemDatabases(d) {
 			n := l.node(d.Name, NodeDatabase, "", d.Name, d.Name)
 			n.data.IsOffline = d.State != "ONLINE"
 			n.data.DBState = d.State
 			n.data.CreateDate = d.CreateDate
 			n.data.IsSystem = true
+			n.data.IsDistributor = d.IsDistributor
 			out = append(out, n)
 		}
 	}
@@ -519,6 +529,11 @@ func databaseMenuItems(a *App, sc *db.ServerConn, node *explorerNode, newQuery, 
 		// so the toggle is withheld there in both directions.
 		gateAzure(gate.Item(controls.MenuItem{Label: offlineLabel, Action: func() { a.toggleDatabaseOffline(sc, node) }},
 			sc, node.data.DBName, gate.AlterDatabase, gate.AlterAnyDatabase), sc),
+	}
+	// SSMS offers neither Take Offline nor Bring Online on a distribution
+	// database: offline, it stops every distribution and cleanup agent.
+	if node.data.IsDistributor {
+		items = items[:len(items)-1]
 	}
 	// Snapshotting a system database is refused by the server, so the
 	// item follows Detach's rule below rather than being offered and

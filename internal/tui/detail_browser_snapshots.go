@@ -65,13 +65,39 @@ func databaseSnapshotDetail(ctx context.Context, sc *dbconn.ServerConn, node *ex
 		rows = append(rows, []string{"Files", "N/A"})
 		return []string{"Property", "Value"}, rows, nil
 	}
-	var totalKB int64
-	for _, f := range files {
-		totalKB += f.SizeKB
-	}
+	onDisk, maxSize := snapshotFileSizes(files)
 	rows = append(rows,
 		[]string{"Sparse files", strconv.Itoa(len(files))},
-		[]string{"Size on disk", formatMB(float64(totalKB) / 1024)},
+		[]string{"Size on disk", onDisk},
+		[]string{"Maximum size", maxSize},
 	)
 	return []string{"Property", "Value"}, rows, nil
+}
+
+// snapshotFileSizes totals a snapshot's sparse files two ways. The catalog
+// size is only the ceiling (the source's size when the snapshot was taken —
+// what a 64 MB source's snapshot reports while occupying 128 KB), so the
+// on-disk figure is the one that says what the snapshot costs. It is "N/A"
+// when any file's is unknown: a partial sum would read as the whole.
+func snapshotFileSizes(files []*gosmo.DatabaseFileInfo) (onDisk, maxSize string) {
+	var diskKB, maxKB int64
+	known := len(files) > 0
+	for _, f := range files {
+		diskKB += f.SizeOnDiskKB
+		maxKB += f.SizeKB
+		known = known && f.SizeOnDiskKB > 0
+	}
+	onDisk = "N/A"
+	if known {
+		onDisk = formatBytes(diskKB * 1024)
+	}
+	return onDisk, formatBytes(maxKB * 1024)
+}
+
+// snapshotFileSizeOnDisk is one file's on-disk size, "N/A" when unknown.
+func snapshotFileSizeOnDisk(f *gosmo.DatabaseFileInfo) string {
+	if f.SizeOnDiskKB <= 0 {
+		return "N/A"
+	}
+	return formatBytes(f.SizeOnDiskKB * 1024)
 }

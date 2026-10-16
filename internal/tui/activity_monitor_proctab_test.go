@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"database/sql/driver"
 	"strings"
 	"testing"
 
@@ -209,5 +210,42 @@ func TestActivityMonitorSessionsUsesWhoIsActive(t *testing.T) {
 	}
 	if got := am.sess.proc.Exec(activity.ProcTempDB); got != "exec tempdb.dbo.usp_WhoIsActive" {
 		t.Errorf("Sessions Exec = %q", got)
+	}
+}
+
+// A tempdb copy an earlier gossms installed is replaced when its stored
+// definition differs, and left alone when it matches: the copy lives until a
+// restart, so without this a fixed body never reaches a server that already
+// has one (review plan 2026-10-16, U1).
+func TestActivityMonitorProcTabReplacesAStaleTempDBCopy(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		stored  string
+		install bool
+	}{
+		{"stale", "create   procedure dbo.usp_block as select 1", true},
+		{"current", activity.BlockProc.Script(activity.ProcTempDB), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			am := hostedProcMonitor(t, amTabBlock)
+			conn, inst := newFakeConn(t,
+				fakeResponse{match: "object_id('master.dbo.sp_block', 'P')", cols: 2, rows: [][]driver.Value{{false, true}}},
+				fakeResponse{match: "from tempdb.sys.sql_modules", cols: 1, rows: [][]driver.Value{{tc.stored}}},
+			)
+			pt := am.procTab()
+			pt.conn = conn
+			pt.resolveProc()
+			drainUntil(t, am.app, func() bool { return pt.loc == activity.ProcTempDB }, "the procedure resolved")
+
+			installed := false
+			for _, s := range inst.Statements() {
+				if strings.Contains(s, "exec tempdb.sys.sp_executesql @stmt") {
+					installed = true
+				}
+			}
+			if installed != tc.install {
+				t.Errorf("installed = %v, want %v; statements: %v", installed, tc.install, inst.Statements())
+			}
+		})
 	}
 }

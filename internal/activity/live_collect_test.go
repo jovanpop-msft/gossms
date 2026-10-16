@@ -346,6 +346,11 @@ func TestLiveProcsInstallFindAndRun(t *testing.T) {
 				if loc, err := p.Find(ctx, db); err != nil || loc != l {
 					t.Fatalf("Find after installing in %s = %v, %v", l.Database(), loc, err)
 				}
+				// The server stores the definition byte for byte, or every
+				// open would reinstall the tempdb copy.
+				if cur, err := p.Current(ctx, db, l); err != nil || !cur {
+					t.Errorf("Current after installing in %s = %v, %v", l.Database(), cur, err)
+				}
 				sets, err := drainAll(ctx, db, p.Exec(l))
 				if err != nil {
 					t.Fatalf("%s: %v", p.Exec(l), err)

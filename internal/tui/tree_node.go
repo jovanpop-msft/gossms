@@ -480,6 +480,12 @@ type nodeData struct {
 	// SINGLE_USER WITH ROLLBACK IMMEDIATE before the server refuses, and renaming a
 	// system Agent job succeeds outright.
 	IsSystem bool
+	// IsDistributor marks a NodeDatabase that is a replication Distributor's
+	// distribution database (gosmo Database.IsDistributor). It is also
+	// IsSystem, so Delete, Rename and Detach are hidden as on master; this flag
+	// additionally hides Take Offline/Bring Online — SSMS 21 offers neither on
+	// it (checked 2026-10-16). It is removed with sp_dropdistributiondb.
+	IsDistributor bool
 	// IsEnabled mirrors the object's own enabled flag: an Agent job, schedule,
 	// alert or operator, a server trigger, a server audit or audit specification,
 	// a security policy, an endpoint (STARTED), and an event session (running;

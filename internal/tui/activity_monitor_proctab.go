@@ -232,7 +232,9 @@ func (pt *amProcTab) connected(conn *db.ServerConn, err error) {
 
 // resolveProc finds the procedure, installing into tempdb when neither database
 // has it. master wins when present (deliberately installed, survives restarts).
-// The tempdb copy is left on teardown; a restart removes it.
+// The tempdb copy is left on teardown; a restart removes it. A tempdb copy
+// that is not this build's is replaced; master's may be hand-installed and
+// is only ever replaced by Install in master.
 func (pt *amProcTab) resolveProc() {
 	conn := pt.conn
 	pt.busy = true
@@ -243,6 +245,15 @@ func (pt *amProcTab) resolveProc() {
 		if err == nil && loc == activity.ProcNone {
 			if err = pt.proc.Install(ctx, conn.Server.DB(), activity.ProcTempDB); err == nil {
 				loc = activity.ProcTempDB
+			}
+		} else if err == nil && loc == activity.ProcTempDB {
+			// The tempdb copy is gossms's own and lives until a restart, so an
+			// earlier gossms's body would outlive every fix to it (U1's Block
+			// tab showed no parallel blocking). Replace it when it differs;
+			// if that fails (another login installed it), the old copy still
+			// runs, so the error is not the tab's.
+			if cur, cerr := pt.proc.Current(ctx, conn.Server.DB(), loc); cerr == nil && !cur {
+				_ = pt.proc.Install(ctx, conn.Server.DB(), loc)
 			}
 		}
 		pt.am.app.postAndWake(func() { pt.procResolved(loc, err) })

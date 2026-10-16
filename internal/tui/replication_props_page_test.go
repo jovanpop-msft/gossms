@@ -219,9 +219,9 @@ func TestLocalPublicationsDetailExplainsAnEmptyList(t *testing.T) {
 		responses []fakeResponse
 		want      string
 	}{
-		{"not configured", slices.Concat([]fakeResponse{{match: replPublishedDBsRead, cols: 10}}, replInfo(nil)),
+		{"not configured", slices.Concat([]fakeResponse{{match: replPublishedDBsRead, cols: 11}}, replInfo(nil)),
 			replicationNotConfiguredLabel},
-		{"not visible", slices.Concat([]fakeResponse{{match: replPublishedDBsRead, cols: 10}},
+		{"not visible", slices.Concat([]fakeResponse{{match: replPublishedDBsRead, cols: 11}},
 			replInfo("SRV", []driver.Value{"Hidden", true, false, false, false})),
 			"Hidden:not visible (offline, or no access)"},
 	} {

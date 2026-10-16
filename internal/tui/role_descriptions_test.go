@@ -138,7 +138,7 @@ func TestServerRolesPagesShowTheRatedImpact(t *testing.T) {
 		// Through the real prefetch, so a dialog that never reads the grants fails here.
 		sc, inst := newFakeConn(t, append(customServerRoleResponses(),
 			fakeResponse{match: "FROM sys.server_principals sp", cols: 10},
-			fakeResponse{match: "FROM sys.databases", cols: 10},
+			fakeResponse{match: "FROM sys.databases", cols: 11},
 			fakeResponse{match: "FROM sys.syslanguages", cols: 3, rows: [][]driver.Value{{int64(0), "us_english", "English"}}},
 		)...)
 		pf, err := fetchNewLoginPrefetch(context.Background(), sc)

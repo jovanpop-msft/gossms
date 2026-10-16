@@ -78,9 +78,9 @@ func TestAGEligibleDatabasesFollowsServerCollation(t *testing.T) {
 
 // csDatabaseRow answers DatabaseByName(name) with a case-sensitive collation.
 func csDatabaseRow(name string) fakeResponse {
-	return fakeResponse{match: "compatibility_level, collation_name", arg: name, cols: 10, rows: [][]driver.Value{{
+	return fakeResponse{match: "compatibility_level, collation_name", arg: name, cols: 11, rows: [][]driver.Value{{
 		name, int64(7), "ONLINE", "FULL", int64(160), "Latin1_General_CS_AS", "Latin1_General_CS_AS", false,
-		time.Date(2026, 5, 6, 11, 0, 0, 0, time.UTC), int64(0)}}}
+		time.Date(2026, 5, 6, 11, 0, 0, 0, time.UTC), int64(0), false}}}
 }
 
 // A server object's duplicate check follows the *server's* collation: on a
