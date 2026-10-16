@@ -62,21 +62,6 @@ work; close an item by deleting it when fixed.
 
 ### Bugs and suspected defects
 
-- **B25 — A master copy of `sp_block`/`sp_WhoIsActive` is never refreshed.**
-  `resolveProc` (`internal/tui/activity_monitor_proctab.go`) now replaces a
-  tempdb copy whose stored definition differs from this build's
-  (`activity.Proc.Current`), so U1's Block-tab fix (review plan 2026-10-16)
-  reaches servers that already have one. master's copy wins over tempdb's and
-  may be hand-installed, so it is left alone, and **Install in master** is
-  offered only while master lacks one: a master copy an older gossms installed
-  keeps the sysprocesses body, which shows no parallel blocking, until it is
-  dropped by hand. Wants an "Update in master" offer when master's copy is
-  not `Current`.
-- **B26 — `go vet -tags livedb ./...` fails in `internal/query`** (found
-  2026-10-16, at `2a451c9`): `live_drain_test.go:216` calls `runBatch` with
-  five arguments; it now takes six (an `int` after the batch). The livedb
-  tests of that package do not compile.
-
 ### Verification gaps
 
 - **V2 — Azure Extended Events not run end to end.** Azure SQL Database's database-scoped sessions
@@ -124,14 +109,17 @@ work; close an item by deleting it when fixed.
   database, never on MI, nor on an Azure SQL Database created `WITH
   CATALOG_COLLATION` (none in the estate) — `TestLiveCatalogCollation` and
   `TestLiveGatedColumnsMatchTheCatalog` on MI.
-- **V5 — Resource Governor and Database Mail edition gates never met a real
-  refusal.** Every
+- **V5 — Resource Governor, Database Mail and backup compression edition
+  gates never met a real refusal.** Every
   instance in the estate is Developer, so Resource Governor's rule
   (Enterprise/Developer on 13–16, plus Standard on 17 —
   `resourceGovernorSupported`) ships from documentation, pinned by fake-driver
   tests; Database Mail on Express (procs present, no `DatabaseMail.exe`, so a
   test mail should sit `unsent` until the dialog's 30 s wait gives up) is
-  unprobed. Run both when a Standard or Express instance is available.
+  unprobed. Back Up's Compression dropdown is pinned to the server default
+  and greyed on Express and Web (`ServerInfo.SupportsBackupCompression`, Msg
+  1844 from the edition matrix, not seen live). Run all three when a Standard,
+  Web or Express instance is available.
 - **V6 — Live Query Statistics never run on Azure.** Driven on 13, 14 and 17
   only (t-qmi-01 refuses the login, Msg 40532). On MI, run a long query with
   Live on (as `testgo`, and as a login without `VIEW SERVER STATE` for the

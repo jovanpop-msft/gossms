@@ -413,7 +413,7 @@ func TestADatabaseMenuWithholdsTheWritesTheLoginCannotDo(t *testing.T) {
 	sc := probedConn(t, "appdb", nil,
 		[]string{"ALTER ANY DATABASE", "CREATE ANY DATABASE"},
 		nil, []string{"BACKUP DATABASE", "ALTER", "CONTROL", "ALTER ANY SCHEMA"})
-	node := &explorerNode{label: "appdb", data: nodeData{Type: NodeDatabase, DBName: "appdb", conn: sc}}
+	node := &explorerNode{label: "appdb", data: nodeData{Type: NodeDatabase, DBName: "appdb", DBState: "ONLINE", conn: sc}}
 
 	on, off := gatedLabels(a.contextMenuItemsForNode(node))
 	for _, want := range []string{"Back Up Database...", "Restore Database...", "Take Database Offline"} {
@@ -436,7 +436,7 @@ func TestADatabaseMenuKeepsEverythingForAnAdministrator(t *testing.T) {
 	sc := probedConn(t, "appdb",
 		[]string{"ALTER ANY DATABASE", "CREATE ANY DATABASE", "CONTROL SERVER"}, nil,
 		[]string{"BACKUP DATABASE", "ALTER", "CONTROL"}, nil)
-	node := &explorerNode{label: "appdb", data: nodeData{Type: NodeDatabase, DBName: "appdb", conn: sc}}
+	node := &explorerNode{label: "appdb", data: nodeData{Type: NodeDatabase, DBName: "appdb", DBState: "ONLINE", conn: sc}}
 
 	_, off := gatedLabels(a.contextMenuItemsForNode(node))
 	if len(off) != 0 {

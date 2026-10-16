@@ -20,7 +20,7 @@ import (
 //     filtering it out would silently drop a name already configured on the
 //     server.
 //   - A name acted on now lists only what the action can actually run against:
-//     backupDatabaseNames for Backup, onlineDatabaseNames for a read made the
+//     backupDatabases for Backup, onlineDatabaseNames for a read made the
 //     moment the name is picked.
 //
 // databaseNames is the first case: every database, in the server's order.
@@ -32,24 +32,27 @@ func databaseNames(ctx context.Context, sc *db.ServerConn) ([]string, error) {
 	return namesOf(dbs), nil
 }
 
-// backupDatabaseNames is the second case: the databases BACKUP DATABASE will
-// accept right now.
+// backupDatabases is the second case: the databases BACKUP DATABASE will
+// accept right now. It returns the databases, not their names, because the
+// Backup dialog also needs each one's recovery model (backupTypeBlocks).
 //
-// Both exclusions are hard server restrictions, not preferences: `BACKUP
+// Every exclusion is a hard server restriction, not a preference: `BACKUP
 // DATABASE tempdb` and a backup of an OFFLINE database each fail with "BACKUP
-// DATABASE is terminating abnormally", so offering either gives a dropdown entry
-// whose only outcome is that error.
-func backupDatabaseNames(ctx context.Context, sc *db.ServerConn) ([]string, error) {
+// DATABASE is terminating abnormally", and a database snapshot — ONLINE, and
+// listed by Server.Databases — with Msg 3002 ("Cannot BACKUP or RESTORE a
+// database snapshot"), so offering any of them gives a dropdown entry whose
+// only outcome is that error. SSMS does not list snapshots either.
+func backupDatabases(ctx context.Context, sc *db.ServerConn) ([]*gosmo.Database, error) {
 	dbs, err := sc.Server.Databases(ctx)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]string, 0, len(dbs))
+	out := make([]*gosmo.Database, 0, len(dbs))
 	for _, d := range dbs {
-		if strings.EqualFold(d.Name, "tempdb") || d.State != "ONLINE" {
+		if strings.EqualFold(d.Name, "tempdb") || d.State != "ONLINE" || d.IsSnapshot() {
 			continue
 		}
-		out = append(out, d.Name)
+		out = append(out, d)
 	}
 	return out, nil
 }

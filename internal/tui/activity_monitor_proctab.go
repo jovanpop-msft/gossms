@@ -49,8 +49,11 @@ type amProcTab struct {
 	grid   *controls.DataGrid
 	result *query.Result // kept only for the column types the XML handoff needs
 	loc    activity.ProcLocation
-	status string
-	busy   bool
+	// masterStale is set when loc is ProcMaster and master's copy is not this
+	// build's (activity.Proc.Current), which offers Update in master.
+	masterStale bool
+	status      string
+	busy        bool
 
 	// rect is the content area, gridRect the grid's part; they differ by the
 	// credit row.
@@ -233,8 +236,8 @@ func (pt *amProcTab) connected(conn *db.ServerConn, err error) {
 // resolveProc finds the procedure, installing into tempdb when neither database
 // has it. master wins when present (deliberately installed, survives restarts).
 // The tempdb copy is left on teardown; a restart removes it. A tempdb copy
-// that is not this build's is replaced; master's may be hand-installed and
-// is only ever replaced by Install in master.
+// that is not this build's is replaced; master's may be hand-installed, so a
+// copy that differs is only flagged (masterStale) for Update in master.
 func (pt *amProcTab) resolveProc() {
 	conn := pt.conn
 	pt.busy = true
@@ -242,6 +245,7 @@ func (pt *amProcTab) resolveProc() {
 		ctx, cancel := context.WithTimeout(conn.Server.Context(), procRunTimeout)
 		defer cancel()
 		loc, err := pt.proc.Find(ctx, conn.Server.DB())
+		stale := false
 		if err == nil && loc == activity.ProcNone {
 			if err = pt.proc.Install(ctx, conn.Server.DB(), activity.ProcTempDB); err == nil {
 				loc = activity.ProcTempDB
@@ -255,18 +259,25 @@ func (pt *amProcTab) resolveProc() {
 			if cur, cerr := pt.proc.Current(ctx, conn.Server.DB(), loc); cerr == nil && !cur {
 				_ = pt.proc.Install(ctx, conn.Server.DB(), loc)
 			}
+		} else if err == nil && loc == activity.ProcMaster {
+			// An earlier gossms's master copy keeps its old body forever,
+			// but master's may be a DBA's own, so it is offered for
+			// update rather than replaced. A failed check offers nothing.
+			cur, cerr := pt.proc.Current(ctx, conn.Server.DB(), loc)
+			stale = cerr == nil && !cur
 		}
-		pt.am.app.postAndWake(func() { pt.procResolved(loc, err) })
+		pt.am.app.postAndWake(func() { pt.procResolved(loc, stale, err) })
 	})
 }
 
 // procResolved records where the procedure is and runs it.
-func (pt *amProcTab) procResolved(loc activity.ProcLocation, err error) {
+func (pt *amProcTab) procResolved(loc activity.ProcLocation, stale bool, err error) {
 	if !pt.am.app.panelHosted(pt.am) {
 		return
 	}
 	pt.busy = false
 	pt.loc = loc
+	pt.masterStale = stale
 	if err != nil {
 		pt.setStatus(err.Error())
 		pt.am.buildTools()
@@ -343,10 +354,17 @@ func (pt *amProcTab) applyResult(res *query.Result) {
 }
 
 // confirmInstallInMaster asks before writing to master, the one thing these
-// tabs do that outlives the session and touches a system database.
+// tabs do that outlives the session and touches a system database. Over a
+// stale master copy it is Update in master, which overwrites that copy.
 func (pt *amProcTab) confirmInstallInMaster() {
-	pt.am.app.confirmDialog.ShowConfirm("Install "+pt.proc.MasterName+" in master",
-		"Create "+pt.proc.Qualified(activity.ProcMaster)+"? This writes a stored procedure into a system database.",
+	title := "Install " + pt.proc.MasterName + " in master"
+	text := "Create " + pt.proc.Qualified(activity.ProcMaster) + "? This writes a stored procedure into a system database."
+	if pt.loc == activity.ProcMaster {
+		title = "Update " + pt.proc.MasterName + " in master"
+		text = "Replace " + pt.proc.Qualified(activity.ProcMaster) +
+			" with this build's version? Its current definition differs and is overwritten."
+	}
+	pt.am.app.confirmDialog.ShowConfirm(title, text,
 		func(confirmed bool) {
 			if confirmed {
 				pt.installInMaster()
@@ -398,6 +416,7 @@ func (pt *amProcTab) masterInstalled(err error, cancelled bool) {
 		return
 	}
 	pt.loc = activity.ProcMaster
+	pt.masterStale = false
 	pt.am.app.setStatus(pt.proc.Qualified(activity.ProcMaster) + " installed")
 	pt.am.buildTools()
 	pt.refresh()

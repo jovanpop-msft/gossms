@@ -66,7 +66,7 @@ func TestAnEditionWithheldItemCarriesTheEditionNote(t *testing.T) {
 func TestAnAzureDatabaseMenuWithholdsWhatTheEditionRefuses(t *testing.T) {
 	a := newTestApp()
 	sc := probedAzureConn(t, "appdb")
-	node := &explorerNode{label: "appdb", data: nodeData{Type: NodeDatabase, DBName: "appdb", conn: sc}}
+	node := &explorerNode{label: "appdb", data: nodeData{Type: NodeDatabase, DBName: "appdb", DBState: "ONLINE", conn: sc}}
 
 	on, off := gatedLabels(a.contextMenuItemsForNode(node))
 	for _, want := range []string{"Take Database Offline", "Detach Database..."} {
@@ -150,7 +150,7 @@ func TestAnOnPremDatabaseMenuKeepsEverything(t *testing.T) {
 	sc := probedConn(t, "appdb",
 		[]string{"ALTER ANY DATABASE", "CREATE ANY DATABASE", "CONTROL SERVER"}, nil,
 		[]string{"BACKUP DATABASE", "ALTER", "CONTROL"}, nil)
-	node := &explorerNode{label: "appdb", data: nodeData{Type: NodeDatabase, DBName: "appdb", conn: sc}}
+	node := &explorerNode{label: "appdb", data: nodeData{Type: NodeDatabase, DBName: "appdb", DBState: "ONLINE", conn: sc}}
 
 	if _, off := gatedLabels(a.contextMenuItemsForNode(node)); len(off) != 0 {
 		t.Errorf("items withheld on an on-premises instance: %v", off)

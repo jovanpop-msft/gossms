@@ -17,6 +17,10 @@ type RadioBox struct {
 	focused  bool
 	disabled bool
 
+	// offOptions marks single options greyed out (SetOptionEnabled), indexed
+	// like options; nil means none.
+	offOptions []bool
+
 	// mouseDragging separates a fresh Button1 press from a resent hold (same field
 	// as Toolbar/TreeView/MenuBar): the selection is a single pick at press time,
 	// not reassigned to whatever option the pointer drifts over.
@@ -44,6 +48,29 @@ func (r *RadioBox) SetEnabled(v bool) { r.disabled = !v }
 
 // Enabled reports whether the selection can be moved.
 func (r *RadioBox) Enabled() bool { return !r.disabled }
+
+// SetOptionEnabled greys out (or restores) one option while the rest of the
+// group stays live: Up/Down step over it and a click on it is refused. Like
+// SetEnabled it never moves the selection — a host that greys the selected
+// option decides where it goes, and says why.
+func (r *RadioBox) SetOptionEnabled(i int, v bool) {
+	if i < 0 || i >= len(r.options) {
+		return
+	}
+	if r.offOptions == nil {
+		if v {
+			return
+		}
+		r.offOptions = make([]bool, len(r.options))
+	}
+	r.offOptions[i] = !v
+}
+
+// OptionEnabled reports whether option i can be picked, the group's own
+// SetEnabled aside.
+func (r *RadioBox) OptionEnabled(i int) bool {
+	return i >= 0 && i < len(r.options) && (r.offOptions == nil || !r.offOptions[i])
+}
 func (r *RadioBox) Selected() int { return r.selected }
 func (r *RadioBox) SetSelected(i int) {
 	if i >= 0 && i < len(r.options) {
@@ -95,6 +122,9 @@ func (r *RadioBox) Draw(s tcell.Screen) {
 		if r.focused && i == r.selected {
 			st = activeStyle
 		}
+		if !r.OptionEnabled(i) {
+			st = theme.StyleControlDisabled()
+		}
 		mark := "( ) "
 		if i == r.selected {
 			mark = "(o) "
@@ -103,8 +133,8 @@ func (r *RadioBox) Draw(s tcell.Screen) {
 	}
 }
 
-// HandleKey moves the selection with Up/Down. Returns false at either
-// boundary instead of consuming the key as a no-op, so a caller like
+// HandleKey moves the selection with Up/Down, over any greyed option. Returns
+// false at either boundary (or with only greyed options beyond it) instead of consuming the key as a no-op, so a caller like
 // propsheet.Form can move focus to the next/previous row instead.
 func (r *RadioBox) HandleKey(ev *tcell.EventKey) bool {
 	if !r.focused || r.disabled {
@@ -112,17 +142,21 @@ func (r *RadioBox) HandleKey(ev *tcell.EventKey) bool {
 	}
 	switch ev.Key() {
 	case tcell.KeyUp:
-		if r.selected <= 0 {
-			return false
-		}
-		r.selected--
-		return true
+		return r.step(-1)
 	case tcell.KeyDown:
-		if r.selected >= len(r.options)-1 {
-			return false
+		return r.step(+1)
+	}
+	return false
+}
+
+// step moves the selection to the next enabled option in direction dir,
+// returning false — the key not consumed — when there is none.
+func (r *RadioBox) step(dir int) bool {
+	for i := r.selected + dir; i >= 0 && i < len(r.options); i += dir {
+		if r.OptionEnabled(i) {
+			r.selected = i
+			return true
 		}
-		r.selected++
-		return true
 	}
 	return false
 }
@@ -141,6 +175,9 @@ func (r *RadioBox) HandleMouse(ev *tcell.EventMouse) bool {
 	for i := range r.options {
 		y := r.optionsY() + i
 		if my == y && mx >= r.rect.X && mx < r.rect.X+w {
+			if !r.OptionEnabled(i) {
+				return false
+			}
 			if !r.mouseDragging {
 				r.mouseDragging = true
 				r.selected = i

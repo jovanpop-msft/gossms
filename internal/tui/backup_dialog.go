@@ -28,6 +28,28 @@ const (
 // backupFormButtons is the form mode's button row.
 var backupFormButtons = []string{"Start Backup", "Script", "Validate", "Cancel"}
 
+// The Compression dropdown's entries, SSMS's three. One checkbox could not
+// say both "server default" (no clause) and "do not compress"
+// (NO_COMPRESSION): unchecked meant the default, so on a server whose
+// "backup compression default" is 1 unticking it still compressed.
+const (
+	compressServerDefault = iota
+	compressOn
+	compressOff
+)
+
+// compressDefaultLabel is the first entry's text; loadCompressionDefault
+// appends the server's setting once read.
+const compressDefaultLabel = "Use the default server setting"
+
+func compressItems(serverDefault string) []string {
+	first := compressDefaultLabel
+	if serverDefault != "" {
+		first += " (" + serverDefault + ")"
+	}
+	return []string{first, "Compress backup", "Do not compress backup"}
+}
+
 // BackupDialog is the Back Up Database dialog (Object Explorer, database
 // node, "Back Up Database..."). The backup itself runs as a background
 // Task (see tasks.go), so the progress view's Hide button can dismiss the
@@ -44,7 +66,7 @@ type BackupDialog struct {
 	rbType     *widgets.RadioBox
 	fDest      *widgets.InputField
 	btnBrowse  *widgets.Button
-	cbCompress *widgets.CheckBox
+	ddCompress *widgets.DropDown
 	cbVerify   *widgets.CheckBox
 	cbChecksum *widgets.CheckBox
 	cbCopyOnly *widgets.CheckBox
@@ -84,6 +106,18 @@ type BackupDialog struct {
 	// directory.
 	backupDir *string
 	defPaths  latest
+
+	// dbFacts is what the loaded database list says about each database, by
+	// name, for applyTypeRules; nil until the list lands, and a database
+	// missing from it (the opened one, if BACKUP refuses it) has every type
+	// enabled. typeHint is the reason applyTypeRules last greyed a type, ""
+	// for none — part of the resting status.
+	dbFacts  map[string]backupDBFacts
+	typeHint string
+
+	// compressDef is loadCompressionDefault's read of the server's "backup
+	// compression default", abandoned by Hide.
+	compressDef latest
 
 	// destCheck is Start Backup's probe for an existing destination file,
 	// superseded by a second press and abandoned by Hide.
@@ -132,8 +166,7 @@ func (d *BackupDialog) show(sc *db.ServerConn, dbName string) {
 	d.rbType = widgets.NewRadioBox("Backup Type:", []string{"Full", "Differential", "Transaction Log"})
 	d.btnBrowse = widgets.NewButton("Browse", d.browseDest)
 	d.fDest = widgets.NewInputField("", d.destFieldWidth(), false)
-	d.cbCompress = widgets.NewCheckBox("Compression")
-	d.cbCompress.SetChecked(true)
+	d.ddCompress = widgets.NewDropDown("Compression: ", compressItems(""), 38)
 	d.cbVerify = widgets.NewCheckBox("Verify backup after completion")
 	d.cbVerify.SetChecked(true)
 	d.cbChecksum = widgets.NewCheckBox("Use backup checksum")
@@ -142,10 +175,12 @@ func (d *BackupDialog) show(sc *db.ServerConn, dbName string) {
 
 	d.prevDB = d.ddDatabase.Value()
 	d.prevType = 0
+	d.dbFacts, d.typeHint = nil, ""
 	d.backupDir = nil
 	d.lastAutoDest = d.autoDest()
 	d.fDest.SetValue(d.lastAutoDest)
 	d.applyDeviceRules()
+	d.applyEditionRules()
 
 	d.rebuildFocusable()
 	d.ModalDialog.Show()
@@ -155,6 +190,7 @@ func (d *BackupDialog) show(sc *db.ServerConn, dbName string) {
 	d.setFocus(0)
 	d.loadDatabases()
 	d.loadDefaultPaths()
+	d.loadCompressionDefault()
 }
 
 // Hide closes the dialog and abandons its loads. A running backup is a Task,
@@ -162,6 +198,7 @@ func (d *BackupDialog) show(sc *db.ServerConn, dbName string) {
 func (d *BackupDialog) Hide() {
 	d.dbListRun.Abandon()
 	d.defPaths.Abandon()
+	d.compressDef.Abandon()
 	d.destCheck.Abandon()
 	d.ModalDialog.Hide()
 }
@@ -175,7 +212,7 @@ func (d *BackupDialog) destFieldWidth() int {
 func (d *BackupDialog) rebuildFocusable() {
 	d.focusable = []focusable{
 		d.ddDatabase, d.rbType, d.fDest, d.btnBrowse,
-		d.cbCompress, d.cbVerify, d.cbChecksum, d.cbCopyOnly,
+		d.ddCompress, d.cbVerify, d.cbChecksum, d.cbCopyOnly,
 	}
 }
 
@@ -301,14 +338,15 @@ func (d *BackupDialog) loadDefaultPaths() {
 	})
 }
 
-// syncAutoDest regenerates the destination field after a database/type
-// change, unless the user has edited the path themselves, and then re-applies
-// applyDeviceRules — which depends on the destination, so it has to run on
+// syncAutoDest re-applies applyTypeRules for the selected database, then
+// regenerates the destination field after a database/type change, unless the
+// user has edited the path themselves, and then re-applies applyDeviceRules — which depends on the destination, so it has to run on
 // every pass, not only the ones that regenerate it.
 func (d *BackupDialog) syncAutoDest() {
 	if d.mode != backupModeForm {
 		return
 	}
+	d.applyTypeRules()
 	sel, typ := d.ddDatabase.Value(), d.rbType.Selected()
 	if sel != d.prevDB || typ != d.prevType {
 		d.prevDB, d.prevType = sel, typ
@@ -329,6 +367,9 @@ const backupURLHint = "To URL: the container needs a credential named for it."
 
 // restingStatus is the status line when nothing has gone wrong.
 func (d *BackupDialog) restingStatus() string {
+	if d.typeHint != "" {
+		return d.typeHint
+	}
 	if gosmo.IsBackupURL(d.fDest.Value()) {
 		return backupURLHint
 	}
@@ -339,14 +380,98 @@ func (d *BackupDialog) restingStatus() string {
 // changed. A real message — an error, or Validate's rendered statement — is
 // left alone: it is what the user asked for and outranks a standing hint.
 func (d *BackupDialog) refreshRestingStatus() {
-	switch {
-	case d.statusErr:
-		return
-	case d.status == "", d.status == "Ready", d.status == backupURLHint:
-	default:
-		return
+	if d.isRestingStatus() {
+		d.setStatusMsg(d.restingStatus(), false)
 	}
-	d.setStatusMsg(d.restingStatus(), false)
+}
+
+// isRestingStatus reports whether the status line holds one of the standing
+// messages restingStatus produces, which a change of destination or database
+// may replace.
+func (d *BackupDialog) isRestingStatus() bool {
+	if d.statusErr {
+		return false
+	}
+	switch d.status {
+	case "", "Ready", backupURLHint:
+		return true
+	}
+	return d.typeHint != "" && d.status == d.typeHint
+}
+
+// backupDBFacts is what applyTypeRules knows about one database.
+type backupDBFacts struct {
+	db *gosmo.Database
+	// status is the database's log chain and differential base, nil when
+	// DatabaseRecoveryStatuses was refused or did not list it.
+	status *gosmo.DatabaseRecoveryStatus
+}
+
+// The reasons applyTypeRules gives on the status line, each one line at
+// backupDialogW.
+const (
+	typeHintMaster = "master takes full backups only."
+	typeHintSimple = "Log backups need the FULL or BULK_LOGGED recovery model."
+	typeHintNoBase = "Differentials need a full, non-copy-only backup first."
+	typeHintNoLog  = "Log backups need a full backup taken under FULL recovery."
+)
+
+// backupTypeBlocks says why a Differential and a Transaction Log backup of db
+// would be refused, "" for one the server takes. Each is a certain refusal
+// after the user has filled in the form (checked live on 17, 2026-10-16):
+//
+//   - master: a differential is Msg 3024, a log backup Msg 4212.
+//   - SIMPLE recovery (master, usually msdb): a log backup is Msg 4208.
+//   - no differential base — no full backup yet, or only COPY_ONLY ones: a
+//     differential is Msg 3035.
+//   - no log chain — no full backup since the database last went to FULL or
+//     BULK_LOGGED (a full taken while SIMPLE does not count): Msg 4214.
+//
+// What is not known stays enabled — no facts, no status row, a primary file
+// the login cannot see — and the server has the last word (fail open).
+func backupTypeBlocks(f backupDBFacts) (diff, log string) {
+	if f.db == nil {
+		return "", ""
+	}
+	if f.db.Name == "master" {
+		return typeHintMaster, typeHintMaster
+	}
+	if f.db.RecoveryModel == gosmo.RecoveryModelSimple {
+		log = typeHintSimple
+	}
+	if st := f.status; st != nil {
+		if st.DifferentialBaseKnown && !st.HasDifferentialBase {
+			diff = typeHintNoBase
+		}
+		if log == "" && !st.LogBackupChainStarted {
+			log = typeHintNoLog
+		}
+	}
+	return diff, log
+}
+
+// applyTypeRules greys the Backup Type entries the selected database cannot
+// take (backupTypeBlocks). A greyed selection falls back to Full and the status
+// line says why; otherwise the reason is the resting status, so a greyed entry
+// is never unexplained. Re-applied on every syncAutoDest pass: it follows the
+// database dropdown.
+func (d *BackupDialog) applyTypeRules() {
+	diff, log := backupTypeBlocks(d.dbFacts[d.ddDatabase.Value()])
+	d.rbType.SetOptionEnabled(1, diff == "")
+	d.rbType.SetOptionEnabled(2, log == "")
+	hint := diff
+	if log != "" && log != diff {
+		hint = strings.TrimSpace(hint + " " + log)
+	}
+	resting := d.isRestingStatus()
+	d.typeHint = hint
+	switch {
+	case !d.rbType.OptionEnabled(d.rbType.Selected()):
+		d.rbType.SetSelected(0)
+		d.setStatusMsg(hint, false)
+	case resting:
+		d.setStatusMsg(d.restingStatus(), false)
+	}
 }
 
 // applyDeviceRules switches off what the destination device cannot carry.
@@ -379,14 +504,76 @@ func (d *BackupDialog) applyDeviceRules() {
 	d.refreshRestingStatus()
 }
 
+// applyEditionRules pins what the server's edition cannot do. Express and Web
+// refuse WITH COMPRESSION (Msg 1844), and the dialog used to default to it, so
+// every backup there failed until the user unticked a box nothing pointed at.
+// The dropdown is pinned to the server default — which those editions leave
+// uncompressed — and greyed, the way applyDeviceRules pins Azure's type. The
+// edition does not change while the dialog is open, so show() runs it once.
+func (d *BackupDialog) applyEditionRules() {
+	var info *gosmo.ServerInfo
+	if d.sc != nil && d.sc.Server != nil {
+		info = d.sc.Server.Info()
+	}
+	if !info.SupportsBackupCompression() {
+		d.ddCompress.SetSelected(compressServerDefault)
+		d.ddCompress.SetEnabled(false)
+	}
+}
+
+// loadCompressionDefault reads the server's "backup compression default" and
+// names it on the dropdown's first entry, so "Use the default server setting"
+// says what that is. A failed read leaves the entry bare; an edition without
+// compression is not asked, its default being off by definition.
+func (d *BackupDialog) loadCompressionDefault() {
+	app, sc := d.app, d.sc
+	if app == nil || sc == nil || sc.Server == nil || !d.ddCompress.Enabled() {
+		return
+	}
+	ctx, tok := d.compressDef.BeginTimeout(sc.Server.Context(), childFetchTimeout)
+	app.safego("reading the backup compression default", func() {
+		c, err := sc.Server.ConfigurationByName(ctx, "backup compression default")
+		app.postAndWake(func() {
+			if !d.compressDef.Done(tok) || !d.Visible() || err != nil || d.mode != backupModeForm {
+				return
+			}
+			label := "off"
+			if c.ValueInUse != 0 {
+				label = "on"
+			}
+			sel := d.ddCompress.Selected()
+			d.ddCompress.SetItems(compressItems(label))
+			d.ddCompress.SetSelected(sel)
+		})
+	})
+}
+
+// openDropDown is whichever dropdown has its list open, or nil. An open list
+// is an overlay that gets first refusal of every event.
+func (d *BackupDialog) openDropDown() *widgets.DropDown {
+	for _, dd := range []*widgets.DropDown{d.ddDatabase, d.ddCompress} {
+		if dd.IsOpen() {
+			return dd
+		}
+	}
+	return nil
+}
+
 // loadDatabases fetches the server's database list in the background and
 // swaps it into the Database dropdown, keeping the current selection. What
-// the list may contain is backupDatabaseNames' rule, not this dialog's.
+// the list may contain is backupDatabases' rule, not this dialog's.
+//
+// The recovery statuses ride along for applyTypeRules. Their read failing
+// costs only those rules — every type stays enabled — not the list.
 func (d *BackupDialog) loadDatabases() {
 	app, sc := d.app, d.sc
 	ctx, seq := d.dbListRun.BeginTimeout(sc.Server.Context(), childFetchTimeout)
 	app.safego("loading the backup database list", func() {
-		names, err := backupDatabaseNames(ctx, sc)
+		dbs, err := backupDatabases(ctx, sc)
+		var statuses []*gosmo.DatabaseRecoveryStatus
+		if err == nil {
+			statuses, _ = sc.Server.DatabaseRecoveryStatuses(ctx)
+		}
 		app.postAndWake(func() {
 			if !d.dbListRun.Done(seq) || !d.Visible() {
 				return
@@ -395,7 +582,18 @@ func (d *BackupDialog) loadDatabases() {
 				d.setStatusMsg(fmt.Sprintf("Load databases: %v", err), true)
 				return
 			}
-			d.setDatabaseItems(names)
+			facts := make(map[string]backupDBFacts, len(dbs))
+			for _, x := range dbs {
+				facts[x.Name] = backupDBFacts{db: x}
+			}
+			for _, st := range statuses {
+				if f, ok := facts[st.DatabaseName]; ok {
+					f.status = st
+					facts[st.DatabaseName] = f
+				}
+			}
+			d.dbFacts = facts
+			d.setDatabaseItems(namesOf(dbs))
 		})
 	})
 }
@@ -405,7 +603,7 @@ func (d *BackupDialog) loadDatabases() {
 //
 // A selection the incoming list doesn't contain is kept, at the front, rather
 // than dropped. show() seeds the dropdown with the database the dialog was opened
-// on, and backupDatabaseNames filters out ones BACKUP will refuse, so Back Up on
+// on, and backupDatabases filters out ones BACKUP will refuse, so Back Up on
 // an OFFLINE database arrives here with a selection not in the list. Falling
 // through to index 0 would silently retarget the dialog at whichever database
 // sorts first; failing loudly on the picked one is better.
@@ -490,8 +688,11 @@ func (d *BackupDialog) currentOptions() gosmo.BackupOptions {
 	if dest := strings.TrimSpace(d.fDest.Value()); dest != "" {
 		opts.Devices = []gosmo.BackupTarget{gosmo.DiskTarget(dest)}
 	}
-	if d.cbCompress.Checked() {
+	switch d.ddCompress.Selected() {
+	case compressOn:
 		opts.Compression = new(true) // Go 1.26: new(expr)
+	case compressOff:
+		opts.Compression = new(false)
 	}
 	return opts
 }

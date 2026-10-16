@@ -187,7 +187,7 @@ gossms/
 │       ├── app_events.go         # key/mouse dispatch, resize/redraw, top-level event loop plumbing
 │       ├── app_connections.go    # connect/disconnect lifecycle, saved-connection bookkeeping, activeServerConn/selectedServerConn helpers
 │       ├── app_peer_creds.go     # App's db.PeerCredentials answer: which saved connection to reach a given instance with
-│       ├── app_explorer_data.go  # background fetch orchestration, context-menu assembly (nodeMenuItems + insertBeforeRefresh), Script object, View Dependencies, Take Offline/Bring Online task consumer
+│       ├── app_explorer_data.go  # background fetch orchestration, context-menu assembly (nodeMenuItems + insertBeforeRefresh), Script object, View Dependencies, Take Offline/Bring Online/Restore With Recovery task consumer
 │       ├── app_panel_actions.go  # opening panels and files: new query panel, open a .sql or .sqlplan, save a plan back out
 │       ├── app_panel_close.go    # closing a panel and quitting: Disposable release, the open-transaction commit prompt, the unsaved-query prompts quit walks, activeQueryPanel/withQueryPanel
 │       ├── app_saves.go          # config.json and tracked_queries.json saves off the UI goroutine: saveConfig (Config.BeginSave → SaveJob.Run on safegoRepair → EndSave, one job at a time, later asks queued behind it), saveTracked, and FlushSaves, which cmd/gossms calls after Run returns so a save still out at quit is not lost

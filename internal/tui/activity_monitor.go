@@ -750,14 +750,22 @@ func (am *ActivityMonitor) buildTools() {
 			Disabled: pt.busy,
 			Action:   pt.refresh,
 		})
-		// Offered only when the procedure isn't already in master.
-		if pt.loc != activity.ProcMaster {
-			// Installing into master needs sysadmin; a db_owner gets "Cannot alter the
-			// procedure 'sp_block'...". CONTROL SERVER rather than a role test, since
-			// HAS_PERMS_BY_NAME answers 1 for sysadmin while IS_SRVROLEMEMBER doesn't.
-			denied := !gate.Allows(pt.conn, "", gate.ControlServer)
+		// Installing into master needs sysadmin; a db_owner gets "Cannot alter the
+		// procedure 'sp_block'...". CONTROL SERVER rather than a role test, since
+		// HAS_PERMS_BY_NAME answers 1 for sysadmin while IS_SRVROLEMEMBER doesn't.
+		denied := !gate.Allows(pt.conn, "", gate.ControlServer)
+		// Install while master lacks the procedure; Update while master's copy
+		// is not this build's. Update is hidden, not dimmed, without
+		// CONTROL SERVER: a login that can't read the definition sees it as
+		// differing, so the offer would claim a staleness nobody checked.
+		label := "Install in master"
+		offer := pt.loc != activity.ProcMaster
+		if !offer && pt.masterStale && !denied {
+			label, offer = "Update in master", true
+		}
+		if offer {
 			am.tools.Cells = append(am.tools.Cells, controls.ToolCell{
-				Label:    "Install in master",
+				Label:    label,
 				Disabled: pt.busy || pt.conn == nil || denied,
 				Reason:   gate.RequiresText(gate.ControlServer),
 				Action:   pt.confirmInstallInMaster,

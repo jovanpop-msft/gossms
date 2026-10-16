@@ -249,3 +249,69 @@ func TestActivityMonitorProcTabReplacesAStaleTempDBCopy(t *testing.T) {
 		})
 	}
 }
+
+// A master copy that is not this build's is offered for update, not replaced:
+// master's may be a DBA's own. One that matches offers nothing.
+func TestActivityMonitorProcTabOffersUpdateForAStaleMasterCopy(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		stored string
+		offer  bool
+	}{
+		{"stale", "create   procedure dbo.sp_block as select 1", true},
+		{"current", activity.BlockProc.Script(activity.ProcMaster), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			am := hostedProcMonitor(t, amTabBlock)
+			conn, inst := newFakeConn(t,
+				fakeResponse{match: "object_id('master.dbo.sp_block', 'P')", cols: 2, rows: [][]driver.Value{{true, false}}},
+				fakeResponse{match: "from master.sys.sql_modules", cols: 1, rows: [][]driver.Value{{tc.stored}}},
+			)
+			pt := am.procTab()
+			pt.conn = conn
+			pt.resolveProc()
+			drainUntil(t, am.app, func() bool { return pt.loc == activity.ProcMaster }, "the procedure resolved")
+
+			for _, s := range inst.Statements() {
+				if strings.Contains(s, "sp_executesql @stmt") {
+					t.Errorf("master's copy was replaced without asking: %v", s)
+				}
+			}
+			if pt.masterStale != tc.offer {
+				t.Errorf("masterStale = %v, want %v", pt.masterStale, tc.offer)
+			}
+			am.buildTools()
+			bar := amRender(am, 100, 30)[1]
+			if got := strings.Contains(bar, "Update in master"); got != tc.offer {
+				t.Errorf("Update in master offered = %v, want %v; toolbar %q", got, tc.offer, bar)
+			}
+			if strings.Contains(bar, "Install in master") {
+				t.Errorf("Install in master offered over master's own copy; toolbar %q", bar)
+			}
+		})
+	}
+}
+
+// Update in master is hidden without CONTROL SERVER: such a login may not read
+// the definition, which reads as differing, so the offer would be unfounded.
+func TestActivityMonitorProcTabUpdateInMasterNeedsControlServer(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		granted bool
+	}{{"denied", false}, {"granted", true}} {
+		t.Run(tc.name, func(t *testing.T) {
+			am := hostedProcMonitor(t, amTabBlock)
+			pt := am.procTab()
+			if tc.granted {
+				pt.conn = serverRoleConn(t, []string{"CONTROL SERVER"}, nil, nil, []string{"sysadmin"})
+			} else {
+				pt.conn = serverRoleConn(t, nil, []string{"CONTROL SERVER"}, nil, []string{"sysadmin"})
+			}
+			pt.loc, pt.masterStale = activity.ProcMaster, true
+			am.buildTools()
+			if got := strings.Contains(amRender(am, 100, 30)[1], "Update in master"); got != tc.granted {
+				t.Errorf("Update in master offered = %v, want %v", got, tc.granted)
+			}
+		})
+	}
+}

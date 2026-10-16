@@ -74,10 +74,11 @@ var readTimeoutSites = map[string]int{
 	"alwayson_menu.go":     2,
 	"app_connections.go":   1,
 	"app_explorer_data.go": 3,
-	// 3: the database list, the default backup directory the destination
-	// is generated in — see BackupDialog.loadDefaultPaths — and Start
+	// 4: the database list, the default backup directory the destination
+	// is generated in — see BackupDialog.loadDefaultPaths — the server's
+	// "backup compression default" (loadCompressionDefault), and Start
 	// Backup's xp_fileexist probe of the destination (checkDestThen).
-	"backup_dialog.go": 3,
+	"backup_dialog.go": 4,
 	// Re-reading a Query Store query's text for "Show Value" — see
 	// DetailBrowser.showQueryStoreValue.
 	"detail_browser.go":          1,

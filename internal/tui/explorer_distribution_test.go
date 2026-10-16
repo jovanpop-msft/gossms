@@ -45,27 +45,27 @@ func TestDistributionDatabaseAloneListsSystemDatabases(t *testing.T) {
 func TestDistributionDatabaseMenuMatchesSSMS(t *testing.T) {
 	a := newTestApp()
 	sc := addTestConn(a, "server-one")
-	for _, offline := range []bool{false, true} {
+	for _, state := range []string{"ONLINE", "OFFLINE", "RESTORING"} {
 		node := &explorerNode{label: "distribution", data: nodeData{
 			Type: NodeDatabase, DBName: "distribution", Name: "distribution",
-			IsSystem: true, IsDistributor: true, IsOffline: offline, conn: sc}}
+			IsSystem: true, IsDistributor: true, IsOffline: state != "ONLINE", DBState: state, conn: sc}}
 		items := a.contextMenuItemsForNode(node)
 		for _, label := range []string{"Delete...", "Rename...", "Detach Database...",
-			"Take Database Offline", "Bring Database Online", "New Snapshot..."} {
+			"Take Database Offline", "Bring Database Online", "Restore With Recovery", "New Snapshot..."} {
 			if findMenuItem(items, label) != nil {
-				t.Errorf("offline=%v: %q is offered on a distribution database", offline, label)
+				t.Errorf("%s: %q is offered on a distribution database", state, label)
 			}
 		}
 		for _, label := range []string{"Back Up Database...", "Restore Database...", "Properties..."} {
 			if findMenuItem(items, label) == nil {
-				t.Errorf("offline=%v: %q is missing", offline, label)
+				t.Errorf("%s: %q is missing", state, label)
 			}
 		}
 	}
 
 	// master keeps its offline toggle: only the distribution database loses it.
 	master := &explorerNode{label: "master", data: nodeData{
-		Type: NodeDatabase, DBName: "master", Name: "master", IsSystem: true, conn: sc}}
+		Type: NodeDatabase, DBName: "master", Name: "master", IsSystem: true, DBState: "ONLINE", conn: sc}}
 	if findMenuItem(a.contextMenuItemsForNode(master), "Take Database Offline") == nil {
 		t.Error("Take Database Offline is gone from master too")
 	}

@@ -30,7 +30,7 @@ func (d *BackupDialog) Draw(s tcell.Screen) {
 	core.DrawText(s, lx, d.destLabelY, labelStyle, "Destination:")
 	d.fDest.Draw(s)
 	d.btnBrowse.Draw(s)
-	d.cbCompress.Draw(s)
+	d.ddCompress.Draw(s)
 	d.cbVerify.Draw(s)
 	d.cbChecksum.Draw(s)
 	d.cbCopyOnly.Draw(s)
@@ -39,9 +39,10 @@ func (d *BackupDialog) Draw(s tcell.Screen) {
 	d.DrawSeparator(s)
 	d.DrawButtons(s, backupFormButtons, d.btnFocus)
 
-	// Drawn last so the open database list isn't painted over by the
-	// widgets positioned below it.
+	// Drawn last so an open list isn't painted over by the widgets
+	// positioned below it.
 	d.ddDatabase.DrawOverlay(s)
+	d.ddCompress.DrawOverlay(s)
 }
 
 func (d *BackupDialog) layoutForm() {
@@ -59,7 +60,7 @@ func (d *BackupDialog) layoutForm() {
 	d.fDest.SetBounds(lx, row)
 	d.btnBrowse.SetBounds(lx+d.fDest.Width()+3, row)
 	row += 2
-	d.cbCompress.SetBounds(lx, row)
+	d.ddCompress.SetBounds(lx, row)
 	row++
 	d.cbVerify.SetBounds(lx, row)
 	row++

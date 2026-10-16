@@ -475,10 +475,8 @@ func (a *App) setEndpointState(sc *db.ServerConn, node *explorerNode, state gosm
 
 // toggleDatabaseOffline takes node's database offline, or back online (Take
 // Offline / Bring Online). Offline rolls back every connection, so it's
-// confirmed. On success the node's state updates and its subtree reloads: an
-// offline database shows a single "(Database is offline)" placeholder
-// (explorer_databases.go), and a stale online subtree mustn't be re-queried
-// against it.
+// confirmed. On success, or after a cancel, the node's folder reloads (see
+// reloadDatabaseFolder).
 func (a *App) toggleDatabaseOffline(sc *db.ServerConn, node *explorerNode) {
 	if !a.requireConn(sc) {
 		return
@@ -505,27 +503,12 @@ func (a *App) toggleDatabaseOffline(sc *db.ServerConn, node *explorerNode) {
 		}, func(err error, cancelled bool) {
 			switch {
 			case cancelled:
-				// Refresh the databases folder: after a cancel the node's state
-				// is unknown until re-read.
 				a.setStatus(fmt.Sprintf("Taking %q %s cancelled", dbName, word))
-				a.explorer.ReloadFolders(sc, folderOf("", NodeDatabases))
+				a.reloadDatabaseFolder(sc, node)
 			case err != nil:
 				a.setStatus(fmt.Sprintf("Failed to take %q %s: %v", dbName, word, err))
 			default:
-				if node.retired {
-					// A Refresh above replaced node while the change ran, and
-					// its listing may hold the old state: the folder re-reads it.
-					a.explorer.ReloadFolders(sc, folderOf("", NodeDatabases))
-					a.setStatus(fmt.Sprintf("Database %q is now %s", dbName, word))
-					return
-				}
-				node.data.IsOffline = goOffline
-				node.data.DBState = "ONLINE"
-				if goOffline {
-					node.data.DBState = "OFFLINE"
-				}
-				a.explorer.Reload(node)
-				a.explorer.rebuild() // repaint node's own icon immediately even when it's collapsed (Reload only rebuilds once an expanded reload completes)
+				a.reloadDatabaseFolder(sc, node)
 				a.setStatus(fmt.Sprintf("Database %q is now %s", dbName, word))
 			}
 		})
@@ -542,6 +525,58 @@ func (a *App) toggleDatabaseOffline(sc *db.ServerConn, node *explorerNode) {
 		return
 	}
 	run()
+}
+
+// recoverDatabase runs recovery on node's RESTORING database (RESTORE
+// DATABASE ... WITH RECOVERY), the menu's Restore With Recovery. It is
+// confirmed: recovery ends the restore sequence, so no further log or
+// differential backup can be restored onto the database after it. The server
+// refuses it while the sequence is incomplete, and its message says what is
+// missing.
+func (a *App) recoverDatabase(sc *db.ServerConn, node *explorerNode) {
+	if !a.requireConn(sc) {
+		return
+	}
+	dbName := node.data.DBName
+	a.confirmDialog.ShowConfirm("Restore With Recovery",
+		fmt.Sprintf("Recover %q and bring it online? No further backups can be restored onto it afterwards.", dbName),
+		func(confirmed bool) {
+			if !confirmed {
+				return
+			}
+			a.runWithProgress(progressJob{
+				title:   "Restore With Recovery",
+				message: fmt.Sprintf("Recovering %q...", dbName),
+				what:    "recovering a restoring database",
+				sc:      sc,
+			}, func(ctx context.Context, _ progressReport) error {
+				return sc.Server.DatabaseRef(dbName).RecoverFromRestoring(ctx)
+			}, func(err error, cancelled bool) {
+				switch {
+				case cancelled:
+					a.setStatus(fmt.Sprintf("Recovering %q cancelled", dbName))
+					a.reloadDatabaseFolder(sc, node)
+				case err != nil:
+					a.setStatus(fmt.Sprintf("Failed to recover %q: %v", dbName, err))
+				default:
+					a.reloadDatabaseFolder(sc, node)
+					a.setStatus(fmt.Sprintf("Database %q is now online", dbName))
+				}
+			})
+		})
+}
+
+// reloadDatabaseFolder re-reads the folder node's database is listed in after
+// a state change, so the node shows the state the server now reports rather
+// than one written here — an online toggle once wrote ONLINE whatever the
+// database had been in. A system database's folder is System Databases;
+// reloading Databases instead would collapse it.
+func (a *App) reloadDatabaseFolder(sc *db.ServerConn, node *explorerNode) {
+	folder := NodeDatabases
+	if node.data.IsSystem {
+		folder = NodeSystemDatabases
+	}
+	a.explorer.ReloadFolders(sc, folderOf("", folder))
 }
 
 // restoreFromSnapshot reverts the snapshot's source database to it (RESTORE

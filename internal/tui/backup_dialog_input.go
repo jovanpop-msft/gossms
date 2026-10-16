@@ -27,15 +27,15 @@ func (d *BackupDialog) HandleKey(ev *tcell.EventKey) bool {
 		d.stepFocus(-1)
 		return true
 	case tcell.KeyEscape:
-		if d.ddDatabase.IsOpen() {
-			d.ddDatabase.HandleKey(ev)
+		if dd := d.openDropDown(); dd != nil {
+			dd.HandleKey(ev)
 			return true
 		}
 		d.Hide()
 		return true
 	case tcell.KeyEnter:
-		if d.ddDatabase.IsOpen() {
-			d.ddDatabase.HandleKey(ev)
+		if dd := d.openDropDown(); dd != nil {
+			dd.HandleKey(ev)
 			d.syncAutoDest()
 			return true
 		}
@@ -70,7 +70,7 @@ func (d *BackupDialog) HandleMouse(ev *tcell.EventMouse) bool {
 		d.ddDatabase.HandleMouse(ev)
 		d.rbType.HandleMouse(ev)
 		d.btnBrowse.HandleMouse(ev)
-		d.cbCompress.HandleMouse(ev)
+		d.ddCompress.HandleMouse(ev)
 		d.cbVerify.HandleMouse(ev)
 		d.cbChecksum.HandleMouse(ev)
 		d.cbCopyOnly.HandleMouse(ev)
@@ -83,8 +83,8 @@ func (d *BackupDialog) HandleMouse(ev *tcell.EventMouse) bool {
 	// The open list is clamped to the screen, not the dialog, so it can reach
 	// past the dialog's edge: it is offered every event (wheel included) before
 	// ConsumeOutsideClick can discard one as "outside" — FilterDialog's order.
-	if d.mode == backupModeForm && d.ddDatabase.IsOpen() && d.ddDatabase.HandleMouse(ev) {
-		d.focusTo(d.ddDatabase)
+	if dd := d.openDropDown(); d.mode == backupModeForm && dd != nil && dd.HandleMouse(ev) {
+		d.focusTo(dd)
 		d.syncAutoDest()
 		return true
 	}
@@ -116,14 +116,16 @@ func (d *BackupDialog) HandleMouse(ev *tcell.EventMouse) bool {
 		return true
 	}
 
-	// The database dropdown's open list is an overlay drawn last, so it
-	// gets first refusal of every click — ahead of ButtonClicked below,
-	// which would otherwise steal a click landing on an open list row that
-	// happens to visually overlap the button row.
-	if d.ddDatabase.HandleMouse(ev) {
-		d.focusTo(d.ddDatabase)
-		d.syncAutoDest()
-		return true
+	// A dropdown's open list is an overlay drawn last, so it gets first
+	// refusal of every click — ahead of ButtonClicked below, which would
+	// otherwise steal a click landing on an open list row that happens to
+	// visually overlap the button row.
+	for _, dd := range []*widgets.DropDown{d.ddDatabase, d.ddCompress} {
+		if dd.HandleMouse(ev) {
+			d.focusTo(dd)
+			d.syncAutoDest()
+			return true
+		}
 	}
 
 	if i := d.ButtonClicked(ev, backupFormButtons); i >= 0 {
@@ -142,7 +144,7 @@ func (d *BackupDialog) HandleMouse(ev *tcell.EventMouse) bool {
 		return true
 	}
 
-	for _, cb := range []*widgets.CheckBox{d.cbCompress, d.cbVerify, d.cbChecksum, d.cbCopyOnly} {
+	for _, cb := range []*widgets.CheckBox{d.cbVerify, d.cbChecksum, d.cbCopyOnly} {
 		if cb.HandleMouse(ev) {
 			d.focusTo(cb)
 			return true

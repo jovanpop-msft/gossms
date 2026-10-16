@@ -9,6 +9,7 @@ import (
 
 	"github.com/gdamore/tcell/v3"
 	gosmo "github.com/radix29/gosmo"
+	"github.com/radix29/gossms/internal/db"
 )
 
 // Every backup goes out WITH INIT, so a generated name reused across backups
@@ -47,14 +48,23 @@ func TestBackupAutoDestIsUniquePerSecond(t *testing.T) {
 // mid-test.
 func backupDestDialog(t *testing.T, responses ...fakeResponse) (*App, *BackupDialog) {
 	t.Helper()
+	sc, _ := newFakeConn(t, responses...)
+	return backupDialogOn(t, sc)
+}
+
+// backupDialogOn is backupDestDialog over a connection the caller built — for
+// an edition other than the fake's default Developer.
+func backupDialogOn(t *testing.T, sc *db.ServerConn) (*App, *BackupDialog) {
+	t.Helper()
 	a := newTestApp()
 	a.screen = &fakeSizedScreen{w: 100, h: 40}
 	d := NewBackupDialog(a)
 	quietLog(t)
 	a.screen = nil
-	sc, _ := newFakeConn(t, responses...)
 	d.show(sc, "AppDB")
-	drainUntil(t, a, func() bool { return d.dbListRun.Idle() && d.defPaths.Idle() }, "the opening loads")
+	drainUntil(t, a, func() bool {
+		return d.dbListRun.Idle() && d.defPaths.Idle() && d.compressDef.Idle()
+	}, "the opening loads")
 	return a, d
 }
 

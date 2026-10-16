@@ -64,3 +64,40 @@ func TestDisabledRadioBoxRefusesInput(t *testing.T) {
 		t.Error("re-enabling did not restore input")
 	}
 }
+
+// One greyed option leaves the rest live: arrows step over it, a boundary
+// with only greyed options beyond it falls through like the real edge, a
+// click on it is refused, and SetSelected still reaches it (the host pins).
+func TestRadioBoxGreyedOptionIsSkipped(t *testing.T) {
+	r := NewRadioBox("Backup Type:", []string{"Full", "Differential", "Transaction Log"})
+	r.SetBounds(4, 2)
+	r.Focus(true)
+	r.SetOptionEnabled(1, false)
+
+	if r.OptionEnabled(1) || !r.OptionEnabled(0) || !r.OptionEnabled(2) {
+		t.Fatalf("OptionEnabled = %v %v %v, want true false true", r.OptionEnabled(0), r.OptionEnabled(1), r.OptionEnabled(2))
+	}
+	if !r.HandleKey(key(tcell.KeyDown, tcell.ModNone)) || r.Selected() != 2 {
+		t.Errorf("Down from Full selected %d, want 2 — over the greyed option", r.Selected())
+	}
+	if !r.HandleKey(key(tcell.KeyUp, tcell.ModNone)) || r.Selected() != 0 {
+		t.Errorf("Up from 2 selected %d, want 0", r.Selected())
+	}
+	// Options start at row 3; Differential is row 4.
+	if r.HandleMouse(mouse(5, 4, tcell.Button1)) || r.Selected() != 0 {
+		t.Errorf("a click on the greyed option was taken: selected %d", r.Selected())
+	}
+
+	r.SetOptionEnabled(2, false)
+	if r.HandleKey(key(tcell.KeyDown, tcell.ModNone)) {
+		t.Error("Down with only greyed options below was consumed; it must fall through like the last option")
+	}
+	r.SetSelected(1)
+	if r.Selected() != 1 {
+		t.Error("SetSelected refused a greyed option")
+	}
+	r.SetOptionEnabled(1, true)
+	if !r.OptionEnabled(1) {
+		t.Error("SetOptionEnabled(1, true) did not restore it")
+	}
+}

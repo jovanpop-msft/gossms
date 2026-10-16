@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"database/sql/driver"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -19,7 +21,7 @@ func backupForm(dbName string) *BackupDialog {
 	d.rbType = widgets.NewRadioBox("Backup Type:", []string{"Full", "Differential", "Transaction Log"})
 	d.fDest = widgets.NewInputField("", 40, false)
 	d.btnBrowse = widgets.NewButton("Browse", nil)
-	d.cbCompress = widgets.NewCheckBox("Compression")
+	d.ddCompress = widgets.NewDropDown("Compression: ", compressItems(""), 38)
 	d.cbVerify = widgets.NewCheckBox("Verify backup after completion")
 	d.cbChecksum = widgets.NewCheckBox("Use backup checksum")
 	d.cbCopyOnly = widgets.NewCheckBox("Copy-only backup")
@@ -67,7 +69,7 @@ func TestBackupOptionsBuildTheExpectedStatement(t *testing.T) {
 	t.Run("a full backup with every option on", func(t *testing.T) {
 		d := backupForm("AppDB")
 		d.fDest.SetValue(`C:\backups\AppDB_full.bak`)
-		d.cbCompress.SetChecked(true)
+		d.ddCompress.SetSelected(compressOn)
 		d.cbChecksum.SetChecked(true)
 		d.cbCopyOnly.SetChecked(true)
 
@@ -97,19 +99,19 @@ func TestBackupOptionsBuildTheExpectedStatement(t *testing.T) {
 		}
 	})
 
-	// Every checkbox off must drop its clause rather than emit a negated
-	// one: NO_COMPRESSION is a different instruction from "say nothing and
-	// let the server default apply", and the dialog offers no third state.
+	// Every checkbox off must drop its clause rather than emit a negated one.
+	// Compression is the exception, a dropdown precisely because it has three
+	// states: "server default" emits nothing, which is not NO_COMPRESSION.
 	t.Run("options off emit no clause", func(t *testing.T) {
 		d := backupForm("AppDB")
 		d.fDest.SetValue(`C:\backups\AppDB.bak`)
-		d.cbCompress.SetChecked(false)
+		d.ddCompress.SetSelected(compressServerDefault)
 		d.cbChecksum.SetChecked(false)
 		d.cbCopyOnly.SetChecked(false)
 
 		opts := d.currentOptions()
 		if opts.Compression != nil {
-			t.Error("Compression is set with the box unchecked — a nil pointer is what means \"use the server default\"")
+			t.Error("Compression is set on the server-default entry — a nil pointer is what means \"use the server default\"")
 		}
 		stmt, err := (&gosmo.Server{}).BuildBackupStatement(opts)
 		if err != nil {
@@ -117,8 +119,24 @@ func TestBackupOptionsBuildTheExpectedStatement(t *testing.T) {
 		}
 		for _, unwanted := range []string{"COPY_ONLY", "CHECKSUM", "COMPRESSION"} {
 			if strings.Contains(stmt, unwanted) {
-				t.Errorf("statement carries %q with the box unchecked:\n%s", unwanted, stmt)
+				t.Errorf("statement carries %q with the option off:\n%s", unwanted, stmt)
 			}
+		}
+	})
+
+	// "Do not compress" has to say so: with the server's "backup compression
+	// default" at 1, emitting nothing still compresses.
+	t.Run("do not compress emits NO_COMPRESSION", func(t *testing.T) {
+		d := backupForm("AppDB")
+		d.fDest.SetValue(`C:\backups\AppDB.bak`)
+		d.ddCompress.SetSelected(compressOff)
+
+		stmt, err := (&gosmo.Server{}).BuildBackupStatement(d.currentOptions())
+		if err != nil {
+			t.Fatalf("BuildBackupStatement: %v", err)
+		}
+		if !strings.Contains(stmt, "NO_COMPRESSION") {
+			t.Errorf("Do not compress produced no NO_COMPRESSION:\n%s", stmt)
 		}
 	})
 
@@ -308,5 +326,74 @@ func TestSQLServerProductName(t *testing.T) {
 func TestYesNo(t *testing.T) {
 	if yesNo(true) != "Yes" || yesNo(false) != "No" {
 		t.Errorf("yesNo = %q/%q, want Yes/No", yesNo(true), yesNo(false))
+	}
+}
+
+// compressionDefaultResponse answers loadCompressionDefault's read of the
+// server's "backup compression default".
+func compressionDefaultResponse(inUse int64) fakeResponse {
+	return fakeResponse{match: "sys.configurations", cols: 9, rows: [][]driver.Value{{
+		int64(1579), "backup compression default", inUse, inUse, int64(0), int64(1),
+		true, false, "Enable compression of backups by default",
+	}}}
+}
+
+// The dialog opens on the server default, never on "Compress": Express and Web
+// refuse WITH COMPRESSION (Msg 1844), and a forced-on default failed every
+// backup there. The first entry names what the default is.
+func TestBackupCompressionDefaultsToTheServerSetting(t *testing.T) {
+	_, d := backupDestDialog(t, compressionDefaultResponse(1))
+	if d.ddCompress.Selected() != compressServerDefault || !d.ddCompress.Enabled() {
+		t.Errorf("Developer: selected %d enabled %v, want the server default, enabled",
+			d.ddCompress.Selected(), d.ddCompress.Enabled())
+	}
+	if got, want := d.ddCompress.Value(), compressDefaultLabel+" (on)"; got != want {
+		t.Errorf("first entry = %q, want %q", got, want)
+	}
+	if opts := d.currentOptions(); opts.Compression != nil {
+		t.Errorf("a fresh dialog forces compression %v; it must leave it to the server", *opts.Compression)
+	}
+}
+
+// A refused or failed read leaves the entry bare rather than guessing.
+func TestBackupCompressionDefaultUnreadLeavesTheLabelBare(t *testing.T) {
+	_, d := backupDestDialog(t, fakeResponse{match: "sys.configurations", err: errors.New("denied")})
+	if got := d.ddCompress.Value(); got != compressDefaultLabel {
+		t.Errorf("first entry = %q, want %q", got, compressDefaultLabel)
+	}
+}
+
+// On an edition without backup compression the dropdown is pinned to the
+// server default and greyed, so no path through the form emits COMPRESSION.
+func TestBackupCompressionPinnedOnExpressAndWeb(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		edition string
+		engine  int64
+	}{
+		{"Express", "Express Edition (64-bit)", 4},
+		{"Web", "Web Edition (64-bit)", 2},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			info := serverInfoResponse()
+			info.rows[0][1] = tc.edition
+			info.rows[0][8] = tc.engine
+			sc, _ := newFakeConnFrom(t, []fakeResponse{info, sysInfoResponse()})
+
+			_, d := backupDialogOn(t, sc)
+			if d.ddCompress.Enabled() {
+				t.Error("the Compression dropdown is enabled on an edition that refuses it")
+			}
+			if d.ddCompress.Selected() != compressServerDefault {
+				t.Errorf("selected %d, want the server default", d.ddCompress.Selected())
+			}
+			stmt, err := (&gosmo.Server{}).BuildBackupStatement(d.currentOptions())
+			if err != nil {
+				t.Fatalf("BuildBackupStatement: %v", err)
+			}
+			if strings.Contains(stmt, "COMPRESSION") {
+				t.Errorf("statement carries a compression clause on %s:\n%s", tc.name, stmt)
+			}
+		})
 	}
 }

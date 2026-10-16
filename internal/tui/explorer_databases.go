@@ -513,10 +513,6 @@ func databasesMenuItems(a *App, sc *db.ServerConn, node *explorerNode, newQuery,
 }
 
 func databaseMenuItems(a *App, sc *db.ServerConn, node *explorerNode, newQuery, refresh controls.MenuItem) []controls.MenuItem {
-	offlineLabel := "Take Database Offline"
-	if node.data.IsOffline {
-		offlineLabel = "Bring Database Online"
-	}
 	items := []controls.MenuItem{
 		newQuery,
 		{Divider: true},
@@ -525,15 +521,13 @@ func databaseMenuItems(a *App, sc *db.ServerConn, node *explorerNode, newQuery, 
 		gate.Item(controls.MenuItem{Label: "Restore Database...", Action: func() { a.showRestoreDialog(sc, node.data.DBName) }},
 			sc, node.data.DBName, gate.ControlDB, gate.AlterAnyDatabase, gate.CreateAnyDatabase),
 		{Label: "View Backup History", Action: func() { a.showBackupHistoryFor(sc, node.data.DBName) }},
-		// ALTER DATABASE ... SET OFFLINE is Msg 5008 on an Azure edition,
-		// so the toggle is withheld there in both directions.
-		gateAzure(gate.Item(controls.MenuItem{Label: offlineLabel, Action: func() { a.toggleDatabaseOffline(sc, node) }},
-			sc, node.data.DBName, gate.AlterDatabase, gate.AlterAnyDatabase), sc),
 	}
 	// SSMS offers neither Take Offline nor Bring Online on a distribution
 	// database: offline, it stops every distribution and cleanup agent.
-	if node.data.IsDistributor {
-		items = items[:len(items)-1]
+	// ALTER DATABASE ... SET OFFLINE is Msg 5008 on an Azure edition, so the
+	// toggle is withheld there in both directions.
+	if toggle, ok := databaseStateToggle(a, sc, node); ok && !node.data.IsDistributor {
+		items = append(items, gateAzure(toggle, sc))
 	}
 	// Snapshotting a system database is refused by the server, so the
 	// item follows Detach's rule below rather than being offered and
@@ -558,6 +552,35 @@ func databaseMenuItems(a *App, sc *db.ServerConn, node *explorerNode, newQuery, 
 		refresh,
 		controls.MenuItem{Label: "Properties...", Action: func() { a.showDatabasePropertiesFor(sc, node.data.DBName) }},
 	)
+}
+
+// databaseStateToggle is a database node's online-state item, chosen by the
+// state the node was loaded in, or false when that state has none:
+//
+//   - ONLINE: Take Database Offline.
+//   - OFFLINE, EMERGENCY, RECOVERY_PENDING, SUSPECT: Bring Database Online —
+//     ALTER DATABASE ... SET ONLINE is the documented way out of each.
+//   - RESTORING: Restore With Recovery. The server refuses every ALTER
+//     DATABASE on a restoring database (Msg 5052), so Bring Online could
+//     never succeed there; RESTORE ... WITH RECOVERY is what finishes it.
+//   - anything else (OFFLINE_SECONDARY, RECOVERING, COPYING): none. No
+//     statement of the user's changes those; the server moves them on.
+func databaseStateToggle(a *App, sc *db.ServerConn, node *explorerNode) (controls.MenuItem, bool) {
+	dbName := node.data.DBName
+	switch node.data.DBState {
+	case "ONLINE":
+		return gate.Item(controls.MenuItem{Label: "Take Database Offline", Action: func() { a.toggleDatabaseOffline(sc, node) }},
+			sc, dbName, gate.AlterDatabase, gate.AlterAnyDatabase), true
+	case "OFFLINE", "EMERGENCY", "RECOVERY_PENDING", "SUSPECT":
+		return gate.Item(controls.MenuItem{Label: "Bring Database Online", Action: func() { a.toggleDatabaseOffline(sc, node) }},
+			sc, dbName, gate.AlterDatabase, gate.AlterAnyDatabase), true
+	case "RESTORING":
+		// The rights a restore over an existing database takes, as the
+		// Restore Database item above.
+		return gate.Item(controls.MenuItem{Label: "Restore With Recovery", Action: func() { a.recoverDatabase(sc, node) }},
+			sc, dbName, gate.ControlDB, gate.AlterAnyDatabase, gate.CreateAnyDatabase), true
+	}
+	return controls.MenuItem{}, false
 }
 
 func databaseSnapshotsMenuItems(a *App, sc *db.ServerConn, node *explorerNode, newQuery, refresh controls.MenuItem) []controls.MenuItem {
