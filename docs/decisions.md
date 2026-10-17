@@ -1336,8 +1336,9 @@ it from the string 'NULL'.
   call: pasting into a query or a sheet reads as before.
 - **Results To File (CSV):** NULL is an empty field, an empty string `""`,
   the string 'NULL' is `NULL` — PostgreSQL COPY CSV's convention, lossless.
-  The format's one limit: a one-column NULL row is an empty line, like the
-  separator between sets.
+  The format's one limit: a one-column NULL row is written `""` (an empty line
+  is skipped by readers and is the separator between sets), so NULL and an
+  empty string are the same for that one shape.
 - **Results to Text:** "NULL", as SSMS shows it.
 
 ## By design — not issues, do not re-raise

@@ -19,7 +19,8 @@ import (
 // keeps the two apart, and the string 'NULL' as NULL: the convention of
 // PostgreSQL's COPY CSV and most importers. encoding/csv never quotes an empty
 // field, hence writeRecord. One limit is the format's: a row of one NULL column is
-// an empty line, the same as the separator between sets.
+// written as "" too, since an empty line is skipped by readers and is the separator
+// between sets, so there a NULL and an empty string are the same.
 //
 // The write path is deliberately dumb: no counting beyond what EndSet is handed,
 // no buffering past bufio's own, nothing retained between rows.
@@ -48,6 +49,14 @@ func newCSVSink(path string) (*csvSink, error) {
 // quoted exactly where encoding/csv would quote it. bufio's error is sticky, so
 // the last write's error is every write's.
 func (s *csvSink) writeRecord(cells []string, isNull []bool) error {
+	// A lone NULL would be a bare "\n", which readers (encoding/csv's included) skip
+	// as a blank line and which is also the separator between sets. Write it as ""
+	// the way encoding/csv quotes a lone empty field: for this one shape NULL and an
+	// empty string are the same on disk.
+	if len(cells) == 1 && len(isNull) > 0 && isNull[0] {
+		s.w.WriteString(`""`)
+		return s.w.WriteByte('\n')
+	}
 	for i, c := range cells {
 		if i > 0 {
 			s.w.WriteByte(',')
@@ -108,6 +117,17 @@ func (s *csvSink) Close() error {
 
 // Abort discards the rows written so far; the destination is not touched.
 func (s *csvSink) Abort() { s.st.Abort() }
+
+// finish ends a run: a stopped run or one that reported any error is aborted, so
+// the destination the user agreed to overwrite is left as it was (kept), and
+// anything else is committed by Close. The handle is released either way.
+func (s *csvSink) finish(cancelled bool, res *query.Result) (kept bool, err error) {
+	if cancelled || res.HasErrors() {
+		s.Abort()
+		return true, nil
+	}
+	return false, s.Close()
+}
 
 // promptResultsFile asks where a Results To File run should write, then hands the
 // chosen path to run. Cancelling the dialog calls neither.

@@ -1,13 +1,11 @@
 <p align="center">
-  <img src="gossms_logo.png" alt="goSSMS" width="720">
-</p>
-<p align="center">
+  <img src="gossms_logo.png" alt="goSSMS" width="720"><br/>
   <strong>SQL Server management for Linux, macOS, and Windows</strong>
 </p>
 
 # goSSMS
 [![Last commit](https://img.shields.io/github/last-commit/radix29/gossms?style=flat)](https://github.com/radix29/gossms/commits/main)
-[![License](https://img.shields.io/github/license/radix29/gossms?style=flat)](LICENSE)
+[![License](https://img.shields.io/badge/license-GNU/GPLv3-blue)](LICENSE)
 [![Release](https://github.com/radix29/gossms/actions/workflows/release.yml/badge.svg)](https://github.com/radix29/gossms/actions/workflows/release.yml)
 [![Go Reference](https://pkg.go.dev/badge/github.com/radix29/gossms.svg)](https://pkg.go.dev/github.com/radix29/gossms)
 [![Minimum Go version](https://img.shields.io/github/go-mod/go-version/radix29/gossms?label=Go%20%E2%89%A5)](go.mod)

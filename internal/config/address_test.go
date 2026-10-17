@@ -151,3 +151,13 @@ func TestIdentityKeyFoldsTheAddress(t *testing.T) {
 		t.Error("IdentityKey drops a Port-field port, so two instances on one host share a key")
 	}
 }
+
+// A signed or non-digit suffix is not a port: it must not key as the default
+// instance "host" (gosmo used to read "host,-5" as port -5 and dial 1433).
+func TestInstanceKeyKeepsABadPortSuffixDistinct(t *testing.T) {
+	for _, s := range []string{"host,-5", "host:+1500"} {
+		if got := InstanceKey(s); got == "host" {
+			t.Errorf("InstanceKey(%q) = %q, collides with the default instance", s, got)
+		}
+	}
+}

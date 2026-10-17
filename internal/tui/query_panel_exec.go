@@ -293,9 +293,8 @@ func (p *QueryPanel) startRun(queryText string, firstLine int, exportPath string
 				return &query.Result{Messages: query.ErrorMessages(err)}
 			}
 			res := sess.ExecuteToSink(ctx, queryText, sink, opts...)
-			// Close after the run either way: the file has partial content and the handle
-			// must not leak.
-			exportErr = sink.Close()
+			// ctx is read while still live (launch cancels it only after run returns).
+			exportKept, exportErr = sink.finish(ctx.Err() != nil, res)
 			return res
 		case capturePlan:
 			return sess.ExecuteWithPlan(ctx, queryText, opts...)

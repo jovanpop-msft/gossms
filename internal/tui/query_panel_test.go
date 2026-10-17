@@ -2,6 +2,7 @@ package tui
 
 import (
 	"encoding/csv"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -764,6 +765,48 @@ func TestCSVSinkKeepsNullEmptyAndTheStringNULLApart(t *testing.T) {
 	}
 }
 
+// TestCSVSinkOneColumnNullRowSurvivesACSVReader. A lone NULL used to be the bare
+// line "\n", which encoding/csv skips, so SELECT nullable_col lost every NULL row.
+// It is now "", the separator between sets is still a blank line, and
+// multi-column NULLs are unchanged.
+func TestCSVSinkOneColumnNullRowSurvivesACSVReader(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "results.csv")
+	sink, err := newCSVSink(path)
+	if err != nil {
+		t.Fatalf("newCSVSink: %v", err)
+	}
+	must := func(err error) {
+		t.Helper()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	must(sink.BeginSet([]string{"c"}))
+	must(sink.Row([]string{"a"}, []bool{false}))
+	must(sink.Row([]string{"NULL"}, []bool{true}))
+	must(sink.Row([]string{""}, []bool{false}))
+	must(sink.EndSet(3))
+	must(sink.BeginSet([]string{"x", "y"}))
+	must(sink.Row([]string{"NULL", "NULL"}, []bool{true, true}))
+	must(sink.Close())
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "c\na\n\"\"\n\"\"\n\nx,y\n,\n"
+	if string(data) != want {
+		t.Errorf("file = %q\nwant   %q", data, want)
+	}
+	r := csv.NewReader(strings.NewReader(strings.SplitN(string(data), "\n\n", 2)[0] + "\n"))
+	rows, err := r.ReadAll()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 4 { // header + 3 rows
+		t.Errorf("csv reader saw %d records, want 4: %q", len(rows), rows)
+	}
+}
+
 // TestReconnectNeverConnectedNoOp confirms Reconnect on a panel that never
 // had a connection (p.conn == nil, e.g. "New Query" with nothing selected
 // in Object Explorer) just reports status — there's no Opts to redial with,
@@ -1245,5 +1288,43 @@ func TestCSVSinkAbortKeepsAnExistingFileAndCloseReplacesIt(t *testing.T) {
 	}
 	if ents, _ := os.ReadDir(dir); len(ents) != 1 {
 		t.Errorf("directory holds %d entries, want only results.csv", len(ents))
+	}
+}
+
+// finish decides commit versus abort for a Results To File run: a stopped or
+// failed run keeps the old file and reports it kept; a clean one replaces it.
+func TestCSVSinkFinishKeepsTheFileOnStopOrError(t *testing.T) {
+	cases := []struct {
+		name      string
+		cancelled bool
+		res       *query.Result
+		wantKept  bool
+		want      string
+	}{
+		{"clean run replaces", false, &query.Result{}, false, "a\n1\n"},
+		{"stopped run keeps", true, &query.Result{}, true, "old\n"},
+		{"batch error keeps", false, &query.Result{Messages: query.ErrorMessages(errors.New("boom"))}, true, "old\n"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "results.csv")
+			if err := os.WriteFile(path, []byte("old\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			sink, err := newCSVSink(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			sink.BeginSet([]string{"a"})
+			sink.Row([]string{"1"}, nil)
+			sink.EndSet(1)
+			kept, err := sink.finish(tc.cancelled, tc.res)
+			if err != nil || kept != tc.wantKept {
+				t.Fatalf("finish = %v, %v; want kept=%v, nil", kept, err, tc.wantKept)
+			}
+			if got, _ := os.ReadFile(path); string(got) != tc.want {
+				t.Errorf("file = %q, want %q", got, tc.want)
+			}
+		})
 	}
 }
