@@ -1,18 +1,19 @@
 <p align="center">
   <img src="gossms_logo.png" alt="goSSMS" width="720">
 </p>
-
 <p align="center">
   <strong>SQL Server management for Linux, macOS, and Windows</strong>
 </p>
 
-<p align="center">
-  <a href="https://github.com/radix29/gossms/commits/main"><img src="https://img.shields.io/github/last-commit/radix29/gossms?style=flat" alt="Last commit"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/radix29/gossms?style=flat" alt="License"></a>
-  <a href="https://discord.gg/7YVKzB3vZ"><img src="https://img.shields.io/badge/Discord-join-5865F2?style=flat&logo=discord&logoColor=white" alt="Discord"></a>
-</p>
-
 # goSSMS
+[![Last commit](https://img.shields.io/github/last-commit/radix29/gossms?style=flat)](https://github.com/radix29/gossms/commits/main)
+[![License](https://img.shields.io/github/license/radix29/gossms?style=flat)](LICENSE)
+[![Release](https://github.com/radix29/gossms/actions/workflows/release.yml/badge.svg)](https://github.com/radix29/gossms/actions/workflows/release.yml)
+[![Go Reference](https://pkg.go.dev/badge/github.com/radix29/gossms.svg)](https://pkg.go.dev/github.com/radix29/gossms)
+[![Minimum Go version](https://img.shields.io/github/go-mod/go-version/radix29/gossms?label=Go%20%E2%89%A5)](go.mod)
+[![Latest release](https://img.shields.io/github/v/release/radix29/gossms?sort=semver)](https://github.com/radix29/gossms/releases)
+[![Discord](https://img.shields.io/badge/Discord-join-5865F2?style=flat&logo=discord&logoColor=white)](https://discord.gg/7YVKzB3vZ)
+
 
 goSSMS is a terminal-based SQL Server management application. It is distributed
 as a single executable and does not require an installer, SQL client tools, or

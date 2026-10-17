@@ -385,3 +385,20 @@ func TestTrimLastGrapheme(t *testing.T) {
 		}
 	}
 }
+
+func TestSafeFileName(t *testing.T) {
+	for in, want := range map[string]string{
+		`a\b/c:d*e?f"g<h>i|j`: "a_b_c_d_e_f_g_h_i_j",
+		"a\x00b\tc\x7f":       "a_b_c_",
+		"name. . ":            "name",
+		"":                    "_",
+		".":                   "_",
+		"..":                  "_",
+		"...":                 "_",
+		"日本語 table":           "日本語 table",
+	} {
+		if got := SafeFileName(in); got != want {
+			t.Errorf("SafeFileName(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

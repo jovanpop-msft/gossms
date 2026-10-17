@@ -527,3 +527,21 @@ func TestAGDashboardApplyIgnoresAClosedPanel(t *testing.T) {
 		t.Fatal("apply installed a reading on a panel that is not hosted")
 	}
 }
+
+// Names differing only in case are distinct databases on a case-sensitive
+// server: each secondary pairs with its own primary and each is counted.
+func TestAGCaseDistinctDatabasesStayDistinct(t *testing.T) {
+	base := time.Date(2026, 8, 11, 12, 0, 0, 0, time.UTC)
+	got := agComputeDatabaseMetrics([]*gosmo.AvailabilityDatabase{
+		{DatabaseName: "Sales", ReplicaServerName: "p", IsPrimaryReplica: true, LastCommitTime: base},
+		{DatabaseName: "sales", ReplicaServerName: "p", IsPrimaryReplica: true, LastCommitTime: base.Add(-time.Hour)},
+		{DatabaseName: "Sales", ReplicaServerName: "s", LastCommitTime: base.Add(-10 * time.Second)},
+		{DatabaseName: "sales", ReplicaServerName: "s", LastCommitTime: base.Add(-time.Hour - 20*time.Second)},
+	})
+	if got[2].DataLoss != 10*time.Second || got[3].DataLoss != 20*time.Second {
+		t.Errorf("data loss = %v, %v; want 10s, 20s", got[2].DataLoss, got[3].DataLoss)
+	}
+	if n := agDistinctDatabases(got); n != 2 {
+		t.Errorf("agDistinctDatabases = %d, want 2", n)
+	}
+}

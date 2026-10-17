@@ -3,11 +3,11 @@ package tui
 import (
 	"bufio"
 	"fmt"
-	"os"
 	"strings"
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/radix29/gossms/internal/fileutil"
 	"github.com/radix29/gossms/internal/query"
 )
 
@@ -24,21 +24,23 @@ import (
 // The write path is deliberately dumb: no counting beyond what EndSet is handed,
 // no buffering past bufio's own, nothing retained between rows.
 type csvSink struct {
-	f *os.File
-	w *bufio.Writer
+	st *fileutil.Stream
+	w  *bufio.Writer
 
 	// sets counts result sets begun so far, so the blank-line separator goes between
 	// sets and not before the first.
 	sets int
 }
 
-// newCSVSink creates (or truncates) path and returns a sink writing to it.
+// newCSVSink returns a sink streaming to a temp file beside path. path itself is
+// replaced only by Close, so a failed or stopped run (Abort) leaves what the user
+// agreed to overwrite as it was.
 func newCSVSink(path string) (*csvSink, error) {
-	f, err := os.Create(path)
+	st, err := fileutil.CreateStream(path, 0o644)
 	if err != nil {
 		return nil, err
 	}
-	return &csvSink{f: f, w: bufio.NewWriter(f)}, nil
+	return &csvSink{st: st, w: bufio.NewWriter(st)}, nil
 }
 
 // writeRecord writes one CSV line: cells comma-separated, a NULL (isNull, which
@@ -93,23 +95,25 @@ func (s *csvSink) Row(cells []string, isNull []bool) error { return s.writeRecor
 // rather than only at Close.
 func (s *csvSink) EndSet(int) error { return s.w.Flush() }
 
-// Close flushes and closes the file. A flush error is preferred over a close
-// error since it names the actual failure, but a close error is still reported
-// rather than dropped: a disk-full condition is often only visible there.
+// Close flushes the rows and replaces the destination with them. A flush error is
+// preferred over a commit error since it names the actual failure; either way the
+// destination is left as it was.
 func (s *csvSink) Close() error {
-	err := s.w.Flush()
-	if cerr := s.f.Close(); err == nil {
-		err = cerr
+	if err := s.w.Flush(); err != nil {
+		s.st.Abort()
+		return err
 	}
-	return err
+	return s.st.Commit()
 }
+
+// Abort discards the rows written so far; the destination is not touched.
+func (s *csvSink) Abort() { s.st.Abort() }
 
 // promptResultsFile asks where a Results To File run should write, then hands the
 // chosen path to run. Cancelling the dialog calls neither.
 //
-// The prompt comes *before* execution: rows are streamed straight to the file as
-// scanned (csvSink), so the destination has to exist by the time the query
-// starts. This also matches SSMS, which asks for the filename when you execute in
+// The prompt comes *before* execution: rows are streamed as scanned (csvSink), so
+// the destination has to be known by the time the query starts. This also matches SSMS, which asks for the filename when you execute in
 // Results To File mode.
 func (p *QueryPanel) promptResultsFile(run func(path string)) {
 	p.app.fileDialog.ShowSave("Results To File", "results.csv", run)
@@ -117,8 +121,11 @@ func (p *QueryPanel) promptResultsFile(run func(path string)) {
 
 // reportExport appends the outcome of a streamed export to res so it shows up
 // in the Messages tab, and mirrors it to the status bar.
-func (p *QueryPanel) reportExport(res *query.Result, path string, rows int, err error) {
+func (p *QueryPanel) reportExport(res *query.Result, path string, rows int, kept bool, err error) {
 	msg := query.Message{Text: fmt.Sprintf("%d row(s) written to %s", rows, path)}
+	if kept {
+		msg = query.Message{Text: fmt.Sprintf("Results not written; %s was not changed", path)}
+	}
 	if err != nil {
 		msg = query.Message{Text: fmt.Sprintf("write results to %s: %v", path, err), IsError: true}
 	}

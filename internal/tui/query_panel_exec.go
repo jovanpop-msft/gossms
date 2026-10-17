@@ -283,6 +283,7 @@ func (p *QueryPanel) startRun(queryText string, firstLine int, exportPath string
 	// Written by run on the background goroutine, read by the completion on the UI
 	// goroutine; launch's postAndWake orders the two.
 	var exportErr error
+	var exportKept bool
 	run := func(ctx context.Context, sess *query.Session) *query.Result {
 		switch {
 		case exportPath != "":
@@ -305,7 +306,7 @@ func (p *QueryPanel) startRun(queryText string, firstLine int, exportPath string
 	p.launch("query execution", "Executing query...", prog, run, func(res *query.Result, cancelled bool) {
 		p.setRunResult(res, cancelled)
 		if exportPath != "" {
-			p.reportExport(res, exportPath, res.RowsWritten, exportErr)
+			p.reportExport(res, exportPath, res.RowsWritten, exportKept, exportErr)
 		}
 	})
 	if live {

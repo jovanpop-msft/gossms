@@ -231,7 +231,7 @@ func (d *AGDashboard) drawHint(s tcell.Screen) {
 func agDistinctDatabases(dbs []agDatabaseMetrics) int {
 	seen := map[string]bool{}
 	for _, m := range dbs {
-		seen[strings.ToLower(m.DB.DatabaseName)] = true
+		seen[m.DB.DatabaseName] = true
 	}
 	return len(seen)
 }

@@ -180,6 +180,37 @@ func TestWriteAtomicFailureKeepsTheOriginalAndLeavesNoTempFile(t *testing.T) {
 	assertOnlyFile(t, dir, "config.json")
 }
 
+// A rename needs only directory permission, so without the writability probe a
+// save would replace a file the user made read-only, which os.WriteFile refuses.
+func TestWriteAtomicRefusesAReadOnlyFile(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("mode bits do not set the read-only attribute the same way on Windows")
+	}
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores file write permission")
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "query.sql")
+	if err := os.WriteFile(path, []byte("original"), 0o444); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := WriteAtomic(path, []byte("replacement"), 0o644); err == nil {
+		t.Fatal("WriteAtomic over a read-only file succeeded, want an error")
+	} else if !errors.Is(err, fs.ErrPermission) {
+		t.Fatalf("WriteAtomic error = %v, want a permission error", err)
+	}
+
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if string(got) != "original" {
+		t.Errorf("contents = %q after a refused write, want the original untouched", got)
+	}
+	assertOnlyFile(t, dir, "query.sql")
+}
+
 // The temp file must be a sibling of path: os.Rename refuses cross-filesystem
 // renames. Observed via a directory that starts empty.
 func TestWriteAtomicWritesItsTempFileBesidePath(t *testing.T) {
@@ -602,4 +633,64 @@ func TestKeepCorruptReportsACopyItCouldNotMake(t *testing.T) {
 	if _, err := KeepCorrupt(path, []byte("{x"), time.Now()); err == nil {
 		t.Error("KeepCorrupt into a folder that doesn't exist reported success")
 	}
+}
+
+func TestStreamAbortLeavesTheOldContentsAndNoTempFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "results.csv")
+	if err := os.WriteFile(path, []byte("original"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	st, err := CreateStream(path, 0o644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.Write([]byte("partial")); err != nil {
+		t.Fatal(err)
+	}
+	st.Abort()
+	if got, _ := os.ReadFile(path); string(got) != "original" {
+		t.Errorf("contents = %q after Abort, want the original", got)
+	}
+	assertOnlyFile(t, dir, "results.csv")
+}
+
+func TestStreamCommitReplacesTheFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "results.csv")
+	if err := os.WriteFile(path, []byte("original"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	st, err := CreateStream(path, 0o644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	st.Write([]byte("new "))
+	st.Write([]byte("rows"))
+	if err := st.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	st.Abort() // after Commit: a no-op
+	if got, _ := os.ReadFile(path); string(got) != "new rows" {
+		t.Errorf("contents = %q after Commit, want the new rows", got)
+	}
+	assertOnlyFile(t, dir, "results.csv")
+}
+
+func TestCreateStreamRefusesAReadOnlyFile(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("mode bits do not set the read-only attribute the same way on Windows")
+	}
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores file write permission")
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "results.csv")
+	if err := os.WriteFile(path, []byte("original"), 0o444); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := CreateStream(path, 0o644); !errors.Is(err, fs.ErrPermission) {
+		t.Fatalf("CreateStream error = %v, want a permission error", err)
+	}
+	assertOnlyFile(t, dir, "results.csv")
 }

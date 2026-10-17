@@ -399,3 +399,22 @@ func EvRune(ev interface{ Str() string }) rune {
 func EvText(ev interface{ Str() string }) []rune {
 	return []rune(ev.Str())
 }
+
+// SafeFileName makes s usable as one path component on every OS: each of
+// `\ / : * ? " < > |` and every control character becomes "_", trailing dots
+// and spaces (which Windows drops) are trimmed, and an empty, "." or ".."
+// result is "_". The Windows rules apply everywhere so a name minted on Linux
+// still opens on Windows.
+func SafeFileName(s string) string {
+	s = strings.Map(func(r rune) rune {
+		if r < 0x20 || r == 0x7f || strings.ContainsRune(`\/:*?"<>|`, r) {
+			return '_'
+		}
+		return r
+	}, s)
+	s = strings.TrimRight(s, ". ")
+	if s == "" {
+		return "_"
+	}
+	return s
+}

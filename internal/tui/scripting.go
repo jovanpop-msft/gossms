@@ -10,6 +10,7 @@ import (
 	"github.com/radix29/gossms/internal/fileutil"
 	"github.com/radix29/gossms/internal/tui/gate"
 	"github.com/radix29/gossms/internal/tuikit/controls"
+	"github.com/radix29/gossms/internal/tuikit/core"
 )
 
 // scripting.go is Object Explorer's "Script <Noun> as ▸" cascade: one table of
@@ -642,9 +643,9 @@ func (a *App) saveScriptAs(n nodeData, text string) {
 func scriptFileName(n nodeData) string {
 	switch {
 	case n.Schema != "":
-		return n.Schema + "." + n.Name + ".sql"
+		return core.SafeFileName(n.Schema) + "." + core.SafeFileName(n.Name) + ".sql"
 	case n.Name == "":
 		return scriptables[n.Type].noun + ".sql"
 	}
-	return n.Name + ".sql"
+	return core.SafeFileName(n.Name) + ".sql"
 }

@@ -10,6 +10,7 @@ import (
 	"github.com/radix29/gossms/internal/fileutil"
 	"github.com/radix29/gossms/internal/showplan"
 	"github.com/radix29/gossms/internal/tuikit/controls"
+	"github.com/radix29/gossms/internal/tuikit/core"
 	"github.com/radix29/gossms/internal/tuikit/theme"
 )
 
@@ -168,7 +169,7 @@ func (a *App) saveExecutionPlanAs() {
 			a.setStatus("No execution plan to save")
 			return
 		}
-		a.fileDialog.ShowSave("Save Execution Plan", p.Title()+sqlPlanExt, func(path string) {
+		a.fileDialog.ShowSave("Save Execution Plan", core.SafeFileName(p.Title())+sqlPlanExt, func(path string) {
 			a.writePlanFile(path, plan.XML)
 		})
 	default:

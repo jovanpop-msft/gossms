@@ -55,6 +55,8 @@ func TestInstanceKeyNormalizesSpellings(t *testing.T) {
 		{"UBUSQL2", "ubusql2", "ubusql2,1433", "  ubusql2  ", "UbuSQL2:1433"},
 		{"HOST\\INST", "host\\inst", "HOST\\inst,1433", "host\\inst,1500"},
 		{"win10cli,55253", "WIN10CLI:55253", " win10cli,55253 "},
+		{"h", "H\\MSSQLSERVER", "h\\mssqlserver"},
+		{"h,1500", "H\\MSSQLSERVER,1500"},
 	}
 	for _, g := range groups {
 		want := InstanceKey(g[0])
@@ -74,6 +76,7 @@ func TestInstanceKeyNormalizesSpellings(t *testing.T) {
 		{"host", "host\\inst"},
 		{"host", "host,55253"},
 		{"host,1500", "host,55253"},
+		{"host", "host\\SQL1"},
 	} {
 		if InstanceKey(pair[0]) == InstanceKey(pair[1]) {
 			t.Errorf("InstanceKey collapses %q and %q onto %q", pair[0], pair[1], InstanceKey(pair[0]))

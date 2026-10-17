@@ -24,40 +24,95 @@ import (
 //
 // Both the file and the directory are synced: without syncing the directory a
 // crash can bring the old contents back.
+//
+// An existing file that os.WriteFile could not open for writing (read-only mode
+// or attribute, ACL) is refused: a rename needs only the directory's write
+// permission, so it would otherwise replace the file the user protected.
 func WriteAtomic(path string, data []byte, perm os.FileMode) error {
-	path = resolveSymlink(path)
-	f, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".tmp")
+	st, err := CreateStream(path, perm)
 	if err != nil {
 		return err
 	}
-	tmp := f.Name()
-	defer os.Remove(tmp) // no-op once the rename below has succeeded
+	if _, err := st.Write(data); err != nil {
+		st.Abort()
+		return err
+	}
+	return st.Commit()
+}
 
+// Stream is WriteAtomic for output produced piecemeal: it writes to a temp file
+// beside the target and replaces the target only at Commit, so a run that fails
+// or is abandoned (Abort) leaves the old contents untouched. Not safe for
+// concurrent use.
+type Stream struct {
+	f    *os.File
+	path string // the resolved target
+	done bool
+}
+
+// CreateStream opens a Stream for path, applying WriteAtomic's checks (symlink
+// resolution, the read-only refusal, the mode rule) up front so a destination
+// that can't be replaced fails before the caller starts producing output.
+func CreateStream(path string, perm os.FileMode) (*Stream, error) {
+	path = resolveSymlink(path)
+	if err := checkWritable(path); err != nil {
+		return nil, err
+	}
+	f, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".tmp")
+	if err != nil {
+		return nil, err
+	}
 	// CreateTemp makes the file 0600; set the final mode explicitly rather than
 	// rely on that.
 	if err := f.Chmod(modeFor(path, perm)); err != nil {
 		f.Close()
-		return err
+		os.Remove(f.Name())
+		return nil, err
 	}
-	if _, err := f.Write(data); err != nil {
-		f.Close()
-		return err
+	return &Stream{f: f, path: path}, nil
+}
+
+// Write appends p to the temp file.
+func (s *Stream) Write(p []byte) (int, error) { return s.f.Write(p) }
+
+// Commit syncs and closes the temp file, renames it over the target and syncs
+// the directory. On any error the temp file is removed and the target is left as
+// it was. Commit after Commit or Abort is a no-op returning nil.
+func (s *Stream) Commit() error {
+	if s.done {
+		return nil
 	}
+	s.done = true
+	tmp := s.f.Name()
 	// Sync before the rename so a crash can't leave the new name pointing at a
 	// partial file.
-	if err := f.Sync(); err != nil {
-		f.Close()
+	if err := s.f.Sync(); err != nil {
+		s.f.Close()
+		os.Remove(tmp)
 		return err
 	}
-	if err := f.Close(); err != nil {
+	if err := s.f.Close(); err != nil {
+		os.Remove(tmp)
 		return err
 	}
-	if err := os.Rename(tmp, path); err != nil {
+	if err := os.Rename(tmp, s.path); err != nil {
+		os.Remove(tmp)
 		return err
 	}
-	syncDir(filepath.Dir(path))
-	RemoveStaleTemps(path)
+	syncDir(filepath.Dir(s.path))
+	RemoveStaleTemps(s.path)
 	return nil
+}
+
+// Abort discards the temp file, leaving the target as it was. Abort after
+// Commit or Abort is a no-op.
+func (s *Stream) Abort() {
+	if s.done {
+		return
+	}
+	s.done = true
+	s.f.Close()
+	os.Remove(s.f.Name())
 }
 
 // CreateAtomic is WriteAtomic for a file that must never be replaced once it
@@ -245,6 +300,21 @@ func resolveSymlink(path string) string {
 		path = target
 	}
 	return path
+}
+
+// checkWritable opens an existing path for writing, without O_TRUNC, and closes
+// it at once, so the OS's own rules (root, ACLs, the Windows read-only attribute)
+// decide, as they would for os.WriteFile. A missing path is fine: WriteAtomic
+// creates it. Any other open failure is returned as is.
+func checkWritable(path string) error {
+	f, err := os.OpenFile(path, os.O_WRONLY, 0)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	return f.Close()
 }
 
 // modeFor returns the mode path already has, capped at perm; a missing or

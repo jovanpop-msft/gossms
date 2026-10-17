@@ -12,6 +12,7 @@ import (
 	gosmo "github.com/radix29/gosmo"
 	"github.com/radix29/gossms/internal/fileutil"
 	"github.com/radix29/gossms/internal/tuikit/controls"
+	"github.com/radix29/gossms/internal/tuikit/core"
 	"github.com/radix29/gossms/internal/xevent"
 )
 
@@ -59,7 +60,7 @@ func (v *XEventViewer) exportBaseName() string {
 	if v.files != "" {
 		name = "merged"
 	}
-	return strings.NewReplacer(" ", "_", "/", "_", "\\", "_", ":", "_", "*", "", "?", "").Replace(name)
+	return core.SafeFileName(strings.NewReplacer(" ", "_", "*", "", "?", "").Replace(name))
 }
 
 // exportToFile asks where, then writes the shown events there in format f.

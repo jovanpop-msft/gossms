@@ -27,3 +27,19 @@ func TestBackupDatabaseNamesDropsWhatBackupRefuses(t *testing.T) {
 		t.Errorf("backupDatabases = %v, want %v", got, want)
 	}
 }
+
+// On a case-sensitive server TEMPDB is a legal user database distinct from
+// tempdb (ID 2); only the real tempdb is excluded.
+func TestBackupDatabasesKeepsCaseVariantOfTempdb(t *testing.T) {
+	sc, _ := newFakeConn(t, databasesListResp(
+		databaseRow(2, "tempdb", 0),
+		databaseRow(9, "TEMPDB", 0),
+	))
+	dbs, err := backupDatabases(context.Background(), sc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := namesOf(dbs), []string{"TEMPDB"}; !slices.Equal(got, want) {
+		t.Errorf("backupDatabases = %v, want %v", got, want)
+	}
+}

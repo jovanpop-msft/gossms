@@ -1212,3 +1212,38 @@ func TestScriptToRunStartsOnTheSelectionsLine(t *testing.T) {
 		t.Errorf("backward selection: scriptToRun = %q, %d; want %q, 2", text, first, "select 3\n")
 	}
 }
+
+// Results To File streams to a temp file and replaces the destination only on
+// Close: a failed or stopped run (Abort) must leave an existing file untouched.
+func TestCSVSinkAbortKeepsAnExistingFileAndCloseReplacesIt(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "results.csv")
+	if err := os.WriteFile(path, []byte("old\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	write := func() *csvSink {
+		sink, err := newCSVSink(path)
+		if err != nil {
+			t.Fatalf("newCSVSink: %v", err)
+		}
+		sink.BeginSet([]string{"a"})
+		sink.Row([]string{"1"}, nil)
+		sink.EndSet(1)
+		return sink
+	}
+
+	write().Abort()
+	if got, _ := os.ReadFile(path); string(got) != "old\n" {
+		t.Fatalf("after Abort file = %q, want it unchanged", got)
+	}
+
+	if err := write().Close(); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := os.ReadFile(path); string(got) != "a\n1\n" {
+		t.Errorf("after Close file = %q, want the new rows", got)
+	}
+	if ents, _ := os.ReadDir(dir); len(ents) != 1 {
+		t.Errorf("directory holds %d entries, want only results.csv", len(ents))
+	}
+}

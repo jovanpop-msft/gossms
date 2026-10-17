@@ -2,7 +2,6 @@ package tui
 
 import (
 	"context"
-	"strings"
 
 	gosmo "github.com/radix29/gosmo"
 	"github.com/radix29/gossms/internal/db"
@@ -32,6 +31,11 @@ func databaseNames(ctx context.Context, sc *db.ServerConn) ([]string, error) {
 	return namesOf(dbs), nil
 }
 
+// tempdbID is the database_id SQL Server permanently gives tempdb. Matching it
+// rather than the name keeps a user database called TEMPDB on a case-sensitive
+// server.
+const tempdbID = 2
+
 // backupDatabases is the second case: the databases BACKUP DATABASE will
 // accept right now. It returns the databases, not their names, because the
 // Backup dialog also needs each one's recovery model (backupTypeBlocks).
@@ -49,7 +53,7 @@ func backupDatabases(ctx context.Context, sc *db.ServerConn) ([]*gosmo.Database,
 	}
 	out := make([]*gosmo.Database, 0, len(dbs))
 	for _, d := range dbs {
-		if strings.EqualFold(d.Name, "tempdb") || d.State != "ONLINE" || d.IsSnapshot() {
+		if d.ID == tempdbID || d.State != "ONLINE" || d.IsSnapshot() {
 			continue
 		}
 		out = append(out, d)

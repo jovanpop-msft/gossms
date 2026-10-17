@@ -328,7 +328,7 @@ func agComputeDatabaseMetrics(dbs []*gosmo.AvailabilityDatabase) []agDatabaseMet
 	primaryCommit := make(map[string]time.Time, len(dbs))
 	for _, d := range dbs {
 		if d.IsPrimaryReplica && !d.LastCommitTime.IsZero() {
-			primaryCommit[strings.ToLower(d.DatabaseName)] = d.LastCommitTime
+			primaryCommit[d.DatabaseName] = d.LastCommitTime
 		}
 	}
 
@@ -339,7 +339,7 @@ func agComputeDatabaseMetrics(dbs []*gosmo.AvailabilityDatabase) []agDatabaseMet
 			out = append(out, m)
 			continue
 		}
-		if pc, ok := primaryCommit[strings.ToLower(d.DatabaseName)]; ok && !d.LastCommitTime.IsZero() {
+		if pc, ok := primaryCommit[d.DatabaseName]; ok && !d.LastCommitTime.IsZero() {
 			// A secondary can't lead its primary; a negative difference is
 			// clock skew, not "-3s of data loss".
 			loss := max(pc.Sub(d.LastCommitTime), 0)
