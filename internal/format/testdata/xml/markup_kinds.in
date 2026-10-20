@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE root [
+  <!ENTITY co "Contoso <Ltd>">
+  <!-- a > inside a DTD comment -->
+]>
+<?xml-stylesheet type="text/xsl" href="s.xsl"?>
+<root><!-- comment with <tags> & stuff --><?target data?><code><![CDATA[if (a < b && c > d) { x = "]]]]><![CDATA[>"; }]]></code><empty></empty><space> </space><amp>&amp;&lt;&#x41;&#65;</amp></root>

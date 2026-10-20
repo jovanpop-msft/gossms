@@ -1,0 +1,39 @@
+IF @x = 1
+    PRINT 'one'
+ELSE IF @x = 2
+    PRINT 'two'
+ELSE
+    PRINT 'many'
+IF EXISTS (
+    SELECT 1
+    FROM sys.objects
+    WHERE name = 'x'
+)
+BEGIN
+    DROP TABLE x;
+END
+WHILE @i < 3
+BEGIN
+    SET @i = @i + 1;
+    IF @i = 2
+    BEGIN
+        CONTINUE;
+    END
+END
+BEGIN TRY
+    SELECT 1 / 0
+END TRY
+BEGIN CATCH
+    SELECT ERROR_MESSAGE() AS msg;
+    THROW;
+END CATCH
+BEGIN TRANSACTION;
+COMMIT TRANSACTION;
+IF @a = 1
+    IF @b = 1
+        PRINT 'ab'
+    ELSE
+        PRINT 'a only'
+retry:
+IF @n > 0
+    GOTO retry

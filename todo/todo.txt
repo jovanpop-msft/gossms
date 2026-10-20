@@ -1,12 +1,10 @@
-
-script database security
-
-format/pretty source code. later add multuple formatting styles
+grid. select with shift+click all the rows between current selection and where shift+click was clicked
 
 add command line parameters for agentic use.
 all functionality of the application should be accessible as command line parameters with formatted text output
 gossms get propery maxdop -conn win10cli
 
+new sql formatting designs
     
 new tab: waits
 at the top a section that show the grpahic from history: sql server aẃaits and from the sample the graphic the same one each occupy 50% the width

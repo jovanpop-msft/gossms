@@ -1,0 +1,91 @@
+/* file header
+   spanning lines */
+
+SELECT
+    a
+  , -- first
+    b /* inline */
+  , c
+FROM t -- trailing
+-- own line before where
+WHERE x = 1
+
+MERGE INTO dbo.tgt AS t
+USING dbo.src AS s ON s.id = t.id
+    AND s.k = t.k
+WHEN MATCHED AND s.v <> t.v THEN
+    UPDATE SET
+        v = s.v
+      , w = s.w
+WHEN NOT MATCHED BY TARGET THEN
+    INSERT (id, v)
+    VALUES (s.id, s.v)
+WHEN NOT MATCHED BY SOURCE THEN
+    DELETE
+OUTPUT
+    $action
+  , inserted.id;
+CREATE TABLE dbo.x (
+    id INT NOT NULL IDENTITY(1, 1)
+  , name NVARCHAR(50) NULL
+  , CONSTRAINT pk_x PRIMARY KEY CLUSTERED (id ASC)
+) ON [primary]
+DECLARE @t TABLE (a INT)
+BEGIN TRY
+    BEGIN TRAN
+    EXEC dbo.p 1
+    COMMIT
+END TRY
+BEGIN CATCH
+    IF @@trancount > 0
+        ROLLBACK;
+    THROW;
+END CATCH
+WHILE @i < 10
+BEGIN
+    SET @i += 1
+    IF @i = 5
+        CONTINUE
+    IF @i = 8
+        BREAK
+END
+lbl:
+GOTO lbl
+SELECT
+    'multi
+  line string'
+  , [weird ]] name]
+  , "q id"
+FROM (
+    SELECT 1 AS x
+) AS d
+WHERE NOT EXISTS (
+    SELECT *
+    FROM y
+    WHERE y.a = d.x
+)
+SELECT x
+FROM t
+ORDER BY x
+OFFSET 10 ROWS FETCH NEXT 5 ROWS ONLY
+SELECT TOP (10) WITH TIES a
+FROM t
+ORDER BY a
+SELECT a
+FROM t
+FOR XML PATH(''), TYPE
+SELECT
+    CASE
+        WHEN a = 1 THEN (
+            SELECT MAX(b)
+            FROM u
+        )
+        ELSE 0
+    END
+FROM t
+SELECT SUM(CASE WHEN a = 1 THEN 1 ELSE 0 END) AS s
+FROM t
+SET TRANSACTION ISOLATION LEVEL READ COMMITTED
+ALTER TABLE dbo.x ADD y int NULL,
+    z int NULL
+CREATE INDEX ix ON dbo.x (name) include (id) WHERE name IS NOT NULL

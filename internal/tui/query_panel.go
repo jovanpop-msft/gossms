@@ -7,6 +7,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/radix29/gossms/internal/db"
+	"github.com/radix29/gossms/internal/format"
 	"github.com/radix29/gossms/internal/query"
 	"github.com/radix29/gossms/internal/tui/planview"
 	"github.com/radix29/gossms/internal/tui/sqlparse"
@@ -81,6 +82,11 @@ type QueryPanel struct {
 	filePath    string      // last path used by Save; "" if never saved
 	savedText   string      // editor text as of the last save/load; compared by Dirty; set only by markSaved
 	resultsMode ResultsMode // Grid/Text/File — set via Query menu
+
+	// lang is what the editor's text is written in: it picks the highlighter and
+	// Edit > Format Document's formatter. Set only through setLanguage, so the
+	// two never disagree; the zero value, SQL, matches NewQueryPanel's editor.
+	lang format.Language
 
 	// dirty caches Dirty's answer for document version dirtyVer; dirtyValid
 	// false forces a recompute (markSaved clears it).
@@ -251,6 +257,23 @@ func NewQueryPanel(app *App, title string) *QueryPanel {
 	p.editor.OnRightClick = func(x, y int) { app.showEditorContextMenu(x, y) }
 	p.editor.SetCompletionProvider(p.newCompletionProvider())
 	return p
+}
+
+// setLanguage makes l the panel's language and gives the editor l's highlighter
+// (none for plain text). A fresh highlighter each time: the built-ins carry
+// per-Editor comment state and must not be shared (controls.SetHighlighter).
+func (p *QueryPanel) setLanguage(l format.Language) {
+	p.lang = l
+	var h controls.Highlighter
+	switch l {
+	case format.LangSQL:
+		h = controls.SQLHighlighter(theme.Active())
+	case format.LangXML:
+		h = controls.XMLHighlighter(theme.Active())
+	case format.LangJSON:
+		h = controls.JSONHighlighter(theme.Active())
+	}
+	p.editor.SetHighlighter(h)
 }
 
 // Title returns the panel's tab title: the file's base name once associated with

@@ -1,0 +1,13 @@
+<event name="sql_batch_completed" package="sqlserver" timestamp="2026-10-20T10:15:42.123Z">
+    <data name="cpu_time">
+        <value>1000</value>
+    </data>
+    <data name="batch_text">
+        <value>SELECT  *
+FROM    sys.objects
+WHERE   type = N'U';</value>
+    </data>
+    <action name="client_app_name" package="sqlserver">
+        <value><![CDATA[goSSMS]]></value>
+    </action>
+</event>

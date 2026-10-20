@@ -1,6 +1,7 @@
 package controls
 
 import (
+	"slices"
 	"strings"
 	"unicode"
 
@@ -448,6 +449,79 @@ func (e *Editor) transformSelection(fn func(rune) rune) {
 // the selection, in place. No-op without a selection.
 func (e *Editor) UppercaseSelection() { e.transformSelection(unicode.ToUpper) }
 func (e *Editor) LowercaseSelection() { e.transformSelection(unicode.ToLower) }
+
+// ReplaceText swaps the whole document for text as one undo step, which SetText
+// can't be used for: it resets the history, so Ctrl+Z after Format Document would
+// have nothing to restore. The cursor keeps its row and column, clamped into the
+// new text; any selection collapses. Returns false, with no undo step, on a
+// read-only editor or when text equals the current content.
+func (e *Editor) ReplaceText(text string) bool {
+	if e.readOnly {
+		return false
+	}
+	if !e.replaceLines(0, e.doc.Len(), e.splitText(text)) {
+		return false
+	}
+	e.selecting, e.selBlock = false, false
+	e.clampCursor()
+	e.ensureCursorVisible()
+	return true
+}
+
+// SelectedLinesText returns the whole lines a linear selection touches (the
+// affectedLineRange rows, joined with "\n"): what a line-oriented rewrite such as
+// Format Document operates on. ok is false with no selection or a block (column)
+// selection, which has no line span to rewrite.
+func (e *Editor) SelectedLinesText() (text string, ok bool) {
+	if !e.HasSelection() || e.selBlock {
+		return "", false
+	}
+	sr, er := e.affectedLineRange()
+	var sb strings.Builder
+	for r := sr; r <= er; r++ {
+		if r > sr {
+			sb.WriteByte('\n')
+		}
+		sb.WriteString(string(e.doc.Line(r)))
+	}
+	return sb.String(), true
+}
+
+// ReplaceSelectedLines replaces the lines SelectedLinesText returns with text as
+// one undo step, then selects the replacement's whole lines so the result is what
+// a repeat of the command would act on. Returns false, changing nothing, where
+// SelectedLinesText would report !ok, on a read-only editor, or when text equals
+// those lines.
+func (e *Editor) ReplaceSelectedLines(text string) bool {
+	if e.readOnly || !e.HasSelection() || e.selBlock {
+		return false
+	}
+	sr, er := e.affectedLineRange()
+	lines := e.splitText(text)
+	if !e.replaceLines(sr, er-sr+1, lines) {
+		return false
+	}
+	e.selecting, e.selBlock = true, false
+	e.selAnchorRow, e.selAnchorCol = sr, 0
+	e.cursorRow = sr + len(lines) - 1
+	e.cursorCol = len(e.doc.Line(e.cursorRow))
+	e.ensureCursorVisible()
+	return true
+}
+
+// replaceLines splices lines over the n rows at row as one undo step, through
+// replaceRange so caches before row survive. Returns false, pushing no step, when
+// lines equal what is already there: an unchanged rewrite must not mark the
+// document modified or leave a no-op entry on the undo stack.
+func (e *Editor) replaceLines(row, n int, lines [][]rune) bool {
+	if slices.EqualFunc(e.doc.all()[row:row+n], lines, slices.Equal) {
+		return false
+	}
+	e.closeCompletion()
+	e.pushUndoSpan(row, row+n)
+	e.doc.replaceRange(row, n, lines)
+	return true
+}
 
 // deleteWordLeft removes the word to the left of the cursor (Ctrl+Backspace), or
 // merges with the previous line at column 0. The caller (HandleKey) pushes undo.

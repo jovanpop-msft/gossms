@@ -161,6 +161,7 @@ gossms/
 │   │                        #   arena.go: chunk-packed cell storage for a retained result set; coltype.go: SSMS-style declared type names
 │   ├── showplan/            # parses ShowPlanXML (estimated/actual) into a navigable operator tree; compare.go pairs two plans of one query (Compare Showplan); live.go merges per-thread query-profile rows into Live Query Statistics counters and progress. No TUI/DB deps
 │   ├── xevent/              # Extended Events viewer's event store: bounded ring, column registry, ring_buffer dedupe, the client-side filter expression, grouping and aggregation. No TUI/DB deps
+│   ├── format/              # Edit > Format Document's engine: Language (what a query panel's text is written in; picks its highlighter, and by extension only, never content), the per-language Style registry, the SQL Standard style (sql*.go: a layout pass over sqltext's tokens with a block/paren frame stack, not a parser; statements it has no rules for keep their line breaks), the JSON formatter (json.Indent, never Marshal), the XML raw-text re-indenter (tags, CDATA, comments emitted verbatim; never encoding/xml's Encoder) and the token-equivalence guard every result passes. Pure text, stdlib + tuikit/sqltext only
 │   ├── fileutil/            # WriteAtomic: temp file + Sync + rename + syncDir, behind config.json, gossms.key, saved .sql scripts and the log export; WithLock: the lock file around config.json's and tracked_queries.json's read-merge-write
 │   │                        #   keeps an existing file's narrower mode (perm is a ceiling) and writes through a symlink, dangling or not
 │   ├── version/             # gossms's own version metadata (mirrors gosmo/version); overridable via -ldflags -X
@@ -173,7 +174,7 @@ gossms/
 │   │   ├── dialogs/                # ModalDialog base (focus trap), Properties/Alert/Confirm/Progress/FileDialog (+ FileSystem: local or remote), FieldGesture (the text-field drag latch)
 │   │   ├── charts/                 # terminal charts from generic series data: off-screen canvas, scales, block glyphs, axis/legend, history/stacked/bar/KPI types
 │   │   ├── controls/                # MenuBar, ContextMenu, Toolbar, ToolRow (a panel's text toolbar: layout, hit-test, "More ▾"), TabStrip, TreeView, DataGrid, ListBox, Editor (Document, LineBuffer; +SQL/XML/JSON highlighters)
-│   │   ├── sqltext/                 # The one T-SQL lexer (Next) and the rules built on it, shared by the editor, internal/query and sqlparse: the "GO" separator line rule, SplitBatches, StatementAt (Ctrl+Enter's statement select), the statement-verb sets; standard library only
+│   │   ├── sqltext/                 # The one T-SQL lexer (Next) and the rules built on it, shared by the editor, internal/query and sqlparse: the "GO" separator line rule, SplitBatches, StatementAt (Ctrl+Enter's statement select) and its leader rule for a caller's own tokens (StatementCutter, Format Document's SQL layout), the statement-verb sets; standard library only
 │   │   └── propsheet/               # PropertySheet — multi-page editable properties dialog framework (rows incl. EditorRow, the embedded multi-line controls.Editor)
 │   │
 │   └── tui/                  # goSSMS application layer (built on tuikit)
@@ -224,6 +225,7 @@ gossms/
 │       ├── explorer_object_rights.go # what permits Rename/Move/Delete per NodeType: the securable, principal, database- and server-scoped right tables
 │       ├── explorer_object_actions.go # the flows themselves: confirmation (incl. the cascade checkbox), script-instead-of-run, the prompt, and the parent-folder refresh
 │       ├── scripting.go          # Object Explorer's "Script <Noun> as ▸" cascade: which verbs each NodeType offers, how each is generated, and the three destinations
+│       ├── database_security_script.go # database node's "Script Database Security": the catalog query that generates a database's roles, users, schemas, memberships and permissions as T-SQL, opened unexecuted
 │       ├── system_principals.go  # which of the principals SQL Server creates for itself count as built-in (no Delete, no Rename)
 │       ├── db_scan.go            # eachDatabase / onlineDatabases: the shared per-database fetch a page runs over every database it can query
 │       ├── tasks.go              # background task registry: Task (progress/cancel), App start/postProgress/postTaskDone
@@ -241,6 +243,7 @@ gossms/
 │       │
 │       │  ── Query panel & IntelliSense ──
 │       ├── query_panel.go        # QueryPanel state/layout, implements layout.Panel
+│       ├── format_document.go    # Edit > Format Document (Alt+Shift+F): the active query panel's text, or its selection's whole lines, through internal/format in the panel's language, as one undo step; failures leave the text and say why
 │       ├── query_panel_draw.go   # QueryPanel rendering: editor/results split, tab strip, results status line
 │       ├── query_panel_input.go  # QueryPanel HandleKey/HandleMouse, incl. the results-side drag zones
 │       ├── query_panel_exec.go   # Execute/Execute Selection/Cancel, plan-capture wiring

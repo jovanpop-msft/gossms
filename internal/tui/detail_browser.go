@@ -8,6 +8,7 @@ import (
 	"github.com/gdamore/tcell/v3"
 	"github.com/gdamore/tcell/v3/color"
 	dbconn "github.com/radix29/gossms/internal/db"
+	"github.com/radix29/gossms/internal/format"
 	"github.com/radix29/gossms/internal/tuikit/controls"
 	"github.com/radix29/gossms/internal/tuikit/core"
 	"github.com/radix29/gossms/internal/tuikit/theme"
@@ -536,7 +537,7 @@ func (db *DetailBrowser) showQueryStoreValue(a *App, col int, column, value stri
 				// left.
 				text = value
 			}
-			a.openValuePanel(column, ".sql", controls.SQLHighlighter(theme.Active()), text)
+			a.openValuePanel(column, format.LangSQL, text)
 		})
 	})
 	return true

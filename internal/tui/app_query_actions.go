@@ -2,8 +2,10 @@ package tui
 
 import (
 	"fmt"
+	"path/filepath"
 
 	"github.com/radix29/gossms/internal/fileutil"
+	"github.com/radix29/gossms/internal/format"
 	"github.com/radix29/gossms/internal/showplan"
 )
 
@@ -158,7 +160,9 @@ func (a *App) saveQueryPanel(qp *QueryPanel, saveAs bool, then func()) {
 	}
 	initial := qp.filePath
 	if initial == "" {
-		initial = "query.sql"
+		// The panel's own extension, not always .sql: a JSON cell value
+		// offered as query.sql would turn SQL on the save (writeQueryFile).
+		initial = "query" + qp.lang.Ext()
 	}
 	title := "Save Query"
 	if saveAs {
@@ -185,6 +189,12 @@ func (a *App) writeQueryFile(qp *QueryPanel, path string) bool {
 		return false
 	}
 	qp.filePath = path
+	// Saved under a known extension, the panel becomes that kind of file — a
+	// script saved as plan.xml highlights (and formats) as XML from now on. Any
+	// other extension leaves the language alone.
+	if l, ok := format.LanguageForExt(filepath.Ext(path)); ok && l != qp.lang {
+		qp.setLanguage(l)
+	}
 	qp.markSaved()
 	a.setStatus("Saved to " + path)
 	return true

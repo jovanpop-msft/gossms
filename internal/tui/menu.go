@@ -84,6 +84,9 @@ func (a *App) buildMenus() []controls.Menu {
 			{Label: "Lowercase Selection", Shortcut: "Ctrl+U", Action: func() { a.editorAction(func(e *controls.Editor) { e.LowercaseSelection() }) },
 				Enabled: func() bool { return a.activeQueryPanel() != nil }},
 			{Divider: true},
+			{Label: "Format Document", Shortcut: "Alt+Shift+F", Action: func() { a.formatActiveDocument() },
+				Enabled: a.canFormatActiveDocument},
+			{Divider: true},
 			{Label: wordWrapMenuLabel(a.wordWrap), Shortcut: "Alt+Z", Action: func() { a.toggleWordWrap() }},
 		}},
 		{Label: "View", Items: []controls.MenuItem{

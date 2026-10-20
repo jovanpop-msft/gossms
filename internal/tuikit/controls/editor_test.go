@@ -681,6 +681,12 @@ func TestEditorUndoRestoresEveryEditPath(t *testing.T) {
 			e.SetSearch(SearchOptions{Query: "SELECT", Replace: "select"})
 			e.ReplaceAll()
 		}},
+		{"replace text", func(e *Editor) { e.cursorRow, e.cursorCol = 3, 4; e.ReplaceText("SELECT 1\n\nGO") }},
+		{"replace selected lines", func(e *Editor) {
+			e.selecting, e.selAnchorRow, e.selAnchorCol = true, 1, 6
+			e.cursorRow, e.cursorCol = 3, 2
+			e.ReplaceSelectedLines("a\nb\nc\nd\ne")
+		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			e := newTestEditor(doc)

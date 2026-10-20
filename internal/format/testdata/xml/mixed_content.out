@@ -1,0 +1,11 @@
+<doc>
+    <p>Some <b>bold</b> and <i>italic</i> text.</p>
+    <list>
+        <item>one</item>
+        <item>two</item>
+    </list>
+    <note>
+  keeps   its
+  inner lines
+</note>
+</doc>

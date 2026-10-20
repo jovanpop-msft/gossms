@@ -1,0 +1,1 @@
+<sp:ShowPlanXML xmlns:sp="http://schemas.microsoft.com/sqlserver/2004/07/showplan" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><sp:Batch><sp:Statements xsi:nil="false"><sp:Stmt   A = "1"   B='two "quoted"' /></sp:Statements></sp:Batch></sp:ShowPlanXML>

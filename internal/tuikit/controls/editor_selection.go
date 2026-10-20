@@ -18,6 +18,10 @@ func (e *Editor) HasSelection() bool {
 	return e.selAnchorRow != e.cursorRow || e.selAnchorCol != e.cursorCol
 }
 
+// HasBlockSelection reports whether the active selection is a block (column)
+// selection — one a line-oriented rewrite (ReplaceSelectedLines) refuses.
+func (e *Editor) HasBlockSelection() bool { return e.HasSelection() && e.selBlock }
+
 // SelectionTopRow returns the line SelectedText's first line comes from (a block
 // selection's top row too), or the cursor's line with no selection. A host
 // running the selection uses it to map a line of the text back to the document.

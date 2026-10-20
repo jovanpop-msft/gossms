@@ -1,0 +1,385 @@
+<?xml version="1.0" encoding="utf-16"?>
+<ShowPlanXML xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" Version="1.599" Build="17.0.4055.5" xmlns="http://schemas.microsoft.com/sqlserver/2004/07/showplan">
+    <BatchSequence>
+        <Batch>
+            <Statements>
+                <StmtSimple StatementCompId="1" StatementEstRows="9" StatementId="1" StatementOptmLevel="FULL" StatementOptmEarlyAbortReason="GoodEnoughPlanFound" CardinalityEstimationModelVersion="170" StatementSubTreeCost="0.0188341" StatementText="SELECT TOP (1000) [PatientID]&#xD;&#xA;      ,[PatientName]&#xD;&#xA;      ,[AppointmentID]&#xD;&#xA;      ,[ScheduledAt]&#xD;&#xA;      ,[DoctorName]&#xD;&#xA;      ,[SpecializationName]&#xD;&#xA;      ,[Diagnosis]&#xD;&#xA;      ,[Treatment]&#xD;&#xA;  FROM [HealthClinic].[dbo].[vw_PatientHistory]" StatementType="SELECT" QueryHash="0x7D985C0758DBF8DB" QueryPlanHash="0x4850AB1F20B31178" RetrievedFromCache="true" StatementSqlHandle="0x090033632D16D4A5AA93664C0197D0DF2D270000000000000000000000000000000000000000000000000000" DatabaseContextSettingsId="1" ParentObjectId="0" StatementParameterizationType="0" SecurityPolicyApplied="false">
+                    <StatementSetOptions ANSI_NULLS="true" ANSI_PADDING="true" ANSI_WARNINGS="true" ARITHABORT="true" CONCAT_NULL_YIELDS_NULL="true" NUMERIC_ROUNDABORT="false" QUOTED_IDENTIFIER="true" />
+                    <QueryPlan DegreeOfParallelism="1" CachedPlanSize="64" CompileTime="16" CompileCPU="16" CompileMemory="712">
+                        <MemoryGrantInfo SerialRequiredMemory="0" SerialDesiredMemory="0" GrantedMemory="0" MaxUsedMemory="0" />
+                        <OptimizerHardwareDependentProperties EstimatedAvailableMemoryGrant="160358" EstimatedPagesCached="20044" EstimatedAvailableDegreeOfParallelism="2" MaxCompileMemory="1428784" />
+                        <OptimizerStatsUsage>
+                            <StatisticsInfo Database="[HealthClinic]" Schema="[dbo]" Table="[Appointments]" Statistics="[IX_Appointments_PatientID]" ModificationCount="0" SamplingPercent="100" LastUpdate="2026-07-11T08:19:41.95" />
+                            <StatisticsInfo Database="[HealthClinic]" Schema="[dbo]" Table="[Doctors]" Statistics="[UQ_Doctors_LicenseNumber]" ModificationCount="400" SamplingPercent="100" LastUpdate="2026-07-02T16:58:48.46" />
+                            <StatisticsInfo Database="[HealthClinic]" Schema="[dbo]" Table="[Doctors]" Statistics="[IX_Doctors_SpecializationID]" ModificationCount="0" SamplingPercent="100" LastUpdate="2026-07-11T08:19:41.97" />
+                            <StatisticsInfo Database="[HealthClinic]" Schema="[dbo]" Table="[Doctors]" Statistics="[PK_Doctors]" ModificationCount="409" SamplingPercent="100" LastUpdate="2026-07-02T16:02:29.91" />
+                            <StatisticsInfo Database="[HealthClinic]" Schema="[dbo]" Table="[MedicalRecords]" Statistics="[_WA_Sys_00000002_59063A47]" ModificationCount="0" SamplingPercent="100" LastUpdate="2026-07-11T08:19:41.98" />
+                            <StatisticsInfo Database="[HealthClinic]" Schema="[dbo]" Table="[Patients]" Statistics="[PK_Patients]" ModificationCount="205" SamplingPercent="100" LastUpdate="2026-07-02T16:08:19.9" />
+                            <StatisticsInfo Database="[HealthClinic]" Schema="[dbo]" Table="[Appointments]" Statistics="[PK_Appointments]" ModificationCount="0" SamplingPercent="100" LastUpdate="2026-07-02T16:08:19.93" />
+                            <StatisticsInfo Database="[HealthClinic]" Schema="[dbo]" Table="[Appointments]" Statistics="[IX_Appointments_DoctorID]" ModificationCount="0" SamplingPercent="100" LastUpdate="2026-07-11T08:19:41.96" />
+                            <StatisticsInfo Database="[HealthClinic]" Schema="[dbo]" Table="[Appointments]" Statistics="[IX_Appointments_ScheduledAt]" ModificationCount="0" SamplingPercent="100" LastUpdate="2026-07-11T08:19:42" />
+                            <StatisticsInfo Database="[HealthClinic]" Schema="[dbo]" Table="[Specializations]" Statistics="[PK_Specializations]" ModificationCount="215" SamplingPercent="100" LastUpdate="2026-07-02T16:02:29.83" />
+                            <StatisticsInfo Database="[HealthClinic]" Schema="[dbo]" Table="[Doctors]" Statistics="[UQ_Doctors_Email]" ModificationCount="0" SamplingPercent="100" LastUpdate="2026-07-11T08:19:41.99" />
+                        </OptimizerStatsUsage>
+                        <QueryTimeStats CpuTime="0" ElapsedTime="0" />
+                        <RelOp AvgRowSize="5111" EstimateCPU="9E-07" EstimateIO="0" EstimateRebinds="0" EstimateRewinds="0" EstimatedExecutionMode="Row" EstimateRows="9" LogicalOp="Top" NodeId="0" Parallel="false" PhysicalOp="Top" EstimatedTotalSubtreeCost="0.0188341">
+                            <OutputList>
+                                <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[Patients]" Alias="[pt]" Column="PatientID" />
+                                <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[Appointments]" Alias="[a]" Column="AppointmentID" />
+                                <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[Appointments]" Alias="[a]" Column="ScheduledAt" />
+                                <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[Specializations]" Alias="[s]" Column="SpecializationName" />
+                                <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[MedicalRecords]" Alias="[mr]" Column="Diagnosis" />
+                                <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[MedicalRecords]" Alias="[mr]" Column="Treatment" />
+                                <ColumnReference Column="Expr1005" />
+                                <ColumnReference Column="Expr1006" />
+                            </OutputList>
+                            <RunTimeInformation>
+                                <RunTimeCountersPerThread Thread="0" ActualRows="9" Batches="0" ActualEndOfScans="1" ActualExecutions="1" ActualExecutionMode="Row" ActualElapsedms="0" ActualCPUms="0" />
+                            </RunTimeInformation>
+                            <Top RowCount="false" IsPercent="false" WithTies="false">
+                                <TopExpression>
+                                    <ScalarOperator ScalarString="(1000)">
+                                        <Const ConstValue="(1000)" />
+                                    </ScalarOperator>
+                                </TopExpression>
+                                <RelOp AvgRowSize="5111" EstimateCPU="0.0001045" EstimateIO="0" EstimateRebinds="0" EstimateRewinds="0" EstimatedExecutionMode="Row" EstimateRows="9" LogicalOp="Left Outer Join" NodeId="1" Parallel="false" PhysicalOp="Nested Loops" EstimatedTotalSubtreeCost="0.0188332">
+                                    <OutputList>
+                                        <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[Patients]" Alias="[pt]" Column="PatientID" />
+                                        <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[Appointments]" Alias="[a]" Column="AppointmentID" />
+                                        <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[Appointments]" Alias="[a]" Column="ScheduledAt" />
+                                        <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[Specializations]" Alias="[s]" Column="SpecializationName" />
+                                        <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[MedicalRecords]" Alias="[mr]" Column="Diagnosis" />
+                                        <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[MedicalRecords]" Alias="[mr]" Column="Treatment" />
+                                        <ColumnReference Column="Expr1005" />
+                                        <ColumnReference Column="Expr1006" />
+                                    </OutputList>
+                                    <RunTimeInformation>
+                                        <RunTimeCountersPerThread Thread="0" ActualRows="9" Batches="0" ActualEndOfScans="1" ActualExecutions="1" ActualExecutionMode="Row" ActualElapsedms="0" ActualCPUms="0" />
+                                    </RunTimeInformation>
+                                    <NestedLoops Optimized="false">
+                                        <Predicate>
+                                            <ScalarOperator ScalarString="[HealthClinic].[dbo].[MedicalRecords].[AppointmentID] as [mr].[AppointmentID]=[HealthClinic].[dbo].[Appointments].[AppointmentID] as [a].[AppointmentID]">
+                                                <Compare CompareOp="EQ">
+                                                    <ScalarOperator>
+                                                        <Identifier>
+                                                            <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[MedicalRecords]" Alias="[mr]" Column="AppointmentID" />
+                                                        </Identifier>
+                                                    </ScalarOperator>
+                                                    <ScalarOperator>
+                                                        <Identifier>
+                                                            <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[Appointments]" Alias="[a]" Column="AppointmentID" />
+                                                        </Identifier>
+                                                    </ScalarOperator>
+                                                </Compare>
+                                            </ScalarOperator>
+                                        </Predicate>
+                                        <RelOp AvgRowSize="583" EstimateCPU="2.09E-05" EstimateIO="0" EstimateRebinds="0" EstimateRewinds="0" EstimatedExecutionMode="Row" EstimateRows="5" LogicalOp="Inner Join" NodeId="2" Parallel="false" PhysicalOp="Nested Loops" EstimatedTotalSubtreeCost="0.0150977">
+                                            <OutputList>
+                                                <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[Patients]" Alias="[pt]" Column="PatientID" />
+                                                <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[Appointments]" Alias="[a]" Column="AppointmentID" />
+                                                <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[Appointments]" Alias="[a]" Column="ScheduledAt" />
+                                                <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[Specializations]" Alias="[s]" Column="SpecializationName" />
+                                                <ColumnReference Column="Expr1005" />
+                                                <ColumnReference Column="Expr1006" />
+                                            </OutputList>
+                                            <RunTimeInformation>
+                                                <RunTimeCountersPerThread Thread="0" ActualRows="5" Batches="0" ActualEndOfScans="1" ActualExecutions="1" ActualExecutionMode="Row" ActualElapsedms="0" ActualCPUms="0" />
+                                            </RunTimeInformation>
+                                            <NestedLoops Optimized="false">
+                                                <OuterReferences>
+                                                    <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[Doctors]" Alias="[d]" Column="SpecializationID" />
+                                                </OuterReferences>
+                                                <RelOp AvgRowSize="435" EstimateCPU="5E-07" EstimateIO="0" EstimateRebinds="0" EstimateRewinds="0" EstimatedExecutionMode="Row" EstimateRows="5" LogicalOp="Compute Scalar" NodeId="3" Parallel="false" PhysicalOp="Compute Scalar" EstimatedTotalSubtreeCost="0.0111613">
+                                                    <OutputList>
+                                                        <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[Patients]" Alias="[pt]" Column="PatientID" />
+                                                        <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[Appointments]" Alias="[a]" Column="AppointmentID" />
+                                                        <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[Appointments]" Alias="[a]" Column="ScheduledAt" />
+                                                        <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[Doctors]" Alias="[d]" Column="SpecializationID" />
+                                                        <ColumnReference Column="Expr1005" />
+                                                        <ColumnReference Column="Expr1006" />
+                                                    </OutputList>
+                                                    <ComputeScalar>
+                                                        <DefinedValues>
+                                                            <DefinedValue>
+                                                                <ColumnReference Column="Expr1005" />
+                                                                <ScalarOperator ScalarString="[HealthClinic].[dbo].[Patients].[FirstName] as [pt].[FirstName]+N' '+[HealthClinic].[dbo].[Patients].[LastName] as [pt].[LastName]">
+                                                                    <Arithmetic Operation="ADD">
+                                                                        <ScalarOperator>
+                                                                            <Arithmetic Operation="ADD">
+                                                                                <ScalarOperator>
+                                                                                    <Identifier>
+                                                                                        <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[Patients]" Alias="[pt]" Column="FirstName" />
+                                                                                    </Identifier>
+                                                                                </ScalarOperator>
+                                                                                <ScalarOperator>
+                                                                                    <Const ConstValue="N' '" />
+                                                                                </ScalarOperator>
+                                                                            </Arithmetic>
+                                                                        </ScalarOperator>
+                                                                        <ScalarOperator>
+                                                                            <Identifier>
+                                                                                <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[Patients]" Alias="[pt]" Column="LastName" />
+                                                                            </Identifier>
+                                                                        </ScalarOperator>
+                                                                    </Arithmetic>
+                                                                </ScalarOperator>
+                                                            </DefinedValue>
+                                                        </DefinedValues>
+                                                        <RelOp AvgRowSize="436" EstimateCPU="2.09E-05" EstimateIO="0" EstimateRebinds="0" EstimateRewinds="0" EstimatedExecutionMode="Row" EstimateRows="5" LogicalOp="Inner Join" NodeId="4" Parallel="false" PhysicalOp="Nested Loops" EstimatedTotalSubtreeCost="0.0111608">
+                                                            <OutputList>
+                                                                <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[Patients]" Alias="[pt]" Column="PatientID" />
+                                                                <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[Patients]" Alias="[pt]" Column="FirstName" />
+                                                                <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[Patients]" Alias="[pt]" Column="LastName" />
+                                                                <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[Appointments]" Alias="[a]" Column="AppointmentID" />
+                                                                <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[Appointments]" Alias="[a]" Column="ScheduledAt" />
+                                                                <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[Doctors]" Alias="[d]" Column="SpecializationID" />
+                                                                <ColumnReference Column="Expr1006" />
+                                                            </OutputList>
+                                                            <RunTimeInformation>
+                                                                <RunTimeCountersPerThread Thread="0" ActualRows="5" Batches="0" ActualEndOfScans="1" ActualExecutions="1" ActualExecutionMode="Row" ActualElapsedms="0" ActualCPUms="0" />
+                                                            </RunTimeInformation>
+                                                            <NestedLoops Optimized="false">
+                                                                <OuterReferences>
+                                                                    <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[Appointments]" Alias="[a]" Column="PatientID" />
+                                                                </OuterReferences>
+                                                                <RelOp AvgRowSize="232" EstimateCPU="5E-07" EstimateIO="0" EstimateRebinds="0" EstimateRewinds="0" EstimatedExecutionMode="Row" EstimateRows="5" LogicalOp="Compute Scalar" NodeId="5" Parallel="false" PhysicalOp="Compute Scalar" EstimatedTotalSubtreeCost="0.0072244">
+                                                                    <OutputList>
+                                                                        <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[Appointments]" Alias="[a]" Column="AppointmentID" />
+                                                                        <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[Appointments]" Alias="[a]" Column="PatientID" />
+                                                                        <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[Appointments]" Alias="[a]" Column="ScheduledAt" />
+                                                                        <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[Doctors]" Alias="[d]" Column="SpecializationID" />
+                                                                        <ColumnReference Column="Expr1006" />
+                                                                    </OutputList>
+                                                                    <ComputeScalar>
+                                                                        <DefinedValues>
+                                                                            <DefinedValue>
+                                                                                <ColumnReference Column="Expr1006" />
+                                                                                <ScalarOperator ScalarString="[HealthClinic].[dbo].[Doctors].[FirstName] as [d].[FirstName]+N' '+[HealthClinic].[dbo].[Doctors].[LastName] as [d].[LastName]">
+                                                                                    <Arithmetic Operation="ADD">
+                                                                                        <ScalarOperator>
+                                                                                            <Arithmetic Operation="ADD">
+                                                                                                <ScalarOperator>
+                                                                                                    <Identifier>
+                                                                                                        <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[Doctors]" Alias="[d]" Column="FirstName" />
+                                                                                                    </Identifier>
+                                                                                                </ScalarOperator>
+                                                                                                <ScalarOperator>
+                                                                                                    <Const ConstValue="N' '" />
+                                                                                                </ScalarOperator>
+                                                                                            </Arithmetic>
+                                                                                        </ScalarOperator>
+                                                                                        <ScalarOperator>
+                                                                                            <Identifier>
+                                                                                                <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[Doctors]" Alias="[d]" Column="LastName" />
+                                                                                            </Identifier>
+                                                                                        </ScalarOperator>
+                                                                                    </Arithmetic>
+                                                                                </ScalarOperator>
+                                                                            </DefinedValue>
+                                                                        </DefinedValues>
+                                                                        <RelOp AvgRowSize="233" EstimateCPU="2.09E-05" EstimateIO="0" EstimateRebinds="0" EstimateRewinds="0" EstimatedExecutionMode="Row" EstimateRows="5" LogicalOp="Inner Join" NodeId="6" Parallel="false" PhysicalOp="Nested Loops" EstimatedTotalSubtreeCost="0.0072239">
+                                                                            <OutputList>
+                                                                                <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[Appointments]" Alias="[a]" Column="AppointmentID" />
+                                                                                <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[Appointments]" Alias="[a]" Column="PatientID" />
+                                                                                <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[Appointments]" Alias="[a]" Column="ScheduledAt" />
+                                                                                <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[Doctors]" Alias="[d]" Column="SpecializationID" />
+                                                                                <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[Doctors]" Alias="[d]" Column="FirstName" />
+                                                                                <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[Doctors]" Alias="[d]" Column="LastName" />
+                                                                            </OutputList>
+                                                                            <RunTimeInformation>
+                                                                                <RunTimeCountersPerThread Thread="0" ActualRows="5" Batches="0" ActualEndOfScans="1" ActualExecutions="1" ActualExecutionMode="Row" ActualElapsedms="0" ActualCPUms="0" />
+                                                                            </RunTimeInformation>
+                                                                            <NestedLoops Optimized="false">
+                                                                                <OuterReferences>
+                                                                                    <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[Appointments]" Alias="[a]" Column="DoctorID" />
+                                                                                </OuterReferences>
+                                                                                <RelOp AvgRowSize="27" EstimateCPU="0.0001625" EstimateIO="0.003125" EstimateRebinds="0" EstimateRewinds="0" EstimatedExecutionMode="Row" EstimateRows="5" EstimatedRowsRead="5" LogicalOp="Clustered Index Scan" NodeId="7" Parallel="false" PhysicalOp="Clustered Index Scan" EstimatedTotalSubtreeCost="0.0032875" TableCardinality="5">
+                                                                                    <OutputList>
+                                                                                        <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[Appointments]" Alias="[a]" Column="AppointmentID" />
+                                                                                        <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[Appointments]" Alias="[a]" Column="PatientID" />
+                                                                                        <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[Appointments]" Alias="[a]" Column="DoctorID" />
+                                                                                        <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[Appointments]" Alias="[a]" Column="ScheduledAt" />
+                                                                                    </OutputList>
+                                                                                    <RunTimeInformation>
+                                                                                        <RunTimeCountersPerThread Thread="0" ActualRows="5" ActualRowsRead="5" Batches="0" ActualEndOfScans="1" ActualExecutions="1" ActualExecutionMode="Row" ActualElapsedms="0" ActualCPUms="0" ActualScans="1" ActualLogicalReads="2" ActualPhysicalReads="0" ActualReadAheads="0" ActualLobLogicalReads="0" ActualLobPhysicalReads="0" ActualLobReadAheads="0" />
+                                                                                    </RunTimeInformation>
+                                                                                    <IndexScan Ordered="false" ForcedIndex="false" ForceScan="false" NoExpandHint="false" Storage="RowStore">
+                                                                                        <DefinedValues>
+                                                                                            <DefinedValue>
+                                                                                                <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[Appointments]" Alias="[a]" Column="AppointmentID" />
+                                                                                            </DefinedValue>
+                                                                                            <DefinedValue>
+                                                                                                <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[Appointments]" Alias="[a]" Column="PatientID" />
+                                                                                            </DefinedValue>
+                                                                                            <DefinedValue>
+                                                                                                <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[Appointments]" Alias="[a]" Column="DoctorID" />
+                                                                                            </DefinedValue>
+                                                                                            <DefinedValue>
+                                                                                                <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[Appointments]" Alias="[a]" Column="ScheduledAt" />
+                                                                                            </DefinedValue>
+                                                                                        </DefinedValues>
+                                                                                        <Object Database="[HealthClinic]" Schema="[dbo]" Table="[Appointments]" Index="[PK_Appointments]" Alias="[a]" IndexKind="Clustered" Storage="RowStore" />
+                                                                                    </IndexScan>
+                                                                                </RelOp>
+                                                                                <RelOp AvgRowSize="217" EstimateCPU="0.0001581" EstimateIO="0.003125" EstimateRebinds="0" EstimateRewinds="4" EstimatedExecutionMode="Row" EstimateRows="1" EstimatedRowsRead="1" LogicalOp="Clustered Index Seek" NodeId="8" Parallel="false" PhysicalOp="Clustered Index Seek" EstimatedTotalSubtreeCost="0.0039155" TableCardinality="10">
+                                                                                    <OutputList>
+                                                                                        <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[Doctors]" Alias="[d]" Column="SpecializationID" />
+                                                                                        <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[Doctors]" Alias="[d]" Column="FirstName" />
+                                                                                        <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[Doctors]" Alias="[d]" Column="LastName" />
+                                                                                    </OutputList>
+                                                                                    <RunTimeInformation>
+                                                                                        <RunTimeCountersPerThread Thread="0" ActualRows="5" ActualRowsRead="5" Batches="0" ActualEndOfScans="0" ActualExecutions="5" ActualExecutionMode="Row" ActualElapsedms="0" ActualCPUms="0" ActualScans="0" ActualLogicalReads="10" ActualPhysicalReads="0" ActualReadAheads="0" ActualLobLogicalReads="0" ActualLobPhysicalReads="0" ActualLobReadAheads="0" />
+                                                                                    </RunTimeInformation>
+                                                                                    <IndexScan Ordered="true" ScanDirection="FORWARD" ForcedIndex="false" ForceSeek="false" ForceScan="false" NoExpandHint="false" Storage="RowStore">
+                                                                                        <DefinedValues>
+                                                                                            <DefinedValue>
+                                                                                                <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[Doctors]" Alias="[d]" Column="SpecializationID" />
+                                                                                            </DefinedValue>
+                                                                                            <DefinedValue>
+                                                                                                <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[Doctors]" Alias="[d]" Column="FirstName" />
+                                                                                            </DefinedValue>
+                                                                                            <DefinedValue>
+                                                                                                <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[Doctors]" Alias="[d]" Column="LastName" />
+                                                                                            </DefinedValue>
+                                                                                        </DefinedValues>
+                                                                                        <Object Database="[HealthClinic]" Schema="[dbo]" Table="[Doctors]" Index="[PK_Doctors]" Alias="[d]" IndexKind="Clustered" Storage="RowStore" />
+                                                                                        <SeekPredicates>
+                                                                                            <SeekPredicateNew>
+                                                                                                <SeekKeys>
+                                                                                                    <Prefix ScanType="EQ">
+                                                                                                        <RangeColumns>
+                                                                                                            <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[Doctors]" Alias="[d]" Column="DoctorID" />
+                                                                                                        </RangeColumns>
+                                                                                                        <RangeExpressions>
+                                                                                                            <ScalarOperator ScalarString="[HealthClinic].[dbo].[Appointments].[DoctorID] as [a].[DoctorID]">
+                                                                                                                <Identifier>
+                                                                                                                    <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[Appointments]" Alias="[a]" Column="DoctorID" />
+                                                                                                                </Identifier>
+                                                                                                            </ScalarOperator>
+                                                                                                        </RangeExpressions>
+                                                                                                    </Prefix>
+                                                                                                </SeekKeys>
+                                                                                            </SeekPredicateNew>
+                                                                                        </SeekPredicates>
+                                                                                    </IndexScan>
+                                                                                </RelOp>
+                                                                            </NestedLoops>
+                                                                        </RelOp>
+                                                                    </ComputeScalar>
+                                                                </RelOp>
+                                                                <RelOp AvgRowSize="217" EstimateCPU="0.0001581" EstimateIO="0.003125" EstimateRebinds="0" EstimateRewinds="4" EstimatedExecutionMode="Row" EstimateRows="1" EstimatedRowsRead="1" LogicalOp="Clustered Index Seek" NodeId="9" Parallel="false" PhysicalOp="Clustered Index Seek" EstimatedTotalSubtreeCost="0.0039155" TableCardinality="210">
+                                                                    <OutputList>
+                                                                        <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[Patients]" Alias="[pt]" Column="PatientID" />
+                                                                        <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[Patients]" Alias="[pt]" Column="FirstName" />
+                                                                        <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[Patients]" Alias="[pt]" Column="LastName" />
+                                                                    </OutputList>
+                                                                    <RunTimeInformation>
+                                                                        <RunTimeCountersPerThread Thread="0" ActualRows="5" ActualRowsRead="5" Batches="0" ActualEndOfScans="0" ActualExecutions="5" ActualExecutionMode="Row" ActualElapsedms="0" ActualCPUms="0" ActualScans="0" ActualLogicalReads="10" ActualPhysicalReads="0" ActualReadAheads="0" ActualLobLogicalReads="0" ActualLobPhysicalReads="0" ActualLobReadAheads="0" />
+                                                                    </RunTimeInformation>
+                                                                    <IndexScan Ordered="true" ScanDirection="FORWARD" ForcedIndex="false" ForceSeek="false" ForceScan="false" NoExpandHint="false" Storage="RowStore">
+                                                                        <DefinedValues>
+                                                                            <DefinedValue>
+                                                                                <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[Patients]" Alias="[pt]" Column="PatientID" />
+                                                                            </DefinedValue>
+                                                                            <DefinedValue>
+                                                                                <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[Patients]" Alias="[pt]" Column="FirstName" />
+                                                                            </DefinedValue>
+                                                                            <DefinedValue>
+                                                                                <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[Patients]" Alias="[pt]" Column="LastName" />
+                                                                            </DefinedValue>
+                                                                        </DefinedValues>
+                                                                        <Object Database="[HealthClinic]" Schema="[dbo]" Table="[Patients]" Index="[PK_Patients]" Alias="[pt]" IndexKind="Clustered" Storage="RowStore" />
+                                                                        <SeekPredicates>
+                                                                            <SeekPredicateNew>
+                                                                                <SeekKeys>
+                                                                                    <Prefix ScanType="EQ">
+                                                                                        <RangeColumns>
+                                                                                            <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[Patients]" Alias="[pt]" Column="PatientID" />
+                                                                                        </RangeColumns>
+                                                                                        <RangeExpressions>
+                                                                                            <ScalarOperator ScalarString="[HealthClinic].[dbo].[Appointments].[PatientID] as [a].[PatientID]">
+                                                                                                <Identifier>
+                                                                                                    <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[Appointments]" Alias="[a]" Column="PatientID" />
+                                                                                                </Identifier>
+                                                                                            </ScalarOperator>
+                                                                                        </RangeExpressions>
+                                                                                    </Prefix>
+                                                                                </SeekKeys>
+                                                                            </SeekPredicateNew>
+                                                                        </SeekPredicates>
+                                                                    </IndexScan>
+                                                                </RelOp>
+                                                            </NestedLoops>
+                                                        </RelOp>
+                                                    </ComputeScalar>
+                                                </RelOp>
+                                                <RelOp AvgRowSize="161" EstimateCPU="0.0001581" EstimateIO="0.003125" EstimateRebinds="0" EstimateRewinds="4" EstimatedExecutionMode="Row" EstimateRows="1" EstimatedRowsRead="1" LogicalOp="Clustered Index Seek" NodeId="10" Parallel="false" PhysicalOp="Clustered Index Seek" EstimatedTotalSubtreeCost="0.0039155" TableCardinality="220">
+                                                    <OutputList>
+                                                        <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[Specializations]" Alias="[s]" Column="SpecializationName" />
+                                                    </OutputList>
+                                                    <RunTimeInformation>
+                                                        <RunTimeCountersPerThread Thread="0" ActualRows="5" ActualRowsRead="5" Batches="0" ActualEndOfScans="0" ActualExecutions="5" ActualExecutionMode="Row" ActualElapsedms="0" ActualCPUms="0" ActualScans="0" ActualLogicalReads="10" ActualPhysicalReads="0" ActualReadAheads="0" ActualLobLogicalReads="0" ActualLobPhysicalReads="0" ActualLobReadAheads="0" />
+                                                    </RunTimeInformation>
+                                                    <IndexScan Ordered="true" ScanDirection="FORWARD" ForcedIndex="false" ForceSeek="false" ForceScan="false" NoExpandHint="false" Storage="RowStore">
+                                                        <DefinedValues>
+                                                            <DefinedValue>
+                                                                <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[Specializations]" Alias="[s]" Column="SpecializationName" />
+                                                            </DefinedValue>
+                                                        </DefinedValues>
+                                                        <Object Database="[HealthClinic]" Schema="[dbo]" Table="[Specializations]" Index="[PK_Specializations]" Alias="[s]" IndexKind="Clustered" Storage="RowStore" />
+                                                        <SeekPredicates>
+                                                            <SeekPredicateNew>
+                                                                <SeekKeys>
+                                                                    <Prefix ScanType="EQ">
+                                                                        <RangeColumns>
+                                                                            <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[Specializations]" Alias="[s]" Column="SpecializationID" />
+                                                                        </RangeColumns>
+                                                                        <RangeExpressions>
+                                                                            <ScalarOperator ScalarString="[HealthClinic].[dbo].[Doctors].[SpecializationID] as [d].[SpecializationID]">
+                                                                                <Identifier>
+                                                                                    <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[Doctors]" Alias="[d]" Column="SpecializationID" />
+                                                                                </Identifier>
+                                                                            </ScalarOperator>
+                                                                        </RangeExpressions>
+                                                                    </Prefix>
+                                                                </SeekKeys>
+                                                            </SeekPredicateNew>
+                                                        </SeekPredicates>
+                                                    </IndexScan>
+                                                </RelOp>
+                                            </NestedLoops>
+                                        </RelOp>
+                                        <RelOp AvgRowSize="4541" EstimateCPU="8.4E-05" EstimateIO="0.0032035" EstimateRebinds="0" EstimateRewinds="4" EstimatedExecutionMode="Row" EstimateRows="5" EstimatedRowsRead="5" LogicalOp="Clustered Index Scan" NodeId="11" Parallel="false" PhysicalOp="Clustered Index Scan" EstimatedTotalSubtreeCost="0.0036235" TableCardinality="5">
+                                            <OutputList>
+                                                <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[MedicalRecords]" Alias="[mr]" Column="AppointmentID" />
+                                                <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[MedicalRecords]" Alias="[mr]" Column="Diagnosis" />
+                                                <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[MedicalRecords]" Alias="[mr]" Column="Treatment" />
+                                            </OutputList>
+                                            <RunTimeInformation>
+                                                <RunTimeCountersPerThread Thread="0" ActualRows="25" ActualRowsRead="25" Batches="0" ActualEndOfScans="5" ActualExecutions="5" ActualExecutionMode="Row" ActualElapsedms="0" ActualCPUms="0" ActualScans="1" ActualLogicalReads="15" ActualPhysicalReads="0" ActualReadAheads="0" ActualLobLogicalReads="0" ActualLobPhysicalReads="0" ActualLobReadAheads="0" />
+                                            </RunTimeInformation>
+                                            <IndexScan Ordered="false" ForcedIndex="false" ForceScan="false" NoExpandHint="false" Storage="RowStore">
+                                                <DefinedValues>
+                                                    <DefinedValue>
+                                                        <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[MedicalRecords]" Alias="[mr]" Column="AppointmentID" />
+                                                    </DefinedValue>
+                                                    <DefinedValue>
+                                                        <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[MedicalRecords]" Alias="[mr]" Column="Diagnosis" />
+                                                    </DefinedValue>
+                                                    <DefinedValue>
+                                                        <ColumnReference Database="[HealthClinic]" Schema="[dbo]" Table="[MedicalRecords]" Alias="[mr]" Column="Treatment" />
+                                                    </DefinedValue>
+                                                </DefinedValues>
+                                                <Object Database="[HealthClinic]" Schema="[dbo]" Table="[MedicalRecords]" Index="[PK_MedicalRecords]" Alias="[mr]" IndexKind="Clustered" Storage="RowStore" />
+                                            </IndexScan>
+                                        </RelOp>
+                                    </NestedLoops>
+                                </RelOp>
+                            </Top>
+                        </RelOp>
+                    </QueryPlan>
+                </StmtSimple>
+            </Statements>
+        </Batch>
+    </BatchSequence>
+</ShowPlanXML>

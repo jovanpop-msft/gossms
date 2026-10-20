@@ -1,0 +1,62 @@
+CREATE TABLE dbo.Orders (
+    OrderID INT IDENTITY(1, 1) NOT NULL
+  , CustomerID NCHAR(5) NULL
+  , OrderDate DATETIME2(0) NOT NULL CONSTRAINT DF_Orders_Date DEFAULT (SYSDATETIME())
+  , Amount DECIMAL(10, 2) NULL
+  , CONSTRAINT PK_Orders PRIMARY KEY CLUSTERED (OrderID)
+) WITH (data_compression = page)
+CREATE OR ALTER PROCEDURE dbo.GetOrders
+    @CustomerID NCHAR(5)
+  , @From DATE = NULL
+  , @Count INT OUTPUT
+WITH RECOMPILE
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT @Count = COUNT(*)
+    FROM dbo.Orders
+    WHERE CustomerID = @CustomerID
+        AND (@From IS NULL OR OrderDate >= @From);
+END
+go
+
+CREATE FUNCTION dbo.Total (@id INT)
+RETURNS DECIMAL(10, 2)
+WITH SCHEMABINDING
+AS
+BEGIN
+    RETURN (
+        SELECT SUM(Amount)
+        FROM dbo.Orders
+        WHERE OrderID = @id
+    );
+END
+go
+
+CREATE VIEW dbo.v
+AS
+SELECT
+    OrderID
+  , CAST(Amount AS VARCHAR(20)) AS A
+  , CONVERT(NVARCHAR(10), OrderDate, 120) AS D
+FROM dbo.Orders
+go
+
+CREATE FUNCTION dbo.tvf (@n INT)
+RETURNS @t TABLE (
+    a INT
+  , b DATE
+)
+AS
+BEGIN
+    INSERT @t (a)
+    VALUES (@n);
+    RETURN;
+END
+go
+
+CREATE TRIGGER trg ON dbo.Orders AFTER INSERT, UPDATE
+AS
+SET NOCOUNT ON;
+IF UPDATE(Amount)
+    PRINT 'x';

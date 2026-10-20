@@ -194,6 +194,8 @@ var helpLines = []string{
 	"  Ctrl+PgUp/PgDn  Previous / next result tab (grids and Messages)",
 	"  Enter/dbl-click On an error in Messages: go to its line",
 	"  Alt+Z       Word wrap on/off (display only)",
+	"  Alt+Shift+F Format Document (JSON, XML; Alt+F too): the selection's",
+	"              lines, or the whole text; one Ctrl+Z undoes it",
 	"",
 	"Execution Plan",
 	"  1/2/3       Plan graph / operator tree / raw XML",

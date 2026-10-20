@@ -178,7 +178,17 @@ func (a *App) showContextMenu(node *explorerNode, x, y int) {
 // scriptables, objectOpFor and filterProps, not the nodeMenus builders.
 func (a *App) contextMenuItemsForNode(node *explorerNode) []controls.MenuItem {
 	items := a.nodeMenuItems(node)
-	items = insertBeforeRefresh(items, a.scriptMenuItems(node))
+	scripts := a.scriptMenuItems(node)
+	if node.data.Type == NodeDatabase {
+		// Joins the cascade's group. It opens a script and runs nothing, so
+		// it is not gated: what the login cannot see, the script's output
+		// simply leaves out.
+		sc := resolveConn(node)
+		scripts = append(scripts, controls.MenuItem{Label: "Script Database Security", Action: func() {
+			a.scriptDatabaseSecurity(sc, node.data.DBName)
+		}})
+	}
+	items = insertBeforeRefresh(items, scripts)
 	items = insertBeforeRefresh(items, a.objectOpsMenuItems(node))
 	return insertBeforeRefresh(items, a.filterMenuItems(node))
 }

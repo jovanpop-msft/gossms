@@ -1346,6 +1346,49 @@ it from the string 'NULL'.
   empty string are the same for that one shape.
 - **Results to Text:** "NULL", as SSMS shows it.
 
+## Format Document: how each language is formatted — settled, do not re-raise
+
+`internal/format`; Edit > Format Document is `internal/tui/format_document.go`.
+
+- **Formatting moves only whitespace between tokens** (plus SQL keyword case).
+  Comments, literals, quoted identifiers, `GO` lines, XML tags and JSON
+  values come out byte-for-byte. A parse failure leaves the text untouched and
+  says where; there is no partial output.
+- **A runtime token guard, not just tests.** `verify` re-lexes input and output
+  and compares the non-whitespace token streams on every run (SQL keywords
+  case-insensitively, `GO` lines by trimmed text); a mismatch refuses the
+  edit with `ErrGuard`, so a formatter bug costs the user nothing. A language
+  with no `verify` case fails closed — a new formatter can't ship without its
+  guard. The XML guard re-derives ignorable whitespace from the token stream,
+  not from the formatter's tree, so the two can't share a mistake.
+- **JSON: `json.Indent`, never `Unmarshal`/`MarshalIndent`.** Indent
+  re-indents tokens without decoding values, so key order, number spelling
+  (`1.0`, `1e5`, big integers) and string escapes survive; Marshal reorders
+  maps and rewrites numbers. `json.Valid` runs first because Indent builds
+  every level's indentation before it errors (200 MB on 10 001 `[`).
+- **XML: an own raw-text re-indenter, never `encoding/xml`'s `Encoder`.** The
+  Encoder rewrites namespace prefixes, turns CDATA into escaped text and
+  normalises attribute quoting — meaning-preserving in theory, surprising on a
+  showplan, XE event data or a `FOR XML` result. Each tag's original text is
+  emitted verbatim. Well-formedness still comes from `xml.Decoder.RawToken`
+  (strict), run alongside the own lexer, which matches end tags (RawToken
+  doesn't). An element with any non-whitespace text or CDATA child,
+  whitespace-only content or `xml:space="preserve"` is left verbatim —
+  re-indenting it changes its value. Fragments (several top-level elements,
+  `FOR XML` without `ROOT`) are accepted.
+- **SQL Standard is a layout pass over `sqltext.Next`'s tokens, not a
+  parser** (§ T-SQL lexing). Statements it has no rules for (EXEC, ALTER
+  TABLE, CREATE INDEX, GRANT, BACKUP, …) keep their line breaks rather than
+  be guessed at. Keywords are upper-cased only where they can't be a name;
+  identifiers are never re-cased. Leading commas. `;` is never added or
+  removed, and long lines never wrap.
+- **Language comes from the extension or origin only**, never content
+  sniffing; Save As to `.sql`/`.xml`/`.json` re-derives it.
+- **One undo step** (`Editor.ReplaceText`/`ReplaceSelectedLines`; `SetText`
+  resets history). A selection formats its whole lines, re-indented at the
+  first line's indent *before* the guard (`Options.LineIndent`) so the guard
+  sees the re-indent too. Block selection and read-only viewers: disabled.
+
 ## By design — not issues, do not re-raise
 
 - **On a narrow terminal the main toolbar hides buttons; it never overlaps

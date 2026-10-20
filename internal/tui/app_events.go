@@ -187,6 +187,14 @@ func (a *App) handleKey(ev *tcell.EventKey) (quit bool) {
 				a.toggleWordWrap()
 				return false
 			}
+			// Alt+Shift+F is Edit > Format Document, as in VS Code; plain
+			// Alt+F counts too. A no-op without a query panel.
+			if r := core.EvRune(ev); r == 'f' || r == 'F' {
+				if a.activeQueryPanel() != nil {
+					a.formatActiveDocument()
+				}
+				return false
+			}
 			// Alt+P is the XEvent Profiler's Standard session, on the
 			// connection Object Explorer has selected — SSMS has no default
 			// key for it; P for Profiler.

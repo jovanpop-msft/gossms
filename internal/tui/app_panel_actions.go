@@ -8,10 +8,9 @@ import (
 
 	"github.com/radix29/gossms/internal/db"
 	"github.com/radix29/gossms/internal/fileutil"
+	"github.com/radix29/gossms/internal/format"
 	"github.com/radix29/gossms/internal/showplan"
-	"github.com/radix29/gossms/internal/tuikit/controls"
 	"github.com/radix29/gossms/internal/tuikit/core"
-	"github.com/radix29/gossms/internal/tuikit/theme"
 )
 
 // app_panel_actions.go opens what the File menu opens: a query panel, a query
@@ -92,8 +91,8 @@ func (a *App) openQueryFile() {
 		qp.markSaved()
 		qp.filePath = path
 		qp.fileEnc, qp.fileCRLF = enc, crlf
-		if strings.EqualFold(filepath.Ext(path), ".xml") {
-			qp.editor.SetHighlighter(controls.XMLHighlighter(theme.Active()))
+		if l, ok := format.LanguageForExt(filepath.Ext(path)); ok && l != format.LangSQL {
+			qp.setLanguage(l)
 		}
 		a.panels.SetActive(a.panels.AddPanel(qp))
 		a.focusPanels()

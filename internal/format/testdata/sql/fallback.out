@@ -1,0 +1,8 @@
+EXEC dbo.p
+    @a = 1,
+    @b = 2
+ALTER TABLE dbo.t ADD c int NULL,
+    CONSTRAINT ck CHECK (c > 0)
+GRANT SELECT, INSERT ON dbo.t TO [public]
+BACKUP DATABASE x TO DISK = N'c:\x.bak' WITH init, compression
+CREATE INDEX ix ON dbo.t (a, b) include (c) WHERE c IS NOT NULL WITH (online = ON)

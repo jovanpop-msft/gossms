@@ -337,13 +337,19 @@ func (e *Editor) Text() string {
 // SelectedText panic, and a stale undo step restores text never typed into this
 // document.
 func (e *Editor) SetText(text string) {
+	e.doc.setLines(e.splitText(text))
+	e.resetForNewText()
+}
+
+// splitText turns text into document lines the way every whole-text entry point
+// stores them: tabs expanded, CRLF folded, one []rune per line.
+func (e *Editor) splitText(text string) [][]rune {
 	parts := strings.Split(strings.ReplaceAll(e.expandTabs(text), "\r\n", "\n"), "\n")
 	lines := make([][]rune, len(parts))
 	for i, p := range parts {
 		lines[i] = []rune(p)
 	}
-	e.doc.setLines(lines)
-	e.resetForNewText()
+	return lines
 }
 
 // SetLineBuffer is SetText for a document built off the UI goroutine: it

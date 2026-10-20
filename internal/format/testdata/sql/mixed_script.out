@@ -1,0 +1,87 @@
+-- header comment
+USE master
+go
+
+SELECT
+    a
+  , b AS bee
+  , COUNT(*)
+FROM dbo.t t
+INNER JOIN dbo.u u ON u.id = t.id
+    AND u.x = 1
+LEFT OUTER JOIN v ON v.a = t.a
+WHERE t.x BETWEEN 1 AND 5
+    AND (t.y = 2 OR t.z = 3)
+    OR t.q IS NULL
+GROUP BY
+    a
+  , b
+HAVING COUNT(*) > 1
+ORDER BY a DESC;
+SELECT 1
+UPDATE dbo.t
+SET
+    a = 1
+  , b = N'x'
+WHERE id = @id
+INSERT INTO dbo.t (a, b)
+VALUES
+    (1, 2)
+  , (3, 4);
+DELETE FROM t
+WHERE x IN (
+    SELECT y
+    FROM z
+    WHERE q = 1
+)
+DECLARE
+    @a INT = 1
+  , @b VARCHAR(10)
+IF @a = 1
+BEGIN
+    PRINT 'a';
+    SELECT @b = 'x'
+END
+ELSE IF @a = 2
+    PRINT 'b'
+ELSE
+BEGIN
+    SET NOCOUNT ON;
+END
+WITH c AS (
+    SELECT 1 AS x
+)
+, d AS (
+    SELECT 2 AS y
+)
+SELECT *
+FROM c
+CROSS APPLY d
+CREATE PROCEDURE dbo.p
+    @a INT
+  , @b INT = 0 OUTPUT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT
+        CASE
+            WHEN @a = 1 THEN 'one'
+            WHEN @a = 2 THEN 'two'
+            ELSE 'many'
+        END AS n
+      , x
+    FROM t;
+END
+GO 2
+
+EXEC sp_who
+    @loginame = 'sa',
+    @x = 1
+SELECT
+    1e+5
+  , -1
+  , a - 1
+  , t.*
+  , $5.00
+  , x * -2
+FROM t

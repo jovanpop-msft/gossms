@@ -1,0 +1,87 @@
+WITH c (id, n) AS (
+    SELECT
+        id
+      , name
+    FROM a
+    UNION ALL
+    SELECT
+        id
+      , name
+    FROM b
+)
+SELECT
+    c.id
+  , (
+        SELECT MAX(x)
+        FROM d
+        WHERE d.id = c.id
+    ) AS mx
+  , ROW_NUMBER() OVER (PARTITION BY c.n ORDER BY c.id DESC) AS rn
+  , IIF(c.id > 1, 'y', 'n') AS f
+  , CASE c.n
+        WHEN 'a' THEN 1
+        WHEN 'b' THEN CASE
+            WHEN c.id = 1 THEN 2
+            ELSE 3
+        END
+        ELSE 0
+    END AS k
+FROM c
+LEFT JOIN (
+    SELECT
+        id
+      , COUNT(*) AS cnt
+    FROM e
+    GROUP BY id
+) AS ee ON ee.id = c.id
+CROSS APPLY (
+    SELECT TOP 1 *
+    FROM f
+    WHERE f.id = c.id
+    ORDER BY f.dt DESC
+) AS ff
+WHERE c.id IS NOT DISTINCT FROM ee.id
+OPTION (recompile)
+INSERT INTO dbo.t (a, b)
+SELECT
+    a
+  , b
+FROM s
+WHERE s.x = 1
+INSERT INTO #t
+EXEC dbo.p @a = 1
+SELECT
+    a
+  , b
+INTO #tmp
+FROM t
+DELETE t
+FROM dbo.t AS t
+INNER JOIN dbo.u AS u ON u.id = t.id
+WHERE u.flag = 1
+UPDATE t
+SET t.a = u.a
+FROM dbo.t AS t
+JOIN dbo.u AS u ON u.id = t.id
+DELETE TOP (10) FROM dbo.log
+OUTPUT deleted.id
+INTO @ids (id)
+WHERE dt < GETDATE()
+SELECT
+    a
+  , b
+  , c
+FROM
+    t1
+  , t2
+WHERE t1.id = t2.id
+SELECT pvt.*
+FROM (
+    SELECT
+        k
+      , v
+    FROM src
+) AS s PIVOT (SUM(v) FOR k IN ([a], [b])) AS pvt
+SELECT id
+FROM t
+FOR JSON PATH, ROOT('items')

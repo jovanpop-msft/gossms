@@ -1,0 +1,10 @@
+<a>
+        <b>
+  <c/>
+                </b>
+
+
+    <d attr="multi
+line value"
+       other="x"><e/></d>
+</a>

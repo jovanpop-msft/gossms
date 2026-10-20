@@ -1,0 +1,23 @@
+-- leading comment
+
+/* block
+   header */ SELECT
+    a /* after a */
+  , b -- after b
+  , c
+FROM t /* before where */
+WHERE x = 1 -- end
+
+-- between statements
+
+-- second paragraph
+UPDATE t
+SET a = 1 -- set a
+WHERE b = 2;
+SELECT 1 -- trailing
+    ;
+SELECT
+    -- own line inside the list
+    a
+  , b
+FROM t

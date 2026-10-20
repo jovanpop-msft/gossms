@@ -268,6 +268,66 @@ func (s *stmtSplitter) advance(t stmtToken) {
 	}
 }
 
+// feedLexed feeds s t, a token Next began in ModeNormal in buf, as the
+// splitter's own token, positioned at (row, col). Comments and newlines are
+// not statement text and are dropped; ';' is the caller's to handle.
+func (s *stmtSplitter) feedLexed(buf []rune, t Token, row, col int) {
+	switch t.Kind {
+	case KindWord, KindNumber:
+		s.feed(stmtToken{tokWord, strings.ToUpper(string(buf[t.Start:t.End])), row, col})
+	case KindString:
+		s.feed(stmtToken{tokString, "'", row, col})
+	case KindQuotedIdent:
+		s.feed(stmtToken{tokIdent, string(buf[t.Start]), row, col})
+	case KindPunct:
+		switch buf[t.Start] {
+		case '(':
+			s.feed(stmtToken{tokOpen, "(", row, col})
+		case ')':
+			s.feed(stmtToken{tokClose, ")", row, col})
+		default:
+			s.feed(stmtToken{tokPunct, string(buf[t.Start]), row, col})
+		}
+	}
+}
+
+// StatementCutter is StatementAt's statement-leader rule for a caller that
+// lexes its own token stream (Format Document's SQL layout): fed one token at
+// a time, it reports each token that begins a statement. A leader whose role
+// the token after it decides (WITH, UPDATE, ...) is reported once that token
+// has been fed, so a report can name an earlier token than the last one fed.
+//
+// It knows only what StatementAt knows: an IF's body, ELSE, a block's END and
+// a module body after AS are not cut (see StatementAt's caveats).
+type StatementCutter struct {
+	cut func(pos int)
+	sp  stmtSplitter
+}
+
+// NewStatementCutter returns a cutter that calls cut with the pos of every
+// token that begins a statement.
+func NewStatementCutter(cut func(pos int)) *StatementCutter {
+	c := &StatementCutter{cut: cut}
+	c.Reset()
+	return c
+}
+
+// Feed takes t, the next token Next began in ModeNormal in buf, and pos, the
+// caller's name for it that cut reports. A ';' ends the statement, like a
+// Reset; comments and newlines are ignored.
+func (c *StatementCutter) Feed(buf []rune, t Token, pos int) {
+	if t.Kind == KindPunct && buf[t.Start] == ';' {
+		c.Reset()
+		return
+	}
+	c.sp.feedLexed(buf, t, 0, pos)
+}
+
+// Reset forgets the statement in progress, as at a GO separator.
+func (c *StatementCutter) Reset() {
+	c.sp = stmtSplitter{cut: func(_, pos int) { c.cut(pos) }}
+}
+
 // StatementAt returns the trimmed [startRow,startCol]-[endRow,endCol] span of the
 // T-SQL statement containing (row, col): what Ctrl+Enter selects, and so what
 // the next F5 runs. ok is false when that statement is only white space, e.g. a
@@ -327,27 +387,13 @@ func StatementAt(lines [][]rune, row, col int) (startRow, startCol, endRow, endC
 			if !fresh {
 				continue
 			}
-			switch t.Kind {
-			case KindWord, KindNumber:
-				sp.feed(stmtToken{tokWord, strings.ToUpper(string(line[t.Start:t.End])), r, t.Start})
-			case KindString:
-				sp.feed(stmtToken{tokString, "'", r, t.Start})
-			case KindQuotedIdent:
-				sp.feed(stmtToken{tokIdent, string(line[t.Start]), r, t.Start})
-			case KindPunct:
-				switch line[t.Start] {
-				case ';':
-					segments = append(segments, span{curRow, curCol, r, t.End})
-					curRow, curCol = r, t.End
-					reset()
-				case '(':
-					sp.feed(stmtToken{tokOpen, "(", r, t.Start})
-				case ')':
-					sp.feed(stmtToken{tokClose, ")", r, t.Start})
-				default:
-					sp.feed(stmtToken{tokPunct, string(line[t.Start]), r, t.Start})
-				}
+			if t.Kind == KindPunct && line[t.Start] == ';' {
+				segments = append(segments, span{curRow, curCol, r, t.End})
+				curRow, curCol = r, t.End
+				reset()
+				continue
 			}
+			sp.feedLexed(line, t, r, t.Start)
 		}
 		st = st.NextLine()
 	}

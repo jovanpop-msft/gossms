@@ -1,0 +1,13 @@
+SELECT 1
+go
+
+SELECT 2
+GO 3
+
+SELECT 3
+go -- trailing comment
+
+SELECT go
+  , x
+FROM t
+SELECT 4; go

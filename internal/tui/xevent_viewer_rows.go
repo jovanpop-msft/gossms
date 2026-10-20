@@ -5,9 +5,9 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/radix29/gossms/internal/format"
 	"github.com/radix29/gossms/internal/showplan"
 	"github.com/radix29/gossms/internal/tuikit/controls"
-	"github.com/radix29/gossms/internal/tuikit/theme"
 	"github.com/radix29/gossms/internal/xevent"
 )
 
@@ -377,11 +377,11 @@ func (v *XEventViewer) showValue(col int, _ string, _ string) bool {
 	case c.Name == "showplan_xml":
 		return v.openPlan(e)
 	case val.IsXML:
-		return v.app.openValuePanel(c.Name, ".xml", controls.XMLHighlighter(theme.Active()), val.Value)
+		return v.app.openValuePanel(c.Name, format.LangXML, val.Value)
 	case slices.Contains(xeSQLFields, c.Name):
-		return v.app.openValuePanel(c.Name, ".sql", controls.SQLHighlighter(theme.Active()), val.Display())
+		return v.app.openValuePanel(c.Name, format.LangSQL, val.Display())
 	case xeCellText(val.Display()) != val.Display():
-		return v.app.openValuePanel(c.Name, ".txt", nil, val.Display())
+		return v.app.openValuePanel(c.Name, format.LangText, val.Display())
 	}
 	return false
 }
@@ -411,7 +411,7 @@ func (v *XEventViewer) cellMenuItems() []controls.MenuItem {
 	for _, val := range slices.Concat(e.Fields, e.Actions) {
 		if val.IsXML && val.Name != "showplan_xml" {
 			items = append(items, controls.MenuItem{Label: "Open " + val.Name + " as XML",
-				Action: func() { v.app.openValuePanel(val.Name, ".xml", controls.XMLHighlighter(theme.Active()), val.Value) }})
+				Action: func() { v.app.openValuePanel(val.Name, format.LangXML, val.Value) }})
 		}
 	}
 	if c, ok := v.selectedColumn(); ok {

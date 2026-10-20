@@ -31,7 +31,11 @@ confirm the new test fails.
 -run XXX -fuzz FuzzLexer -fuzztime 60s -fuzzminimizetime 0`, likewise `FuzzScope`
 in `./internal/tui/sqlparse` (their seeds run in plain `go test`; without
 `-fuzzminimizetime 0` the minimizer stalls them). A crasher is a bug to fix,
-and its `testdata/fuzz/` file stays as the regression seed.
+and its `testdata/fuzz/` file stays as the regression seed. A Format Document
+formatter change gets the same with `FuzzFormatSQL`/`FuzzFormatXML`/
+`FuzzFormatJSON` in `./internal/format` — five minutes for SQL: its first
+eight bugs (a `go` identifier left alone on a line, `\f` read as a blank by
+the GO rule, a label seen through a comment) each took the fuzzer under two.
 
 **`waitAndDrain` runs one callback, not "everything".** It returns after the
 first queued UI callback, and the order goroutines post in shifts under

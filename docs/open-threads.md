@@ -52,6 +52,26 @@ support); this section covers only the environment.
   AAG1; only add/remove database, suspend/resume, listener round trip and the
   failover refusal run there.
 
+## Format Document: what is left
+
+Settled design: `docs/decisions.md` § Format Document.
+
+- **Additional SQL styles and a picker.** Only Standard is registered. The
+  registry is in place (`format.Styles`/`StyleByID`, unknown or empty ID →
+  first style), and the rule tables sit in `sql_rules.go` so a second style
+  is a table plus switches, not a second engine. Lands with it, not before:
+  Edit > Format Document becomes a cascade (`controls/menu_cascade.go`) with the
+  default style marked, and `config.SQLFormatStyle` plus a Tools > Options
+  dropdown.
+- **The 5 MB showplan target (< 300 ms) is not met**: ~475 ms on the
+  i5-2500K dev box (`BenchmarkFormatXMLShowplan`). The `xml.Decoder` pass
+  alone is ~310 ms, so meeting it means replacing encoding/xml's
+  well-formedness check with the own lexer's.
+- **Keyword case on a case-sensitive *server* is untried.** Run live in a
+  `Latin1_General_CS_AS` database only, where INT, VARCHAR, XML, SYSNAME and
+  the built-ins resolve case-insensitively; `sysname` and the CLR types are
+  left alone because a CS server collation was not available to check them.
+
 ## Fix order
 
 Outstanding work by priority within each subsection. Each item points to where

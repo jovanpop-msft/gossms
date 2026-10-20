@@ -3,8 +3,7 @@ package tui
 import (
 	"strings"
 
-	"github.com/radix29/gossms/internal/tuikit/controls"
-	"github.com/radix29/gossms/internal/tuikit/theme"
+	"github.com/radix29/gossms/internal/format"
 )
 
 // cellValueKind is what a result-set cell's text was recognised as, and so
@@ -114,18 +113,13 @@ func classifySQLType(sqlType string) cellValueKind {
 // savedText is seeded so the panel isn't born dirty and closing it doesn't prompt
 // to save.
 func (a *App) openCellValuePanel(sqlType, column, value string) bool {
-	var suffix string
-	var highlighter controls.Highlighter
 	switch classifyCellKind(sqlType, value) {
 	case cellXML:
-		suffix, highlighter = ".xml", controls.XMLHighlighter(theme.Active())
+		return a.openValuePanel(column, format.LangXML, value)
 	case cellJSON:
-		suffix, highlighter = ".json", controls.JSONHighlighter(theme.Active())
-	default:
-		return false
+		return a.openValuePanel(column, format.LangJSON, value)
 	}
-
-	return a.openValuePanel(column, suffix, highlighter, value)
+	return false
 }
 
 // showSQLCellValue is the DataGrid OnShowValue hook for a grid whose rows
@@ -137,15 +131,15 @@ func (a *App) showSQLCellValue(_ int, column, value string) bool {
 	if column != qsQueryColumn || strings.TrimSpace(value) == "" {
 		return false
 	}
-	return a.openValuePanel(column, ".sql", controls.SQLHighlighter(theme.Active()), value)
+	return a.openValuePanel(column, format.LangSQL, value)
 }
 
 // openValuePanel puts one cell's value in a new query panel titled after its
-// column, highlighted as suffix's file type.
-func (a *App) openValuePanel(column, suffix string, highlighter controls.Highlighter, value string) bool {
-	title := strings.ToUpper(strings.TrimPrefix(suffix, "."))
+// column plus lang's extension, in lang.
+func (a *App) openValuePanel(column string, lang format.Language, value string) bool {
+	title := strings.ToUpper(strings.TrimPrefix(lang.Ext(), "."))
 	if column != "" {
-		title = column + suffix
+		title = column + lang.Ext()
 	}
 	a.queryPanelCnt++
 	qp := NewQueryPanel(a, title)
@@ -155,7 +149,7 @@ func (a *App) openValuePanel(column, suffix string, highlighter controls.Highlig
 	// either one born dirty — and with no filePath, closing it pushes the user
 	// into Save As for a value they only wanted to look at.
 	qp.markSaved()
-	qp.editor.SetHighlighter(highlighter)
+	qp.setLanguage(lang)
 	a.panels.SetActive(a.panels.AddPanel(qp))
 	a.focusPanels()
 	a.setStatus("Opened " + title)

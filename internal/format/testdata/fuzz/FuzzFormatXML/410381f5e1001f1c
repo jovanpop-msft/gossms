@@ -1,0 +1,2 @@
+go test fuzz v1
+string("leadiNS text<!><b/><:\x04R\xe1;3P\x00/axB;\x8c\xf4\x18>\xe7>\n")

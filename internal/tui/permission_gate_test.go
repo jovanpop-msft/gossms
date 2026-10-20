@@ -422,7 +422,7 @@ func TestADatabaseMenuWithholdsTheWritesTheLoginCannotDo(t *testing.T) {
 		}
 	}
 	// Reading is untouched.
-	for _, want := range []string{"New Query", "View Backup History", "Properties..."} {
+	for _, want := range []string{"New Query", "View Backup History", "Script Database Security", "Properties..."} {
 		if !slices.Contains(on, want) {
 			t.Errorf("%q was withheld, and it only reads", want)
 		}

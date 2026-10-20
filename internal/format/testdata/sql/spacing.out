@@ -1,0 +1,31 @@
+SELECT
+    N'x'
+  , n'y'
+  , 1e+5
+  , 1.5E-3
+  , 0x1e + 5
+  , -1
+  , a - 1
+  , a - 1
+  , x * -2
+  , t.*
+  , COUNT(*)
+  , COUNT (*)
+  , $5.00
+  , $(sqlcmdvar)
+  , a.b
+  , [a].[b]
+  , @x += 1
+  , a <> b
+  , a != b
+  , a >= b
+  , a <= b
+  , a::b
+  , ~1
+  , (1)
+  , (1)
+  , geography::Point(1, 2, 3)
+FROM t
+WHERE a = -1
+    AND b IN(1, 2, 3)
+    AND c NOT IN (4, 5)

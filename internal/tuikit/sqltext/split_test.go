@@ -115,3 +115,28 @@ func TestSplitBatchesAppliesTheLineRule(t *testing.T) {
 		}
 	}
 }
+
+// StatementCutter reports the statement starts StatementAt cuts at, by the
+// caller's token positions — including a leader whose role the next token
+// settles (WITH), reported once that token arrives.
+func TestStatementCutter(t *testing.T) {
+	src := []rune("select 1 insert t values (1) with c as (select 1) select * from c; " +
+		"update t set a = 1 merge t using s on 1 = 1 when matched then update set a = 1;")
+	var cuts []string
+	var words []string
+	c := NewStatementCutter(func(pos int) { cuts = append(cuts, words[pos]) })
+	var st State
+	for i := 0; ; {
+		var tok Token
+		tok, st = Next(src, i, len(src), st)
+		if tok.Kind == KindEnd {
+			break
+		}
+		i = tok.End
+		words = append(words, string(src[tok.Start:tok.End]))
+		c.Feed(src, tok, len(words)-1)
+	}
+	if got, want := strings.Join(cuts, " "), "select insert with update merge"; got != want {
+		t.Errorf("cuts at %q, want %q", got, want)
+	}
+}
