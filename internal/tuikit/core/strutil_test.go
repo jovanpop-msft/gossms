@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"unicode/utf8"
 	"unsafe"
 )
 
@@ -396,9 +397,44 @@ func TestSafeFileName(t *testing.T) {
 		"..":                  "_",
 		"...":                 "_",
 		"日本語 table":           "日本語 table",
+		"CON":                 "_CON",
+		"con":                 "_con",
+		"nul.tar.gz":          "_nul.tar.gz",
+		"AUX .txt":            "_AUX .txt",
+		"COM1":                "_COM1",
+		"lpt9":                "_lpt9",
+		"COM¹":                "_COM¹",
+		"PRN ":                "_PRN",
+		"CONSOLE":             "CONSOLE",
+		"COM10":               "COM10",
+		"LPT":                 "LPT",
+		"xCON":                "xCON",
 	} {
 		if got := SafeFileName(in); got != want {
 			t.Errorf("SafeFileName(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+// A long name is cut to safeFileNameMax bytes on a rune boundary, so two joined
+// with an extension ("schema.name.sql") stay inside a 255-byte component, and
+// a cut that leaves a trailing dot or space is trimmed like any other.
+func TestSafeFileNameCapsLengthOnARuneBoundary(t *testing.T) {
+	for _, in := range []string{
+		strings.Repeat("a", 300),
+		strings.Repeat("日", 100), // 3 bytes each: 120 is a boundary
+		"a" + strings.Repeat("日", 100),
+		strings.Repeat("a", safeFileNameMax-1) + ". tail",
+	} {
+		got := SafeFileName(in)
+		if len(got) > safeFileNameMax || !utf8.ValidString(got) || !strings.HasPrefix(in, got) {
+			t.Errorf("SafeFileName(%d bytes) = %q (%d bytes), want a valid prefix of at most %d", len(in), got, len(got), safeFileNameMax)
+		}
+		if strings.HasSuffix(got, ".") || strings.HasSuffix(got, " ") {
+			t.Errorf("SafeFileName cut %q ends in a dot or space", got)
+		}
+	}
+	if n := 2*safeFileNameMax + len(".sqlplan") + 1; n > 255 {
+		t.Errorf("two capped names plus an extension are %d bytes, over 255", n)
 	}
 }

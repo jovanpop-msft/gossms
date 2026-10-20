@@ -401,10 +401,16 @@ func EvText(ev interface{ Str() string }) []rune {
 }
 
 // SafeFileName makes s usable as one path component on every OS: each of
-// `\ / : * ? " < > |` and every control character becomes "_", trailing dots
-// and spaces (which Windows drops) are trimmed, and an empty, "." or ".."
-// result is "_". The Windows rules apply everywhere so a name minted on Linux
-// still opens on Windows.
+// `\ / : * ? " < > |` and every control character becomes "_", the result is
+// cut to safeFileNameMax bytes on a rune boundary, trailing dots and spaces
+// (which Windows drops) are trimmed, a Windows device name (CON, NUL, COM1...,
+// reserved whatever extension follows) gets a "_" prefix, and an empty, "." or
+// ".." result is "_". The Windows rules apply everywhere so a name minted on
+// Linux still opens on Windows.
+//
+// The cap is under half the 255-byte limit most file systems share because
+// callers join two results and an extension ("schema.name.sql"); a cut is safe
+// there only if both halves fit.
 func SafeFileName(s string) string {
 	s = strings.Map(func(r rune) rune {
 		if r < 0x20 || r == 0x7f || strings.ContainsRune(`\/:*?"<>|`, r) {
@@ -412,9 +418,41 @@ func SafeFileName(s string) string {
 		}
 		return r
 	}, s)
+	if len(s) > safeFileNameMax {
+		cut := safeFileNameMax
+		for cut > 0 && !utf8.RuneStart(s[cut]) {
+			cut--
+		}
+		s = s[:cut]
+	}
 	s = strings.TrimRight(s, ". ")
 	if s == "" {
 		return "_"
 	}
+	if isWindowsDeviceName(s) {
+		return "_" + s
+	}
 	return s
+}
+
+const safeFileNameMax = 120
+
+// isWindowsDeviceName reports whether Windows reads name as a device: its stem
+// (up to the first dot, trailing spaces ignored) is CON, PRN, AUX, NUL, or COM
+// or LPT followed by 0-9 or a superscript 1-3, in any case.
+func isWindowsDeviceName(name string) bool {
+	stem, _, _ := strings.Cut(name, ".")
+	stem = strings.ToUpper(strings.TrimRight(stem, " "))
+	switch stem {
+	case "CON", "PRN", "AUX", "NUL":
+		return true
+	}
+	if rest, ok := strings.CutPrefix(stem, "COM"); ok {
+		stem = rest
+	} else if rest, ok := strings.CutPrefix(stem, "LPT"); ok {
+		stem = rest
+	} else {
+		return false
+	}
+	return len(stem) == 1 && stem[0] >= '0' && stem[0] <= '9' || stem == "¹" || stem == "²" || stem == "³"
 }

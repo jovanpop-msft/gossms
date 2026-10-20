@@ -103,6 +103,12 @@ func TestScriptFileNameQualifiesBySchema(t *testing.T) {
 		{nodeData{Name: "app_login"}, "app_login.sql"},
 		{nodeData{Schema: "dbo", Name: "a/b"}, "dbo.a_b.sql"},
 		{nodeData{Schema: "d:o", Name: "q*?"}, "d_o.q__.sql"},
+		// A Windows device stem is reserved whatever follows the dot. Each part
+		// is made safe on its own, so a device name after the schema is
+		// prefixed too: unneeded there, but harmless.
+		{nodeData{Name: "CON"}, "_CON.sql"},
+		{nodeData{Schema: "aux", Name: "t"}, "_aux.t.sql"},
+		{nodeData{Schema: "dbo", Name: "NUL"}, "dbo._NUL.sql"},
 	} {
 		if got := scriptFileName(tt.n); got != tt.want {
 			t.Errorf("scriptFileName(%+v) = %q, want %q", tt.n, got, tt.want)
