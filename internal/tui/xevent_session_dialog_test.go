@@ -473,13 +473,24 @@ func TestXEEventsPageBrowsesReadOnly(t *testing.T) {
 	press := func(k tcell.Key) { f.HandleKey(tcell.NewEventKey(k, "", tcell.ModNone)) }
 	space := func() { f.HandleKey(tcell.NewEventKey(tcell.KeyRune, " ", tcell.ModNone)) }
 
-	// Focus lands on the library; Enter and Space there would add an event.
+	// tabTo Tabs until g has focus. Read-only rows between grids take focus too
+	// (so Ctrl+C copies them), so the count of Tabs is not the point.
+	tabTo := func(g *controls.DataGrid, what string) {
+		t.Helper()
+		for range 20 {
+			if gr, ok := f.Focused().(*propsheet.GridRow); ok && gr.Grid == g {
+				return
+			}
+			press(tcell.KeyTab)
+		}
+		t.Fatalf("Tab never reached the %s grid; focused %T", what, f.Focused())
+	}
+
+	// On the library, Enter and Space would add an event.
+	tabTo(lib, "event library")
 	press(tcell.KeyEnter)
 	space()
-	press(tcell.KeyTab)
-	if g, ok := f.Focused().(*propsheet.GridRow); !ok || g.Grid != sel {
-		t.Fatalf("Tab went to %T, want the selected-events grid past the read-only filter rows", f.Focused())
-	}
+	tabTo(sel, "selected-events")
 	if sel.Row(0)[0] != "sqlserver.rpc_completed" {
 		t.Fatalf("first selected event = %v", sel.Row(0))
 	}

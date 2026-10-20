@@ -30,6 +30,13 @@ type CheckRow struct {
 	x, y, w  int
 }
 
+// flat reports whether the row draws as a tick or cross (either gate).
+func (r *CheckRow) flat() bool { return r.drawReadOnly || r.pageReadOnly }
+
+// Browsable lets a flat row take focus for Ctrl+C to copy its state, as
+// TextRow.Browsable does; HandleKey and HandleMouse refuse while flat.
+func (r *CheckRow) Browsable() bool { return r.flat() }
+
 // Check returns an editable checkbox row.
 func Check(label string, checked bool) *CheckRow {
 	b := widgets.NewCheckBox(label)
@@ -61,7 +68,7 @@ func (r *CheckRow) Layout(x, y, w int) {
 	r.x, r.y, r.w = x, y, w
 	r.box.SetBounds(x, y)
 }
-func (r *CheckRow) Focusable() bool { return !r.disabled && !r.pageReadOnly }
+func (r *CheckRow) Focusable() bool { return (!r.disabled && !r.pageReadOnly) || r.Browsable() }
 
 // SetEnabled toggles whether the row can be focused or changed; a disabled row
 // still draws its box, greyed, as TextRow.SetEnabled does. SetReadOnly draws the
@@ -87,7 +94,7 @@ func (r *CheckRow) ReadOnly() bool { return r.pageReadOnly }
 func (r *CheckRow) SetDrawReadOnly(v bool) { r.drawReadOnly = v }
 
 func (r *CheckRow) Draw(s tcell.Screen, focused bool) {
-	if r.drawReadOnly || r.pageReadOnly {
+	if r.flat() {
 		p := theme.Active()
 		mark := "✗"
 		if r.box.Checked() {
@@ -95,6 +102,10 @@ func (r *CheckRow) Draw(s tcell.Screen, focused bool) {
 		}
 		mst := tcell.StyleDefault.Background(p.DialogBg).Foreground(p.Text)
 		lst := tcell.StyleDefault.Background(p.DialogBg).Foreground(p.TextDim)
+		if focused {
+			mst, lst = theme.StyleSelected(), theme.StyleSelected()
+			core.FillRect(s, core.Rect{X: r.x, Y: r.y, W: r.w, H: 1}, ' ', lst)
+		}
 		core.DrawText(s, r.x, r.y, mst, mark)
 		core.DrawTextClipped(s, r.x+2, r.y, max(0, r.w-2), lst, r.label)
 		return
@@ -103,13 +114,13 @@ func (r *CheckRow) Draw(s tcell.Screen, focused bool) {
 	r.box.Draw(s)
 }
 func (r *CheckRow) HandleKey(ev *tcell.EventKey) bool {
-	if r.pageReadOnly {
+	if r.flat() {
 		return false
 	}
 	return r.box.HandleKey(ev)
 }
 func (r *CheckRow) HandleMouse(ev *tcell.EventMouse) bool {
-	if r.pageReadOnly {
+	if r.flat() {
 		return false
 	}
 	return r.box.HandleMouse(ev)
@@ -155,9 +166,17 @@ type SelectRow struct {
 	// disabled is SetEnabled's state: see TextRow.SetEnabled.
 	disabled bool
 	// fitItems widens the control to its widest item — see SetFitItems.
-	fitItems bool
-	x, y, w  int
+	fitItems   bool
+	drawHeight int // see flatHeight
+	x, y, w    int
 }
+
+// flat reports whether the row draws as a plain label/value pair (either gate).
+func (r *SelectRow) flat() bool { return r.drawReadOnly || r.pageReadOnly }
+
+// Browsable lets a flat row take focus for Ctrl+C to copy its value, as
+// TextRow.Browsable does; HandleKey and HandleMouse refuse while flat.
+func (r *SelectRow) Browsable() bool { return r.flat() }
 
 // Select returns an editable dropdown row.
 func Select(label string, items []string, selected int) *SelectRow {
@@ -220,7 +239,16 @@ func (r *SelectRow) SetItems(items []string) {
 // (URLs differing only at the end). Never narrower than the fixed width.
 func (r *SelectRow) SetFitItems(v bool) { r.fitItems = v }
 
-func (r *SelectRow) Height(w int) int { return 1 }
+func (r *SelectRow) Height(w int) int {
+	if r.flat() {
+		return flatHeight(r.dd.Value(), w)
+	}
+	return 1
+}
+
+// MinDrawHeight and SetDrawHeight implement Shrinkable — see TextRow's.
+func (r *SelectRow) MinDrawHeight() int  { return 1 }
+func (r *SelectRow) SetDrawHeight(h int) { r.drawHeight = h }
 func (r *SelectRow) Layout(x, y, w int) {
 	r.x, r.y, r.w = x, y, w
 	r.dd.SetBounds(x, y)
@@ -237,7 +265,7 @@ func (r *SelectRow) Layout(x, y, w int) {
 	room := w - core.DisplayWidth(r.dd.Label()) - 3
 	r.dd.SetWidth(max(3, min(want, room)))
 }
-func (r *SelectRow) Focusable() bool { return !r.disabled && !r.pageReadOnly }
+func (r *SelectRow) Focusable() bool { return (!r.disabled && !r.pageReadOnly) || r.Browsable() }
 
 // SetEnabled toggles whether the row can be focused or changed; a disabled row
 // still draws its dropdown, greyed, as TextRow.SetEnabled does, so a switched-off
@@ -266,11 +294,16 @@ func (r *SelectRow) ReadOnly() bool { return r.pageReadOnly }
 
 // SetDrawReadOnly implements ReadOnlyDrawer: the row draws the selected item
 // as flat text, with no box and no arrow.
-func (r *SelectRow) SetDrawReadOnly(v bool) { r.drawReadOnly = v }
+func (r *SelectRow) SetDrawReadOnly(v bool) {
+	r.drawReadOnly = v
+	if v {
+		r.dd.Focus(false) // see SetReadOnly
+	}
+}
 
 func (r *SelectRow) Draw(s tcell.Screen, focused bool) {
-	if r.drawReadOnly || r.pageReadOnly {
-		drawFlatReadOnly(s, r.x, r.y, r.w, r.Label(), r.dd.Value())
+	if r.flat() {
+		drawFlat(s, r.x, r.y, r.w, r.Label(), r.dd.Value(), r.drawHeight, focused)
 		return
 	}
 	r.dd.Focus(focused && !r.disabled)
@@ -279,7 +312,7 @@ func (r *SelectRow) Draw(s tcell.Screen, focused bool) {
 func (r *SelectRow) DrawOverlay(s tcell.Screen) { r.dd.DrawOverlay(s) }
 func (r *SelectRow) OverlayActive() bool        { return r.dd.IsOpen() }
 func (r *SelectRow) HandleKey(ev *tcell.EventKey) bool {
-	if r.pageReadOnly {
+	if r.flat() {
 		return false
 	}
 	before := r.dd.Value()
@@ -288,7 +321,7 @@ func (r *SelectRow) HandleKey(ev *tcell.EventKey) bool {
 	return handled
 }
 func (r *SelectRow) HandleMouse(ev *tcell.EventMouse) bool {
-	if r.pageReadOnly {
+	if r.flat() {
 		return false
 	}
 	before := r.dd.Value()
@@ -346,8 +379,13 @@ type RadioRow struct {
 	// drawReadOnly collapses the group to a single label/value line — see
 	// SetDrawReadOnly.
 	drawReadOnly bool
+	drawHeight   int // see flatHeight
 	x, y, w      int
 }
+
+// Browsable lets a flat row take focus for Ctrl+C to copy its value, as
+// TextRow.Browsable does; HandleKey and HandleMouse refuse while flat.
+func (r *RadioRow) Browsable() bool { return r.drawReadOnly }
 
 // Radio returns an editable radio-group row.
 func Radio(label string, options []string, selected int) *RadioRow {
@@ -394,10 +432,21 @@ func (r *RadioRow) Label() string     { return r.rb.Label() }
 
 func (r *RadioRow) Height(w int) int {
 	if r.drawReadOnly {
+		return flatHeight(r.CopyText(), w)
+	}
+	return r.rb.Height()
+}
+
+// MinDrawHeight and SetDrawHeight implement Shrinkable for the flat form (see
+// flatHeight). The group itself can't draw in less than its full height, so it
+// asks for all of it.
+func (r *RadioRow) MinDrawHeight() int {
+	if r.drawReadOnly {
 		return 1
 	}
 	return r.rb.Height()
 }
+func (r *RadioRow) SetDrawHeight(h int) { r.drawHeight = h }
 func (r *RadioRow) Layout(x, y, w int) {
 	r.x, r.y, r.w = x, y, w
 	r.rb.SetBounds(x, y)
@@ -411,19 +460,25 @@ func (r *RadioRow) SetDrawReadOnly(v bool) { r.drawReadOnly = v }
 
 func (r *RadioRow) Draw(s tcell.Screen, focused bool) {
 	if r.drawReadOnly {
-		drawFlatReadOnly(s, r.x, r.y, r.w, r.Label(), r.CopyText())
+		drawFlat(s, r.x, r.y, r.w, r.Label(), r.CopyText(), r.drawHeight, focused)
 		return
 	}
 	r.rb.Focus(focused)
 	r.rb.Draw(s)
 }
 func (r *RadioRow) HandleKey(ev *tcell.EventKey) bool {
+	if r.drawReadOnly {
+		return false
+	}
 	before := r.rb.Selected()
 	handled := r.rb.HandleKey(ev)
 	r.notifyChanged(before)
 	return handled
 }
 func (r *RadioRow) HandleMouse(ev *tcell.EventMouse) bool {
+	if r.drawReadOnly {
+		return false
+	}
 	before := r.rb.Selected()
 	handled := r.rb.HandleMouse(ev)
 	r.notifyChanged(before)

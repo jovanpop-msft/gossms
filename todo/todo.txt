@@ -1,6 +1,3 @@
-properties dialogs:
-- vertical scroll is not working properly when dragged with the mouse. cannot drag it till bottom. it is working with the mouse scroll wheel.
-- some properties that are very long you cannot see the whole value. ex server settings, database settings page -> data, log, disk space.
 
 script database security
 

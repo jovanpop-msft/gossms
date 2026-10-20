@@ -11,28 +11,66 @@ import (
 )
 
 // TestAReadOnlyFormCannotBeEdited. The point is not that editing is
-// discouraged: nothing on the form can take focus, so no row can be typed
-// into or toggled, so the form can never become dirty — which is what makes
-// Apply and Script Changes have nothing to send.
+// discouraged: a row on the form takes focus only to be copied, and refuses
+// every key, click and paste, so the form can never become dirty — which is
+// what makes Apply and Script Changes have nothing to send.
 func TestAReadOnlyFormCannotBeEdited(t *testing.T) {
+	static := Static("Data", "/var/opt/mssql/data")
 	text := Text("Name", "srv01", 20)
 	check := Check("Enabled", false)
-	f := NewForm(Section("Settings"), text, check)
+	f := NewForm(Section("Settings"), static, text, check)
 	f.SetBounds(0, 0, 60, 10)
 
 	f.SetReadOnly(true)
 	f.Focus(true)
 
-	if f.Focused() != nil {
-		t.Error("a row took focus on a read-only form")
+	if f.Focused() != Row(static) {
+		t.Fatalf("focused row = %T, want the static row, focusable to be copied", f.Focused())
 	}
-	if f.FocusNext() || f.FocusPrev() {
-		t.Error("focus moved into a read-only form")
+	if c, ok := f.CopyText(); !ok || c != "/var/opt/mssql/data" {
+		t.Errorf("static CopyText = %q, %v; want its value", c, ok)
+	}
+	if !f.FocusNext() || f.Focused() != Row(text) {
+		t.Fatalf("Tab went to %T, want the text row, focusable to be copied", f.Focused())
+	}
+	for _, r := range "XY" {
+		f.HandleKey(tcell.NewEventKey(tcell.KeyRune, string(r), tcell.ModNone))
+	}
+	f.HandleKey(key(tcell.KeyBackspace2, tcell.ModNone))
+	text.Paste("pasted")
+	text.SelectAll()
+	if got := text.Cut(); got != "" {
+		t.Errorf("Cut on a read-only text row returned %q", got)
+	}
+	// A flat value copies as shown, unit included; an editable one bare, so it
+	// pastes back into the field.
+	size := Int("Fill factor", 0, 0, 100, "%")
+	size.SetDrawReadOnly(true)
+	if got := size.CopyText(); got != "0 %" {
+		t.Errorf("flat Int CopyText = %q, want %q", got, "0 %")
+	}
+	size.SetDrawReadOnly(false)
+	if got := size.CopyText(); got != "0" {
+		t.Errorf("editable Int CopyText = %q, want %q", got, "0")
+	}
+	if c, ok := f.CopyText(); !ok || c != "srv01" {
+		t.Errorf("CopyText = %q, %v; want the value, to copy", c, ok)
+	}
+	if !f.FocusNext() || f.Focused() != Row(check) {
+		t.Fatalf("Tab went to %T, want the check row", f.Focused())
+	}
+	f.HandleKey(tcell.NewEventKey(tcell.KeyRune, " ", tcell.ModNone))
+	f.HandleKey(key(tcell.KeyEnter, tcell.ModNone))
+	if c, _ := f.CopyText(); c != "false" {
+		t.Errorf("check row CopyText = %q, want false", c)
 	}
 	// Tab must be refused rather than swallowed, so the sheet can move focus
 	// on to the button row — the keyboard-trap rule.
 	if f.HandleKey(tcell.NewEventKey(tcell.KeyTab, "", tcell.ModNone)) {
 		t.Error("a read-only form claimed Tab, trapping focus on itself")
+	}
+	if text.Value() != "srv01" || check.Checked() {
+		t.Errorf("a read-only form was edited: %q / %v", text.Value(), check.Checked())
 	}
 	if f.Dirty() {
 		t.Error("a read-only form reported itself dirty")
@@ -44,8 +82,12 @@ func TestAReadOnlyFormCannotBeEdited(t *testing.T) {
 	}
 
 	f.SetReadOnly(false)
-	if !f.FocusNext() {
-		t.Error("clearing read-only did not give the rows their focus back")
+	f.FocusFirst() // the static row
+	f.FocusNext()
+	f.Draw(&fakeScreen{w: 60, h: 10}) // focuses the input field
+	f.HandleKey(tcell.NewEventKey(tcell.KeyRune, "Z", tcell.ModNone))
+	if text.Value() == "srv01" {
+		t.Error("clearing read-only did not give the rows their editing back")
 	}
 }
 
@@ -316,9 +358,10 @@ func TestFlatValueStartsWhereAnEditableValueDoes(t *testing.T) {
 // TestAPageReadOnlyRowRefusesEveryEditPath. A page gating one row of an
 // otherwise editable form (a job step of a subsystem the page cannot write) has
 // to close every way in, not just the drawn one: Edit is the path a test takes,
-// HandleKey the path a keystroke takes, and Focusable is what stops the row
-// being reachable at all. A row that only *draws* flat still goes dirty and
-// still gets written.
+// HandleKey the path a keystroke takes, Paste the clipboard's. The row stays
+// focusable, so Ctrl+C can copy it, which makes every one of those refusals
+// load-bearing. A row that only *draws* flat still goes dirty and still gets
+// written.
 func TestAPageReadOnlyRowRefusesEveryEditPath(t *testing.T) {
 	text := Text("Step name", "Notify ops", 20)
 	sel := Select("Database", []string{"(unchanged)", "appdb", "salesdb"}, 0)
@@ -346,8 +389,12 @@ func TestAPageReadOnlyRowRefusesEveryEditPath(t *testing.T) {
 	if text.Value() != "Notify ops" || sel.Selected() != 0 {
 		t.Errorf("a keystroke edited a page-read-only row: %q / %d", text.Value(), sel.Selected())
 	}
-	if text.Focusable() || sel.Focusable() {
-		t.Error("a page-read-only row is still focusable")
+	text.Paste("X")
+	if text.Value() != "Notify ops" {
+		t.Errorf("Paste edited a page-read-only row: %q", text.Value())
+	}
+	if !text.Focusable() || !sel.Focusable() {
+		t.Error("a page-read-only row is not focusable, so its value can't be copied")
 	}
 	if text.Dirty() || sel.Dirty() {
 		t.Error("a page-read-only row went dirty")
@@ -398,17 +445,18 @@ func TestThePagesGateAndTheFormsGateAreIndependent(t *testing.T) {
 	text.SetReadOnly(true)
 	f.SetReadOnly(true)
 	f.SetReadOnly(false)
-	if !text.ReadOnly() || text.Focusable() {
+	if !text.ReadOnly() {
 		t.Error("clearing the form's gate cleared the page's own")
 	}
 
-	// Asked through the form, not the row: the form's gate is enforced in
-	// Form.focusableAt, so a row's own Focusable() knows nothing about it.
+	// Asked through the form, not the row: the form's gate is enforced in the
+	// row's drawReadOnly, which the page's own gate knows nothing about.
 	f.SetReadOnly(true)
 	text.SetReadOnly(false)
 	f.Focus(true)
-	if f.Focused() != nil || f.FocusNext() {
-		t.Error("clearing the page's gate let a row focus on a read-only form")
+	f.HandleKey(tcell.NewEventKey(tcell.KeyRune, "X", tcell.ModNone))
+	if text.Value() != "Notify ops" {
+		t.Errorf("clearing the page's gate let a key edit a read-only form: %q", text.Value())
 	}
 }
 
@@ -445,8 +493,11 @@ func TestAReadOnlyFormsGridsCanBeBrowsed(t *testing.T) {
 	f.HandleKey(tcell.NewEventKey(tcell.KeyRune, " ", tcell.ModNone))
 	f.HandleKey(key(tcell.KeyEnter, tcell.ModNone))
 
-	// Tab skips the text row and lands on the next grid, then leaves the form
-	// — the keyboard-trap rule still holds.
+	// Tab stops on the text row (to copy it), lands on the next grid, then
+	// leaves the form — the keyboard-trap rule still holds.
+	if !f.HandleKey(key(tcell.KeyTab, tcell.ModNone)) || f.Focused() != Row(text) {
+		t.Fatalf("Tab went to %T, want the text row", f.Focused())
+	}
 	if !f.HandleKey(key(tcell.KeyTab, tcell.ModNone)) || f.Focused() != Row(toggles) {
 		t.Fatalf("Tab went to %T, want the toggle grid", f.Focused())
 	}
@@ -461,7 +512,7 @@ func TestAReadOnlyFormsGridsCanBeBrowsed(t *testing.T) {
 	}
 
 	// A click on the first grid's third row selects it and focuses the grid;
-	// a click on the text row is claimed and focuses nothing.
+	// a click on the text row focuses it, to copy, and edits nothing.
 	f.Draw(&fakeScreen{w: 60, h: 30})
 	gy := f.bands[1].y
 	press := func(x, y int) {
@@ -473,8 +524,8 @@ func TestAReadOnlyFormsGridsCanBeBrowsed(t *testing.T) {
 		t.Errorf("click on the grid: focused %T, selected row %d; want the grid, row 2", f.Focused(), plain.SelectedRow())
 	}
 	press(2, f.bands[2].y)
-	if f.Focused() == Row(text) {
-		t.Error("a click focused the text row of a read-only form")
+	if f.Focused() != Row(text) || text.Value() != "srv01" {
+		t.Errorf("click on the text row: focused %T, value %q; want it focused, unchanged", f.Focused(), text.Value())
 	}
 
 	if activations != 0 {
@@ -510,5 +561,44 @@ func TestAReadOnlyFormIsNeverDirty(t *testing.T) {
 	f.SetReadOnly(true)
 	if f.Dirty() {
 		t.Error("a read-only form reported itself dirty")
+	}
+}
+
+// TestAReadOnlyRowWrapsALongValue. A flat row has no input box to scroll, so a
+// value wider than its column wraps under itself, as a Static's does, and Ctrl+C
+// on it still copies the whole value.
+func TestAReadOnlyRowWrapsALongValue(t *testing.T) {
+	long := "/var/opt/mssql/data/instances/MSSQL17.MSSQLSERVER/MSSQL/DATA/"
+	cases := []struct {
+		name string
+		row  Row
+		want string
+	}{
+		{"text", Text("Path", long, 20), long},
+		{"select", Select("Path", []string{"x", long}, 1), long},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			f := NewForm(c.row)
+			f.SetBounds(0, 0, 60, 10)
+			f.SetReadOnly(true)
+			s := &fakeScreen{w: 60, h: 10}
+			f.Draw(s)
+			h := c.row.Height(60)
+			if h < 2 {
+				t.Fatalf("Height = %d, want the value wrapped onto more lines", h)
+			}
+			var b strings.Builder
+			for y := range h {
+				b.WriteString(strings.TrimSpace(s.line(y)[flatValueX(0):]))
+			}
+			if b.String() != c.want {
+				t.Errorf("drawn value = %q, want %q", b.String(), c.want)
+			}
+			f.Focus(true)
+			if got, ok := f.CopyText(); !ok || got != c.want {
+				t.Errorf("CopyText = %q, %v; want the whole value", got, ok)
+			}
+		})
 	}
 }

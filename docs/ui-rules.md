@@ -64,8 +64,10 @@ behind the mouse and async rules.
   add/remove and the collation-aware name checks the pages each used to
   rewrite.
 - **A read-only page's grids browse, so their `OnSelectRow` runs there too.**
-  `Form.SetReadOnly` leaves grids focusable and browse-only; everything else is
-  inert, and the form reports clean whatever its rows say. An `OnSelectRow`
+  `Form.SetReadOnly` leaves grids focusable and browse-only, and flat rows
+  focusable only to be copied; everything else is inert, and the form reports
+  clean whatever its rows say. A row that draws flat refuses every edit path
+  itself (keys, mouse, Cut, Paste, Select All) — focus reaches it. An `OnSelectRow`
   may fill detail rows (with `SetValue`, never `Edit`) and commit the previous
   row's unchanged values back — but must never open, write or dirty anything
   else on the strength of a selection.

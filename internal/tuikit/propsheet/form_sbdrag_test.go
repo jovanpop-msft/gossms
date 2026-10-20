@@ -52,3 +52,29 @@ func TestFormClickAfterScrollbarDragDoesNotScroll(t *testing.T) {
 		t.Errorf("click at x=10 changed scroll %d -> %d, want it unchanged", before, f.scroll)
 	}
 }
+
+// Dragging the thumb to the track's last cell must reach maxScroll, as the
+// wheel does. With row starts that don't land exactly on total-H (a two-line
+// Section ahead of one-line rows), rounding the drag's line down to its row
+// parked the form one row short of the bottom.
+func TestFormScrollbarDragReachesBottom(t *testing.T) {
+	var rows []Row
+	for range 8 {
+		rows = append(rows, Section("S"), Static("A", "1"))
+	}
+	f := NewForm(rows...)
+	f.SetBounds(0, 0, 60, 8) // 24 lines, maxScroll's row starts at 17, not 16
+	f.Draw(&fakeScreen{w: 100, h: 40})
+	w := f.contentWidth()
+	want := f.maxScroll(w)
+
+	f.HandleMouse(tcell.NewEventMouse(f.rect.Right()-1, 0, tcell.Button1, tcell.ModNone))
+	f.HandleMouse(tcell.NewEventMouse(f.rect.Right()-1, f.rect.H-1, tcell.Button1, tcell.ModNone))
+	if f.scroll != want {
+		t.Errorf("drag to the track's end left scroll at %d, want maxScroll %d", f.scroll, want)
+	}
+	f.HandleMouse(tcell.NewEventMouse(f.rect.Right()-1, 0, tcell.Button1, tcell.ModNone))
+	if f.scroll != 0 {
+		t.Errorf("drag back to the track's top left scroll at %d, want 0", f.scroll)
+	}
+}

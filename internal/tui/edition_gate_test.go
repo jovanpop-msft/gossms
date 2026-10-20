@@ -106,13 +106,13 @@ func TestNewDatabaseWithholdsTheFileFieldsOnAzure(t *testing.T) {
 	azure := probedAzureConn(t, "")
 	f, _, _, _ := buildNewDatabaseGeneralPage(azure, pf)
 	for _, label := range []string{"Logical name", "Path", "Initial size", "Growth", "Recovery model"} {
-		if focusableRowNamed(f, label) {
+		if editableRowNamed(f, label) {
 			t.Errorf("%q is still editable on a Managed Instance", label)
 		}
 	}
 	// The identity fields are the whole point of the page and must survive.
 	for _, label := range []string{"Database name", "Collation", "Compatibility level"} {
-		if !focusableRowNamed(f, label) {
+		if !editableRowNamed(f, label) {
 			t.Errorf("%q was withheld, and a Managed Instance accepts it", label)
 		}
 	}
@@ -120,20 +120,25 @@ func TestNewDatabaseWithholdsTheFileFieldsOnAzure(t *testing.T) {
 	onPrem := probedConn(t, "", nil, nil, nil, nil)
 	f, _, _, _ = buildNewDatabaseGeneralPage(onPrem, pf)
 	for _, label := range []string{"Logical name", "Path", "Recovery model"} {
-		if !focusableRowNamed(f, label) {
+		if !editableRowNamed(f, label) {
 			t.Errorf("%q lost its editor on an on-premises instance", label)
 		}
 	}
 }
 
-// focusableRowNamed reports whether the form has an editable row with this
-// label. A row made read-only stops being focusable, which is the observable
-// difference the edition gate makes.
-func focusableRowNamed(f *propsheet.Form, label string) bool {
+// editableRowNamed reports whether the form has an editable row with this
+// label: focusable and not under its own read-only gate, which is the
+// observable difference the edition gate makes. Focusable alone no longer
+// tells: a read-only row still takes focus so Ctrl+C can copy it.
+func editableRowNamed(f *propsheet.Form, label string) bool {
 	for _, r := range f.Rows() {
 		type labeled interface{ Label() string }
 		l, ok := r.(labeled)
 		if !ok || l.Label() != label {
+			continue
+		}
+		type gated interface{ ReadOnly() bool }
+		if g, ok := r.(gated); ok && g.ReadOnly() {
 			continue
 		}
 		if r.Focusable() {

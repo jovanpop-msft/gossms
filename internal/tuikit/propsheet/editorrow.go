@@ -143,6 +143,11 @@ func (r *EditorRow) SetDrawHeight(h int) { r.drawHeight = h }
 
 func (r *EditorRow) Focusable() bool { return true }
 
+// Browsable keeps a read-only editor focusable on a read-only form: the box is
+// there to be scrolled, selected and copied, and the editor itself refuses every
+// mutating key, Cut and Paste while read-only.
+func (r *EditorRow) Browsable() bool { return r.ed.ReadOnly() }
+
 func (r *EditorRow) Draw(s tcell.Screen, focused bool) {
 	p := theme.Active()
 	lst := tcell.StyleDefault.Background(p.DialogBg).Foreground(p.TextDim)

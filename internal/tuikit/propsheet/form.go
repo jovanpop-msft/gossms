@@ -78,9 +78,11 @@ func (f *Form) Prepend(rows ...Row) {
 }
 
 // SetReadOnly makes the form uneditable: no row can take focus or receive a
-// press, except a Browsable row (a grid), which keeps both for browsing and which
-// ReadOnlyDrawer makes inert. Wheel scrolling and PgUp/PgDn still work, and every
-// ReadOnlyDrawer row switches to flat rendering.
+// press, except a Browsable row, which keeps both for looking at and which
+// ReadOnlyDrawer makes inert: a grid browses, a flat text, check, select or radio
+// row takes focus only so Ctrl+C can copy it, a read-only editor scrolls and
+// selects. Wheel scrolling and PgUp/PgDn still work, and every ReadOnlyDrawer row
+// switches to flat rendering.
 //
 // This presents a Properties page whose reads succeed but writes would be
 // refused. Nothing can become dirty, so Apply and Script Changes have nothing to
@@ -228,18 +230,6 @@ func (f *Form) scrollLines(w int) int {
 		lines += f.rowHeight(i, w)
 	}
 	return lines
-}
-
-// rowAtLine returns the index of the row containing content line n.
-func (f *Form) rowAtLine(n, w int) int {
-	y := 0
-	for i := range f.rows {
-		y += f.rowHeight(i, w)
-		if n < y {
-			return i
-		}
-	}
-	return max(0, len(f.rows)-1)
 }
 
 // maxScroll returns the largest scroll index worth reaching: the one that first
@@ -525,8 +515,24 @@ func (f *Form) handleScrollbarDrag(ev *tcell.EventMouse, w int) bool {
 	}
 	f.sbDragging = true
 	line := core.ScrollOffsetForDrag(my-f.rect.Y, f.rect.H, total, f.rect.H)
-	f.scroll = min(f.rowAtLine(line, w), f.maxScroll(w))
+	f.scroll = min(f.rowFromLine(line, w), f.maxScroll(w))
 	return true
+}
+
+// rowFromLine maps a drag's line offset to the first row starting at or after
+// it. Rounding down to the row containing the line left the bar's last cell, offset total-H, on the
+// row before maxScroll whenever the rows' starts don't land exactly on total-H,
+// so a dragged thumb could not reach the bottom of most pages while the wheel
+// could.
+func (f *Form) rowFromLine(n, w int) int {
+	y := 0
+	for i := range f.rows {
+		if y >= n {
+			return i
+		}
+		y += f.rowHeight(i, w)
+	}
+	return max(0, len(f.rows)-1)
 }
 
 // onScreen reports whether row i has a band — some of it drawn — in the last

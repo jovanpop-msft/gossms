@@ -180,10 +180,12 @@ func (r *HintRow) Draw(s tcell.Screen, focused bool) {
 // ---------------------------------------------------------------------------
 
 // StaticRow displays a read-only label/value pair. Still focusable (Up/Down and
-// Tab land on it, Ctrl+C copies its value); only editing is unavailable.
+// Tab land on it, Ctrl+C copies its value); only editing is unavailable. A long
+// value wraps — see drawFlat.
 type StaticRow struct {
 	label, value string
 	x, y, w      int
+	drawHeight   int // see flatHeight
 }
 
 // Static returns a read-only label/value row.
@@ -199,46 +201,75 @@ func (r *StaticRow) SetValue(v string) { r.value = v }
 // Value returns the current displayed value.
 func (r *StaticRow) Value() string { return r.value }
 
-func (r *StaticRow) Height(w int) int   { return 1 }
+func (r *StaticRow) Height(w int) int   { return flatHeight(r.value, w) }
 func (r *StaticRow) Layout(x, y, w int) { r.x, r.y, r.w = x, y, w }
 func (r *StaticRow) Focusable() bool    { return true }
 func (r *StaticRow) CopyText() string   { return r.value }
 
+// Browsable keeps the row focusable on a read-only form too, for Ctrl+C: it has
+// nothing to edit, so focus is all it ever had.
+func (r *StaticRow) Browsable() bool { return true }
+
 func (r *StaticRow) Draw(s tcell.Screen, focused bool) {
-	p := theme.Active()
-	lst := tcell.StyleDefault.Background(p.DialogBg).Foreground(p.TextDim)
-	vst := tcell.StyleDefault.Background(p.DialogBg).Foreground(p.Text)
-	if focused {
-		lst, vst = theme.StyleSelected(), theme.StyleSelected()
-		core.FillRect(s, core.Rect{X: r.x, Y: r.y, W: r.w, H: 1}, ' ', vst)
-	}
-	drawFlatValue(s, r.x, r.y, r.w, r.label, r.value, lst, vst)
+	drawFlat(s, r.x, r.y, r.w, r.label, r.value, r.drawHeight, focused)
 }
 
-// drawFlatValue renders a label/value pair as plain text: what StaticRow draws
-// and every editable row switches to under Form.SetReadOnly. Shared on purpose: a
-// gated page mixes both kinds, and two spellings of "a value you cannot change"
-// would read as two kinds of field.
+// MinDrawHeight and SetDrawHeight implement Shrinkable — see flatHeight.
+func (r *StaticRow) MinDrawHeight() int  { return 1 }
+func (r *StaticRow) SetDrawHeight(h int) { r.drawHeight = h }
+
+// drawFlat renders a label/value pair as plain text: what StaticRow draws and
+// every editable row switches to when read-only (Form.SetReadOnly or the row's
+// own SetReadOnly). Shared on purpose: a gated page mixes both kinds, and two
+// spellings of "a value you cannot change" would read as two kinds of field.
 //
 // The value never starts on LabelWidth: a label may be exactly that wide (the
 // limit TestNoPropertySheetLabelIsTruncated enforces), and drawn flush the two
 // run together ("Maximum concurrent connections0").
-func drawFlatValue(s tcell.Screen, x, y, w int, label, value string, lst, vst tcell.Style) {
+//
+// A value wider than its column wraps onto further lines under itself rather
+// than clipping: a flat row has no cursor to scroll it, so a long path (Server
+// Properties' default data/log locations, a mount point) could not be read in
+// full. drawHeight, when 1 or more, is the Shrinkable cap on those lines. A
+// focused row is highlighted across every line it draws: flat rows still take
+// focus, so Ctrl+C can copy them.
+func drawFlat(s tcell.Screen, x, y, w int, label, value string, drawHeight int, focused bool) {
+	p := theme.Active()
+	lst := tcell.StyleDefault.Background(p.DialogBg).Foreground(p.TextDim)
+	vst := tcell.StyleDefault.Background(p.DialogBg).Foreground(p.Text)
+	lines := flatLines(value, w)
+	if drawHeight >= 1 && drawHeight < len(lines) {
+		lines = lines[:drawHeight]
+	}
+	if focused {
+		lst, vst = theme.StyleSelected(), theme.StyleSelected()
+		core.FillRect(s, core.Rect{X: x, Y: y, W: w, H: len(lines)}, ' ', vst)
+	}
 	core.DrawTextClipped(s, x, y, LabelWidth, lst, label)
 	valX := flatValueX(x)
-	core.DrawTextClipped(s, valX, y, max(0, x+w-valX), vst, value)
+	for i, line := range lines {
+		core.DrawTextClipped(s, valX, y+i, max(0, x+w-valX), vst, line)
+	}
 }
+
+// flatLines is value wrapped to a flat row's value column at row width w; never
+// empty, so an empty value still takes its line.
+func flatLines(value string, w int) []string {
+	lines := core.WrapText(value, max(1, w-flatValueX(0)))
+	if len(lines) == 0 {
+		return []string{""}
+	}
+	return lines
+}
+
+// flatHeight is the height drawFlat takes for value at row width w. A row drawn
+// flat implements Shrinkable alongside it (MinDrawHeight 1, its drawHeight passed
+// to drawFlat), so a wrapped value at the form's bottom edge drops its trailing
+// lines rather than running into the hint line and button row.
+func flatHeight(value string, w int) int { return len(flatLines(value, w)) }
 
 // flatValueX is the column a flat value starts in: where the same row's text
 // sits when editable, so a row switching between the two doesn't jog its value
 // sideways. An editable row pads its label to LabelWidth and draws '[' after it,
 // text one further; TestFlatValueStartsWhereAnEditableValueDoes pins the pair.
 func flatValueX(x int) int { return x + LabelWidth + 2 }
-
-// drawFlatReadOnly is drawFlatValue in the styles a read-only row uses.
-func drawFlatReadOnly(s tcell.Screen, x, y, w int, label, value string) {
-	p := theme.Active()
-	lst := tcell.StyleDefault.Background(p.DialogBg).Foreground(p.TextDim)
-	vst := tcell.StyleDefault.Background(p.DialogBg).Foreground(p.Text)
-	drawFlatValue(s, x, y, w, label, value, lst, vst)
-}

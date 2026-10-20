@@ -301,8 +301,8 @@ declares no arm — `ALTER AUTHORIZATION` is refused on undenied roles too.
   `internal/tui/gate/names_test.go` checks object rights against
   `ProbedDatabasePermissions`, not `ProbedObjectPermissions`, so a new one would
   silently gate nothing.
-- **A read-only Properties page's grids browse; nothing else on it takes
-  focus.** A grid is how a page shows *which* row its detail rows describe, so
+- **A read-only Properties page's grids browse; its other rows take focus only
+  to be copied.** A grid is how a page shows *which* row its detail rows describe, so
   a gated page whose grids refuse focus shows only the first event, target or
   role. `propsheet.Browsable` rows (`GridRow`, `ToggleGridRow`) keep focus and
   clicks on a read-only form, and `Form.SetReadOnly` makes their grids
@@ -314,8 +314,13 @@ declares no arm — `ALTER AUTHORIZATION` is refused on undenied roles too.
   its keys edit. A read-only form is **never** `Dirty()`, whatever its rows
   say: a browsing grid runs pages' commit-the-detail-back `OnSelectRow`
   handlers, and a lossy round trip there must not turn a look into a write.
-  Text, check and select rows stay unfocusable — their values are already on
-  screen.
+  Text, check, select and radio rows drawn flat (and a read-only EditorRow)
+  are `Browsable` too, so `Ctrl+C` can copy them — reversed 2026-10-20 at the
+  user's request from "unfocusable, their values are already on screen": a
+  value on screen still could not be copied. Focus is all they get: every key,
+  click, Cut, Paste and Select All is refused while flat, so nothing can go
+  dirty. A long flat value wraps under itself (`drawFlat`) rather than
+  clipping, since there is no input box to scroll it.
 - **A renamed principal's page gate keeps asking about the old name.**
   Login, User, Role and Server Role Properties pass the name the dialog opened
   with to `withRequiresOn`, not the `namePtr` box a rename updates. The gate

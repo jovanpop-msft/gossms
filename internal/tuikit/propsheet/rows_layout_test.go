@@ -178,3 +178,32 @@ func TestFormLaysOutBelowWrappedButtons(t *testing.T) {
 		t.Errorf("line 2 = %q, want the row below the two button lines", got)
 	}
 }
+
+// A Static value wider than its column wraps under itself instead of clipping:
+// a read-only row has no cursor to scroll it into view (Server Properties'
+// default data path).
+func TestStaticRowWrapsLongValue(t *testing.T) {
+	val := "/var/opt/mssql/data/some/very/long/default/data/directory/path"
+	r := Static("Data", val)
+	w := LabelWidth + 2 + 20
+	if got, want := r.Height(w), (len(val)+19)/20; got != want {
+		t.Fatalf("Height(%d) = %d, want %d", w, got, want)
+	}
+	s := &fakeScreen{w: 100, h: 20}
+	r.Layout(0, 0, w)
+	r.Draw(s, false)
+	var b strings.Builder
+	for y := range r.Height(w) {
+		for x := flatValueX(0); x < w; x++ {
+			if c, ok := s.cells[[2]int{x, y}]; ok && c != ' ' {
+				b.WriteRune(c)
+			}
+		}
+	}
+	if b.String() != val {
+		t.Errorf("drawn value = %q, want %q", b.String(), val)
+	}
+	if got := Static("Data", "short").Height(w); got != 1 {
+		t.Errorf("short value Height = %d, want 1", got)
+	}
+}

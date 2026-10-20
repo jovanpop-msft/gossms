@@ -105,11 +105,13 @@ type ReadOnlyDrawer interface {
 
 // Browsable is implemented by a row that may still take focus on a read-only
 // form, to be looked at rather than edited: GridRow and ToggleGridRow, whose
-// selection drives the detail rows beside them. Form.SetReadOnly leaves every
-// other row unfocusable and unclickable; a Browsable row keeps both and is
-// trusted to have made itself inert through ReadOnlyDrawer (a grid goes
-// browse-only: navigates, selects and copies, activates no cell), so the form
-// still can't become dirty.
+// selection drives the detail rows beside them; a StaticRow, or a flat TextRow,
+// CheckRow, SelectRow or RadioRow, focused so Ctrl+C can copy its value; a
+// read-only EditorRow, to scroll and select. Form.SetReadOnly leaves every other row
+// unfocusable and unclickable; a Browsable row keeps both and is trusted to have
+// made itself inert through ReadOnlyDrawer (a grid goes browse-only: navigates,
+// selects and copies, activates no cell; a flat row refuses every key, click,
+// Cut and Paste), so the form still can't become dirty.
 type Browsable interface {
 	Browsable() bool
 }

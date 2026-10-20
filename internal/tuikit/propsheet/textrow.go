@@ -24,6 +24,7 @@ type TextRow struct {
 	validate  func(string) error
 	onChange  func(string)
 	untracked bool // see SetDirtyTracked
+	password  bool // a Password row: nothing to show or copy when flat
 	// drawReadOnly renders the row flat instead of as an input box (see
 	// SetDrawReadOnly). pageReadOnly is the page's own independent gate (see
 	// SetReadOnly).
@@ -32,8 +33,9 @@ type TextRow struct {
 	// width is the field's width as asked for; Layout narrows the field to what the
 	// row has room for, so an 80-column sheet doesn't draw it over the form's right
 	// border, and widens it back when it can.
-	width   int
-	x, y, w int
+	width      int
+	drawHeight int // see flatHeight
+	x, y, w    int
 }
 
 // Text returns a plain editable text row, width columns wide.
@@ -48,7 +50,7 @@ func Text(label, value string, width int) *TextRow {
 // baseline gives for free.
 func Password(label string, width int) *TextRow {
 	f := widgets.NewInputField(core.PadRight(label, LabelWidth), width, true)
-	return &TextRow{field: f, orig: "", enabled: true, width: width}
+	return &TextRow{field: f, orig: "", enabled: true, width: width, password: true}
 }
 
 // Int returns an editable integer row constrained to [min, max], with an
@@ -123,7 +125,17 @@ func (r *TextRow) SetEnabled(v bool) {
 // adding one to a plain Text row.
 func (r *TextRow) SetValidate(fn func(string) error) { r.validate = fn }
 
-func (r *TextRow) Height(w int) int { return 1 }
+func (r *TextRow) Height(w int) int {
+	if r.flat() {
+		return flatHeight(r.flatValue(), w)
+	}
+	return 1
+}
+
+// MinDrawHeight and SetDrawHeight implement Shrinkable, for a flat value that
+// wraps (see flatHeight); an input box is one line either way.
+func (r *TextRow) MinDrawHeight() int  { return 1 }
+func (r *TextRow) SetDrawHeight(h int) { r.drawHeight = h }
 func (r *TextRow) Layout(x, y, w int) {
 	r.x, r.y, r.w = x, y, w
 	r.field.SetBounds(x, y)
@@ -135,10 +147,28 @@ func (r *TextRow) Layout(x, y, w int) {
 	}
 	r.field.SetWidth(min(r.width, room))
 }
-func (r *TextRow) Focusable() bool { return r.enabled && !r.pageReadOnly }
+func (r *TextRow) Focusable() bool { return (r.enabled && !r.pageReadOnly) || r.Browsable() }
+
+// Browsable lets a flat row take focus, on a read-only form or under the page's
+// own gate, for Ctrl+C to copy its value. Every edit path refuses while flat
+// (HandleKey, HandleMouse, Cut, Paste, SelectAll), so focus costs nothing. A
+// Password row stays out: it has no value to copy.
+func (r *TextRow) Browsable() bool { return r.flat() && !r.password }
+
+// flat reports whether the row draws as a plain label/value pair (either gate).
+func (r *TextRow) flat() bool { return r.drawReadOnly || r.pageReadOnly }
+
+// flatValue is what a flat row shows: the value, and its unit after it.
+func (r *TextRow) flatValue() string {
+	v := r.field.Value()
+	if v != "" && r.unit != "" {
+		v += " " + r.unit
+	}
+	return v
+}
 
 // SetReadOnly is the page's own gate on the row, independent of the form's: the
-// value is shown, the row can't be focused, typed into or Edit'ed.
+// value is shown flat and can be focused and copied, not typed into or Edit'ed.
 // EditorRow.SetReadOnly's counterpart, set together with it by a page gating a
 // whole panel (the Steps page's non-T-SQL step). Separate fields rather than one
 // flag so whichever is set last can't cancel the other: lifting the form's
@@ -154,12 +184,8 @@ func (r *TextRow) ReadOnly() bool { return r.pageReadOnly }
 func (r *TextRow) SetDrawReadOnly(v bool) { r.drawReadOnly = v }
 
 func (r *TextRow) Draw(s tcell.Screen, focused bool) {
-	if r.drawReadOnly || r.pageReadOnly {
-		v := r.field.Value()
-		if v != "" && r.unit != "" {
-			v += " " + r.unit
-		}
-		drawFlatReadOnly(s, r.x, r.y, r.w, r.Label(), v)
+	if r.flat() {
+		drawFlat(s, r.x, r.y, r.w, r.Label(), r.flatValue(), r.drawHeight, focused)
 		return
 	}
 	r.field.Focus(focused && r.enabled)
@@ -188,7 +214,7 @@ func (r *TextRow) notifyChanged(before string) {
 }
 
 func (r *TextRow) HandleKey(ev *tcell.EventKey) bool {
-	if !r.enabled || r.pageReadOnly {
+	if !r.enabled || r.flat() {
 		return false
 	}
 	before := r.field.Value()
@@ -197,7 +223,7 @@ func (r *TextRow) HandleKey(ev *tcell.EventKey) bool {
 	return handled
 }
 func (r *TextRow) HandleMouse(ev *tcell.EventMouse) bool {
-	if !r.enabled || r.pageReadOnly {
+	if !r.enabled || r.flat() {
 		return false
 	}
 	before := r.field.Value()
@@ -205,14 +231,24 @@ func (r *TextRow) HandleMouse(ev *tcell.EventMouse) bool {
 	r.notifyChanged(before)
 	return handled
 }
-func (r *TextRow) CopyText() string { return r.field.Value() }
+
+// CopyText is the value as shown: a flat row copies its unit too ("0 %"), as
+// read; an editable row copies the bare value, which pastes back into the field.
+func (r *TextRow) CopyText() string {
+	if r.flat() {
+		return r.flatValue()
+	}
+	return r.field.Value()
+}
 
 // HasSelection and the SelectedText, Cut, Paste and SelectAll beside it forward
-// to the wrapped InputField, making TextRow a ClipboardRow.
-func (r *TextRow) HasSelection() bool   { return r.field.HasSelection() }
+// to the wrapped InputField, making TextRow a ClipboardRow. A flat row has no
+// visible selection and takes no edit: Ctrl+C copies its whole value, and Cut,
+// Paste and Select All do nothing, so focusing it to copy can't change it.
+func (r *TextRow) HasSelection() bool   { return !r.flat() && r.field.HasSelection() }
 func (r *TextRow) SelectedText() string { return r.field.SelectedText() }
 func (r *TextRow) Cut() string {
-	if !r.enabled {
+	if !r.enabled || r.flat() {
 		return ""
 	}
 	before := r.field.Value()
@@ -221,14 +257,14 @@ func (r *TextRow) Cut() string {
 	return cut
 }
 func (r *TextRow) Paste(text string) {
-	if r.enabled {
+	if r.enabled && !r.flat() {
 		before := r.field.Value()
 		r.field.Paste(text)
 		r.notifyChanged(before)
 	}
 }
 func (r *TextRow) SelectAll() {
-	if r.enabled {
+	if r.enabled && !r.flat() {
 		r.field.SelectAll()
 	}
 }
