@@ -4,13 +4,98 @@ All notable changes to goSSMS are documented in this file. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); detailed
 entries start with v0.0.2 onward.
 
-## [Unreleased]
+## [0.1.0] - 2026-10-20
+
+The first minor release: a hardening pass over the whole tool. Backup and
+restore check what they are about to do, files the tool writes are replaced
+atomically, property sheets show what is configured against what is running,
+and the permission and database-state rules follow SSMS more closely. Built on
+gosmo v0.1.0.
 
 ### Added
 
 - **Windows on ARM release binary.** `windows/arm64` is back among the release
   targets, with the same embedded icon and version info as the amd64 build
   (`go-winres` now generates a `.syso` for both architectures).
+- **Backup dialog checks.** Each destination name is unique per second; an
+  existing destination file asks before it is overwritten (skipped for URL
+  targets); compression defaults to the server setting and is pinned off on
+  Express and Web; backup types the database cannot take (log on SIMPLE or
+  with no full backup, differential with no base) are greyed with the reason,
+  and the choice follows the database. Databases backup refuses (snapshots,
+  tempdb) are not listed.
+- **Greyed options in radio boxes** (`widgets.RadioBox`): an unavailable
+  choice is skipped by the keys and the mouse.
+- **State toggle in the database menu** (Take Offline / Bring Online and
+  Detach-style entries follow the current state); the menu of a distribution
+  database matches SSMS, and it is listed under System Databases.
+- **Database Files.** Lowering a size shrinks the file and says where a shrink
+  stopped; raising it grows the file. Database snapshots show their size on
+  disk.
+- **Change Tracking columns** on databases and tables: turning on column
+  tracking for a tracked table asks first; an untracked database starts from
+  the server defaults.
+- **Login policy and unlock** ride in the same statement as the password
+  change, and policy combinations the server refuses are refused up front.
+- **Server role ratings** cover every fixed role and rate user-defined roles
+  from their grants (`role_descriptions.go`).
+- **Securables** list and revoke grants on every securable class (procedures,
+  types, certificates and the rest).
+- **Server properties** show the configured and the running value of
+  `sp_configure` options that differ, and write nothing untouched.
+- **Messages pane** jumps to the error's line in the script on Enter or
+  double-click; Script to Run starts on the selection's line.
+- **Editor**: `GoToLine`, a double-click hook, and Up/Down in an empty context
+  menu highlights the last or first item.
+- **Activity Monitor** replaces an out-of-date helper procedure copy in
+  `tempdb` and offers Update in `master` for a stale one; tempdb file bars mark
+  the log file.
+
+### Fixed
+
+- **Results To File replaced the destination with partial output** when a run
+  was stopped or failed; the file now stays as it was and the status says so.
+- **CSV export of a one-column NULL** wrote a blank line that readers drop; it
+  is written as `""`.
+- **Copying from an empty results grid** crashed; a selection that outlives
+  its rows, or ends at column 0, no longer copies or edits the wrong lines.
+- **Ctrl+click inside a Shift-selected run** did not toggle the row; selection
+  is now a range plus toggles, fast on very large results.
+- **Config files** are replaced atomically; a corrupt file is kept as a copy
+  before being overwritten (and not overwritten when it cannot be kept); stale
+  temp files are swept; a read-only file is refused; the log file is narrowed
+  from world-readable.
+- **An unknown authentication method** and a closed parent connection are
+  refused with a message instead of connecting differently; a bad port suffix
+  keeps its own instance key.
+- **Money values** keep their precision in the grid and export.
+- **Restore** verifies it is restoring the set chosen (and its checksum when
+  present); a filegroup without a first file cannot be Read-only or Default.
+- **Drop and offline drop** say which files an offline drop leaves; a forced
+  drop restores the database's access mode.
+- **Containment change** asks before it kills sessions; Query Store offers
+  only the intervals and modes the server accepts.
+- **Availability groups**: databases the join would refuse are not offered, and
+  case-different database names stay distinct; New AG offers only what the
+  version can create.
+- **Blocking and memory views**: parallel blockers show, every memory clerk
+  group is known, and the Agent job history breaks ties by instance.
+- **Properties dialogs** fit the longest value whole; long drop-down values end
+  in an ellipsis clear of the arrow; role pages count every securable class.
+- **Index options** write `PAD_INDEX` only when edited and offer nothing for
+  columnstore and memory-optimized indexes; table owner text marks an
+  inherited owner; dependency labels mark caller-dependent edges.
+- **Processor affinity** at CPU 31 stayed in range of `sp_configure`.
+- **Security Policies** in the Explorer label the disabled ones.
+- **Extended Events export** quotes names and literals through gosmo.
+- **Full-text population** retries a read chosen as a deadlock victim.
+
+### Changed
+
+- `gosmo` v0.1.0 (first minor release; boolean mode parameters are named
+  types), `shopspring/decimal` v1.6.0.
+- Code comments across `tuikit`, `activity`, `sqlparse`, `showplan` and the
+  dialogs were compacted and made consistent; no behavior change.
 
 ## [0.0.15] - 2026-10-13
 

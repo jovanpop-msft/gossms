@@ -4,26 +4,27 @@ What changed in the current goSSMS release. Detail, and every earlier release,
 is in [CHANGELOG.md](CHANGELOG.md). Questions and feedback:
 [goSSMS on Discord](https://discord.gg/7YVKzB3vZ).
 
-## v0.0.15 — 2026-10-13
+## v0.1.0 — 2026-10-20
 
 ### New
 
-- **Live Query Statistics** and **Live Execution Plan** (Activity Monitor).
-- **Replication**: publications, subscriptions, Properties, Replication Monitor.
-- New Full-Text Catalog, Index, Search Property List and Stoplist dialogs.
-- Apply names the session blocking it.
-- Restore hint for log and differential sets.
+- Windows on ARM (`windows/arm64`) binary.
+- Backup checks: unique names, overwrite prompt, compression default, types
+  greyed with the reason.
+- Database menu state toggle; distribution databases match SSMS.
+- Database Files shrink and grow; snapshot size on disk.
+- Change Tracking columns, login policy and unlock, server role ratings.
+- Messages pane jumps to the error line.
 
 ### Fixes
 
-- Failed or cancelled connect kept the wrong database in a query window.
-- Commit after a lost session now reports the rollback.
-- Whole-word search for `@id`, `#tmp` and non-ASCII words.
-- Extended Events negated filters and grouping.
-- Change Tracking disable, file sizes, and a filter hang on a lone `!`.
-- Backup set types, login CONNECT SQL grants, parallel plan CPU time.
-- Menu and toolbar hover behind dialogs.
+- Results To File no longer overwrites the file with partial output.
+- CSV export of a one-column NULL; copy from an empty grid.
+- Atomic config writes; corrupt config is kept as a copy.
+- Restore verifies the chosen backup set.
+- Availability group, Query Store, containment and filegroup validation.
+- Money precision, processor affinity, long values in properties dialogs.
 
 ### Changes
 
-- `gosmo` v0.0.17.
+- `gosmo` v0.1.0.

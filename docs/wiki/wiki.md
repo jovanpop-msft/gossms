@@ -19,16 +19,15 @@ A terminal-based SQL Server Management Studio for Linux, macOS, and Windows.
 One executable — no GUI, no installer, no SQL client tools or drivers
 required. More content here soon.
 
-Current release: **v0.0.15**. See
+Current release: **v0.1.0**. See
 [RELEASE.md](https://github.com/radix29/gossms/blob/main/RELEASE.md) for what
 changed and
 [CHANGELOG.md](https://github.com/radix29/gossms/blob/main/CHANGELOG.md) for
 the detail behind it. Supported servers: **SQL Server 2016 SP1 and later**, on
 Windows and Linux, and **Azure SQL Managed Instance**.
 
-**New in v0.0.15:** **Live Query Statistics** and Live Execution Plan,
-**Replication** publications, subscriptions and the Replication Monitor, and
-full-text creation dialogs.
+**New in v0.1.0:** Windows on ARM, backup and restore safety checks, atomic
+config writes, and Results To File that no longer overwrites on a stopped run.
 
 Questions and feedback: [goSSMS on Discord](https://discord.gg/7YVKzB3vZ).
 

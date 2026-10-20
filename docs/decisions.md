@@ -707,7 +707,7 @@ Peer credentials, easy to undo:
   subscribe to two publishers' same-named publication, and the subscriber stores
   one publisher name in two cases (`WIN10CLI` / `win10cli`).
 
-- **Live replication coverage is closed as it stands (2026-10-13)** — no
+- **Live replication coverage is closed as it stands** — no
   further runs on 2016/2017. Publisher-side and merge reads and Replication
   Monitor met real rows on 17 only (the gosmo `testdata/replication` fixture);
   win10cli\SQL2016/SQL2017 have the Replication feature not installed (Msg

@@ -72,10 +72,9 @@ work; close an item by deleting it when fixed.
   and SAS, and whether the wildcard pattern gosmo builds lists a container's
   rollover blobs, are unrun.
 - **V3 — Managed Instance low-privilege Extended Events run unfinished**
-  (t-qmi-01 refuses every login, `testgo` too, Msg 40532). Verified so far: as a `VIEW SERVER STATE` login, Sessions
-  listed, New/Start/Stop/Delete greyed "needs ALTER ANY EVENT SESSION"; MI
-  answers all nine granular event-session names through `HAS_PERMS_BY_NAME`
-  (not NULL as on 13–16), so the `gate.EventSession*` `Alt`s decide there.
+  (t-qmi-01 refuses every login, `testgo` too, Msg 40532). MI answers all nine
+  granular event-session names through `HAS_PERMS_BY_NAME` (not NULL as on
+  13–16), so the `gate.EventSession*` `Alt`s decide there.
   **Still to run:** `xeReadsOnlyByPattern` live (Watch Live Data, View
   Target Data, Merge on `system_health` — tests only so far);
   Properties read-only and browsable; the Profiler refused; then
@@ -137,10 +136,4 @@ work; close an item by deleting it when fixed.
   `FULLTEXTSERVICEPROPERTY`/`sys.fulltext_document_types` on Azure SQL
   Database (assumed); whether its `HAS_PERMS_BY_NAME` accepts the class words
   for 23/29/31 (a rejection would fail the whole database probe, not just
-  these rows). `STATISTICAL_SEMANTICS`
-  ran on 17 only (2026-10-13): win10cli's default instance has `semanticsdb`
-  registered; create, add-column, read, script and replay are in gosmo's
-  `TestLiveFullText`, and the Columns page showed True/False.
-  The follow's read was picked as a deadlock victim (Msg 1205) mid-crawl and
-  ended the task; it now retries `fullTextFollowReadRetries` reads
-  (`TestFullTextFollowRetriesAFailedRead`).
+  these rows). `STATISTICAL_SEMANTICS` ran on 17 only.

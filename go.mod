@@ -10,7 +10,7 @@ require (
 	github.com/golang-sql/sqlexp v0.1.0
 	github.com/microsoft/go-mssqldb v1.11.2
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c
-	github.com/radix29/gosmo v0.0.17
+	github.com/radix29/gosmo v0.1.0
 )
 
 require (
@@ -32,7 +32,7 @@ require (
 	github.com/jcmturner/rpc/v2 v2.0.3 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.4.1 // indirect
-	github.com/shopspring/decimal v1.5.0 // indirect
+	github.com/shopspring/decimal v1.6.0 // indirect
 	golang.org/x/crypto v0.58.0 // indirect
 	golang.org/x/net v0.61.0 // indirect
 	golang.org/x/sync v0.24.0 // indirect
@@ -41,4 +41,4 @@ require (
 	golang.org/x/text v0.43.0 // indirect
 )
 
-replace github.com/radix29/gosmo => ../gosmo
+//replace github.com/radix29/gosmo => ../gosmo

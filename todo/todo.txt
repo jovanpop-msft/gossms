@@ -1,3 +1,7 @@
+properties dialogs:
+- vertical scroll is not working properly when dragged with the mouse. cannot drag it till bottom. it is working with the mouse scroll wheel.
+- some properties that are very long you cannot see the whole value. ex server settings, database settings page -> data, log, disk space.
+
 script database security
 
 format/pretty source code. later add multuple formatting styles
@@ -52,18 +56,19 @@ go over the source files code comments and compact them. make them concise. thro
 check for go.mod updates
 commit before both projects
 
-prepare gosmo for release v0.0.17 . Update readme.md, release.md, changelog.md, and all other documentations and diagramms. the release document should contain only the changes from the last release, delete the old release. they should be summarized as bullet points and splitted in three cantegories. New, Fixes and Changes. The texts should be short an concise, the long explanation is in the changelog.md
+prepare gosmo for release v0.1.0 . Update readme.md, release.md, changelog.md, and all other documentations and diagramms. the release document should contain only the changes from the last release, delete the old release. they should be summarized as bullet points and splitted in three cantegories. New, Fixes and Changes. The texts should be short an concise, the long explanation is in the changelog.md
 do not commit or tag anything to git. 
 
 fix go.mod before, reference the new :
 
-prepare gossms for release v0.0.15. Update readme.md, release.md, changelog.md, and all other documentations and diagramms. the release document should contain only the changes from the last release, delete the old release information. they should be summarized as bullet points and splitted in three cantegories. New, Fixes and Changes. The texts should be short an concise, the long explanation is in the changelog.md
+prepare gossms for release v0.1.0. Update readme.md, release.md, changelog.md, and all other documentations and diagramms. the release document should contain only the changes from the last release, delete the old release information. they should be summarized as bullet points and splitted in three cantegories. New, Fixes and Changes. The texts should be short an concise, the long explanation is in the changelog.md
 do not commit or tag anything to git. 
 make the text in the RELEASE.md shorter and conciser. the long explanation is in CHANGELOG.md
 update the docs/dicord.md file for this release. it should be below 2000 characters.
 
 update open-threads and decisions, delete what it is done and the history. keep only what is actual.
 update the fix lists at the bottom of open threads if something was already fixed.
+check decision.md for redundant or opossing decisions. let me chose how to solve.
 
 
 analyze the used libraries especially tcell and mssql as there were updates since first integrated and look if the changes in these libraries can improve current projects. do the same for golang 1.27.1. if you have any findings create a plan file.
