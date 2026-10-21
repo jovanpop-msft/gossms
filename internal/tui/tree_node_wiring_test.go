@@ -52,9 +52,9 @@ type nodeWiring struct {
 	// never reaches — which is why these are tolerated rather than fixed here.
 	// A *new* type is not on this list and must be named.
 	unnamed bool
-	// portableBullet records the one type whose Portable glyph is the shared
-	// bullet on purpose: NodeColumn, because '⁞' is not guaranteed to render
-	// everywhere (see objectIconPortable).
+	// portableBullet records the types whose Portable glyph is the shared
+	// bullet on purpose: NodeColumn and NodeViewColumn, because '⁞' is not
+	// guaranteed to render everywhere (see objectIconPortable).
 	portableBullet bool
 }
 
@@ -252,6 +252,8 @@ var nodeTypeWiring = map[NodeType]nodeWiring{
 	NodeFullTextStoplist:            {class: classObject},
 	NodeSearchPropertyLists:         {class: classFolder, filterable: true},
 	NodeSearchPropertyList:          {class: classObject},
+	NodeViewColumns:                 {class: classFolder},
+	NodeViewColumn:                  {class: classObject, portableBullet: true},
 	NodeLoading:                     {class: classInternal},
 	NodeError:                       {class: classInternal},
 }

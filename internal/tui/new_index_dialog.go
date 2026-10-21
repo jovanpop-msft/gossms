@@ -52,6 +52,12 @@ type nidxPrefetch struct {
 	primaryXMLNames  []string
 	fileGroups       []string
 	partitionSchemes []string
+	// onView, schemaBound and hasClustered are the indexed-view rules' inputs
+	// (checkViewRules): whether the index is on a view, whether that view is
+	// WITH SCHEMABINDING, and whether it already has its clustered index.
+	onView       bool
+	schemaBound  bool
+	hasClustered bool
 }
 
 // NewIndexDialog is the New Index creation dialog.
@@ -65,6 +71,9 @@ type NewIndexDialog struct {
 	schema string
 	table  string
 	node   *explorerNode
+	// onView is whether table names a view (nodeData.OnView), read when the
+	// page set is chosen — before the prefetch, which says so too.
+	onView bool
 
 	// rows are the widgets the pages built, read back by request(). Which exist
 	// depends on kind, so every read is nil-guarded.
@@ -80,7 +89,7 @@ func NewNewIndexDialog(app *App) *NewIndexDialog {
 	d.init(app, newObjectConfig[nidxPrefetch]{
 		title:   "New Index",
 		noun:    "Index",
-		pages:   nidxPagesFor(gosmo.IndexTypeNonClustered),
+		pages:   nidxPagesFor(gosmo.IndexTypeNonClustered, false),
 		fetch:   d.fetchPrefetch,
 		build:   d.buildPages,
 		refresh: func(sc *db.ServerConn) { d.app.explorer.ReloadFolders(sc, sameNodeAs(d.node)) },
@@ -93,20 +102,26 @@ func NewNewIndexDialog(app *App) *NewIndexDialog {
 func (d *NewIndexDialog) show(sc *db.ServerConn, node *explorerNode, kind newIndexKind) {
 	d.kind = kind
 	d.node = node
+	d.onView = node.data.OnView
 	d.dbName, d.schema, d.table = node.data.DBName, node.data.Schema, node.data.Name
 	// Script Changes opens its query window in the database the statement runs in,
 	// not the connection's default.
 	d.scriptDatabase = d.dbName
 	d.keyColumns = nil
 	d.rows = nidxRows{}
-	d.pages = nidxPagesFor(kind.typ)
+	d.pages = nidxPagesFor(kind.typ, d.onView)
 	d.newObjectDialog.show(sc)
 	d.SetHeader("Database: "+d.dbName, kind.noun+" on "+fqn(d.schema, d.table))
 }
 
 // nidxPagesFor is the page set one index type needs. Every page named here is
-// built by buildPages; a type with no use for a page doesn't list it.
-func nidxPagesFor(typ gosmo.IndexType) []string {
+// built by buildPages; a type with no use for a page doesn't list it. A view's
+// nonclustered index has no Filter page: SQL Server refuses a filtered index
+// on a view (Msg 10610).
+func nidxPagesFor(typ gosmo.IndexType, onView bool) []string {
+	if onView && typ == gosmo.IndexTypeNonClustered {
+		return []string{"General", "Included Columns", "Options", "Storage"}
+	}
 	switch typ {
 	case gosmo.IndexTypeXML:
 		return []string{"General", "XML", "Options"}
@@ -124,7 +139,7 @@ func nidxPagesFor(typ gosmo.IndexType) []string {
 }
 
 func (d *NewIndexDialog) fetchPrefetch(ctx context.Context, sc *db.ServerConn) (*nidxPrefetch, error) {
-	t, err := findTable(ctx, sc, d.dbName, d.schema, d.table)
+	t, err := findIndexed(ctx, sc, d.dbName, d.schema, d.table)
 	if err != nil {
 		return nil, err
 	}
@@ -139,11 +154,15 @@ func (d *NewIndexDialog) fetchPrefetch(ctx context.Context, sc *db.ServerConn) (
 	pf := &nidxPrefetch{columns: cols, existingNames: newNameSet(databaseCollation(t.Database()))}
 	for _, idx := range indexes {
 		pf.existingNames.Add(idx.Name)
+		pf.hasClustered = pf.hasClustered || idx.IsClustered
 	}
-	if d.kind.typ == gosmo.IndexTypeXML {
+	if v, ok := t.(*gosmo.View); ok {
+		pf.onView, pf.schemaBound = true, v.IsSchemaBound
+	}
+	if tbl, ok := t.(*gosmo.Table); ok && d.kind.typ == gosmo.IndexTypeXML {
 		// A secondary XML index is built over a primary one, which the catalog reports
 		// as an XML index with no secondary type.
-		xml, err := t.XMLIndexes(ctx)
+		xml, err := tbl.XMLIndexes(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -213,7 +232,7 @@ func (d *NewIndexDialog) buildPages(pf *nidxPrefetch) {
 // read runs against the real server under Script Changes too; only the CREATE
 // is collected.
 func (d *NewIndexDialog) createIndex(ctx context.Context, req gosmo.CreateIndexRequest) error {
-	t, err := findTable(ctx, d.sc, d.dbName, d.schema, d.table)
+	t, err := findIndexed(ctx, d.sc, d.dbName, d.schema, d.table)
 	if err != nil {
 		return err
 	}
@@ -315,6 +334,9 @@ func (d *NewIndexDialog) checkRequest(pf *nidxPrefetch) error {
 	if pf.existingNames.Has(name) && (d.rows.dropExisting == nil || !d.rows.dropExisting.Checked()) {
 		return fmt.Errorf("an index named %q already exists on %s — tick Drop existing index to replace it", name, fqn(d.schema, d.table))
 	}
+	if err := d.checkViewRules(pf); err != nil {
+		return err
+	}
 	if nidxNeedsOneColumn(d.kind.typ) && d.rows.singleColumn == nil {
 		return fmt.Errorf("%s has no %s column, which a %s needs",
 			fqn(d.schema, d.table), nidxColumnKind(d.kind.typ), strings.ToLower(d.kind.noun))
@@ -339,14 +361,43 @@ func (d *NewIndexDialog) checkRequest(pf *nidxPrefetch) error {
 	return nil
 }
 
+// checkViewRules refuses what SQL Server refuses on a view before the
+// statement goes: an index on a view without SCHEMABINDING (Msg 1939), a
+// clustered index that is not unique (Msg 1941), and a nonclustered one before
+// the view has its unique clustered index (Msg 1940). A table's index passes.
+func (d *NewIndexDialog) checkViewRules(pf *nidxPrefetch) error {
+	if !pf.onView {
+		return nil
+	}
+	view := fqn(d.schema, d.table)
+	switch {
+	case !pf.schemaBound:
+		return fmt.Errorf("%s is not schema-bound — only a view created WITH SCHEMABINDING can be indexed", view)
+	case d.kind.typ == gosmo.IndexTypeClustered && (d.rows.unique == nil || !d.rows.unique.Checked()):
+		return fmt.Errorf("a view's clustered index must be unique — tick Unique")
+	case d.kind.typ != gosmo.IndexTypeClustered && !pf.hasClustered:
+		return fmt.Errorf("%s has no unique clustered index yet — a view's first index must be one", view)
+	}
+	return nil
+}
+
+// viewIndexKinds are the New Index kinds a view takes: rowstore only.
+// Columnstore, XML and spatial indexes are table-only on SQL Server.
+var viewIndexKinds = newIndexKinds[:2]
+
 // newIndexMenuItems is the Indexes folder's "New Index >" cascade, one item per
-// index type, each opening this dialog preset to it. Every item is enabled:
-// whether a type is possible on this table (a second clustered index, an XML
-// index with no xml column) needs columns and indexes the menu has not read, so
-// the dialog says so on its General page and its preflight refuses.
+// index type, each opening this dialog preset to it — on a view's folder
+// (OnView), the two kinds a view takes. Every item is enabled: whether a type
+// is possible on this table (a second clustered index, an XML index with no
+// xml column) needs columns and indexes the menu has not read, so the dialog
+// says so on its General page and its preflight refuses.
 func (a *App) newIndexMenuItems(sc *db.ServerConn, node *explorerNode) []controls.MenuItem {
-	items := make([]controls.MenuItem, 0, len(newIndexKinds))
-	for _, kind := range newIndexKinds {
+	kinds := newIndexKinds
+	if node.data.OnView {
+		kinds = viewIndexKinds
+	}
+	items := make([]controls.MenuItem, 0, len(kinds))
+	for _, kind := range kinds {
 		items = append(items, controls.MenuItem{
 			Label:  kind.label,
 			Action: func() { a.showNewIndexDialog(sc, node, kind) },

@@ -86,6 +86,7 @@ var childLoaders = map[NodeType]childLoader{
 	NodeStatistics:       loadStatisticsChildren,
 	NodeViews:            loadViewsChildren,
 	NodeView:             loadViewChildren,
+	NodeViewColumns:      loadViewColumnsChildren,
 	NodeSystemViews:      loadSystemViewsChildren,
 	NodeStoredProcedures: loadStoredProceduresChildren,
 	NodeSystemProcedures: loadSystemProceduresChildren,

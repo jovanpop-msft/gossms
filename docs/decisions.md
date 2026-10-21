@@ -851,7 +851,15 @@ Every result below was probed with `WITHOUT LOGIN` users on 13, 14,
   "Database Triggers" (DDL, `parent_class = 0`). `Database.Triggers` is gosmo's
   database-wide read; gossms has no folder for it.
 - **A view isn't a leaf** — it carries INSTEAD OF triggers, so `NodeView` has a
-  Triggers folder. `Database.ObjectTriggers` serves both (gosmo's `View` has no
+  Triggers folder, beside its Columns (`NodeViewColumns`/`NodeViewColumn`, own
+  types so no table-column Delete/Rename is offered; issue #2), Indexes and
+  Statistics. Those two reuse the table's `NodeIndexes`/`NodeStatistics`
+  marked `nodeData.OnView` (the DDL is the same; OnView picks the extended-
+  property level and the New Index kinds); pages and dialogs, handed names
+  only, resolve table-then-view (`findIndexed`). gosmo models it SMO-style:
+  `View.Indexes`/`Statistics`/…, `Index.View()`, `Table()` nil on a view's.
+  New Index on a view offers Clustered/Non-Clustered only, no Filter page, and
+  preflights Msg 1939/1940/1941; New Statistics preflights 1940. `Database.ObjectTriggers` serves both (gosmo's `View` has no
   database back-pointer for a method of its own).
 - **The DDL family is read/enable/disable/script/drop — no New dialog**, like
   Server Triggers; a trigger body isn't form-buildable. Edit via Script Database

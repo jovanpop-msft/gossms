@@ -167,11 +167,12 @@ func TestStoredProceduresAndFunctionsAreLeaves(t *testing.T) {
 	}
 }
 
-// A view expands to exactly one folder — its triggers — and that folder must
-// carry the view's own schema and name, or its loader reads the wrong object.
-func TestViewExpandsToItsTriggers(t *testing.T) {
+// A view expands to SSMS's four folders (issue #2: its Details listed only
+// Triggers, and its columns were nowhere), and each must carry the view's own
+// schema and name, or its loader reads the wrong object.
+func TestViewExpandsToItsFolders(t *testing.T) {
 	if !hasChildren(NodeView) {
-		t.Fatal("hasChildren(NodeView) = false — the view's Triggers folder would have no expand arrow")
+		t.Fatal("hasChildren(NodeView) = false — the view's folders would have no expand arrow")
 	}
 	a := newTestApp()
 	sc := addTestConn(a, "server-one")
@@ -183,12 +184,31 @@ func TestViewExpandsToItsTriggers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("loadViewChildren: %v", err)
 	}
-	if len(children) != 1 || children[0].label != "Triggers" {
-		t.Fatalf("view children = %v, want one Triggers folder", children)
+	want := []struct {
+		label string
+		typ   NodeType
+	}{
+		{"Columns", NodeViewColumns},
+		{"Triggers", NodeTriggers},
+		{"Indexes", NodeIndexes},
+		{"Statistics", NodeStatistics},
 	}
-	got := children[0].data
-	if got.Type != NodeTriggers || got.Schema != "dbo" || got.Name != "vOrders" || got.DBName != "AdventureWorks" {
-		t.Errorf("Triggers folder data = %+v, want the view's own schema/name/database", got)
+	if len(children) != len(want) {
+		t.Fatalf("got %d view children, want %d", len(children), len(want))
+	}
+	for i, c := range children {
+		got := c.data
+		if c.label != want[i].label || got.Type != want[i].typ {
+			t.Errorf("child[%d] = %q (%v), want %q (%v)", i, c.label, got.Type, want[i].label, want[i].typ)
+		}
+		if got.Schema != "dbo" || got.Name != "vOrders" || got.DBName != "AdventureWorks" {
+			t.Errorf("%s folder data = %+v, want the view's own schema/name/database", c.label, got)
+		}
+		// Indexes and Statistics are the table's folder types, told apart by
+		// OnView: it decides the New Index kinds and the extended-property level.
+		if wantOnView := got.Type == NodeIndexes || got.Type == NodeStatistics; got.OnView != wantOnView {
+			t.Errorf("%s folder OnView = %v, want %v", c.label, got.OnView, wantOnView)
+		}
 	}
 }
 

@@ -139,7 +139,7 @@ func objectIconEmoji(t NodeType) rune {
 		return '📸'
 	case NodeTable:
 		return '▤'
-	case NodeColumn:
+	case NodeColumn, NodeViewColumn:
 		return '🏷'
 	case NodeIndex:
 		return '📇'
@@ -308,7 +308,7 @@ func objectIconSymbols(t NodeType) rune {
 		return '◍'
 	case NodeTable:
 		return '▦'
-	case NodeColumn:
+	case NodeColumn, NodeViewColumn:
 		return '⁞'
 	case NodeIndex:
 		return '⌗'
@@ -469,10 +469,11 @@ func objectIconSymbols(t NodeType) rune {
 	}
 }
 
-// objectIconPortable is the Symbols set with one substitution: Column uses
-// the plain '•' bullet, since '⁞' isn't guaranteed to render everywhere.
+// objectIconPortable is the Symbols set with one substitution: a column (a
+// table's or a view's) uses the plain '•' bullet, since '⁞' isn't guaranteed
+// to render everywhere.
 func objectIconPortable(t NodeType) rune {
-	if t == NodeColumn {
+	if t == NodeColumn || t == NodeViewColumn {
 		return '•'
 	}
 	return objectIconSymbols(t)

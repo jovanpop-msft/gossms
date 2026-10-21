@@ -2,6 +2,7 @@ package tui
 
 import (
 	"slices"
+	"strings"
 	"testing"
 
 	gosmo "github.com/radix29/gosmo"
@@ -139,5 +140,25 @@ func TestNewStatisticsRefusesADuplicateColumn(t *testing.T) {
 	}
 	if hint := formHint(t, f); hint == "" {
 		t.Error("nothing was added and the page says nothing about why")
+	}
+}
+
+// A view without its unique clustered index takes no statistics (Msg 1940),
+// so the preflight refuses before the statement goes; an indexed view's and a
+// table's pass.
+func TestNewStatisticsOnAnUnindexedViewIsRefused(t *testing.T) {
+	for _, unindexed := range []bool{true, false} {
+		pf := nstatTestPrefetch()
+		pf.unindexedView = unindexed
+		d := nstatDialog(t, pf)
+		chooseSelect(t, d.forms[0], "Column to add", "Customer")
+		clickButton(t, d.forms[0], "Add")
+		err := d.preflight()
+		if unindexed && (err == nil || !strings.Contains(err.Error(), "only on an indexed view")) {
+			t.Errorf("unindexed view: preflight = %v, want the indexed-view refusal", err)
+		}
+		if !unindexed && err != nil {
+			t.Errorf("indexed: preflight = %v, want none", err)
+		}
 	}
 }

@@ -130,12 +130,21 @@ func loadTableChildren(l loaderCtx, node *explorerNode) ([]*explorerNode, error)
 	}, nil
 }
 
-// loadViewChildren returns one view's object-family folders. A view has exactly
-// one: its INSTEAD OF triggers, which SSMS also files under the view rather
-// than under the database.
+// loadViewChildren returns one view's object-family folders, in SSMS's order:
+// its columns, its INSTEAD OF triggers (which SSMS also files under the view
+// rather than under the database), and an indexed view's indexes and
+// statistics. Those two are the table's folder types, marked OnView: every
+// index and statistic action is the same DDL on a view.
 func loadViewChildren(l loaderCtx, node *explorerNode) ([]*explorerNode, error) {
+	schema, name, dbName := node.data.Schema, node.data.Name, node.data.DBName
+	indexes := l.node("Indexes", NodeIndexes, schema, name, dbName)
+	stats := l.node("Statistics", NodeStatistics, schema, name, dbName)
+	indexes.data.OnView, stats.data.OnView = true, true
 	return []*explorerNode{
-		l.node("Triggers", NodeTriggers, node.data.Schema, node.data.Name, node.data.DBName),
+		l.node("Columns", NodeViewColumns, schema, name, dbName),
+		l.node("Triggers", NodeTriggers, schema, name, dbName),
+		indexes,
+		stats,
 	}, nil
 }
 
@@ -145,6 +154,19 @@ func tableFor(l loaderCtx, node *explorerNode) (*gosmo.Table, error) {
 	dbObj, err := l.sc.Server.DatabaseByName(l.ctx, node.data.DBName)
 	if err != nil {
 		return nil, err
+	}
+	return dbObj.TableByName(l.ctx, node.data.Schema, node.data.Name)
+}
+
+// indexedFor is tableFor for an Indexes or Statistics folder, which hangs
+// under a table or, marked OnView, a view.
+func indexedFor(l loaderCtx, node *explorerNode) (indexedObject, error) {
+	dbObj, err := l.sc.Server.DatabaseByName(l.ctx, node.data.DBName)
+	if err != nil {
+		return nil, err
+	}
+	if node.data.OnView {
+		return dbObj.ViewByName(l.ctx, node.data.Schema, node.data.Name)
 	}
 	return dbObj.TableByName(l.ctx, node.data.Schema, node.data.Name)
 }
@@ -163,13 +185,7 @@ func loadColumnsChildren(l loaderCtx, node *explorerNode) ([]*explorerNode, erro
 	}
 	out := make([]*explorerNode, 0, len(cols))
 	for _, c := range cols {
-		nullWord := "null"
-		if !c.IsNullable {
-			nullWord = "not null"
-		}
-		typ := c.TypeString()
-		label := fmt.Sprintf("%s (%s, %s)", c.Name, typ, nullWord)
-		n := l.node(label, NodeColumn, node.data.Schema, c.Name, node.data.DBName)
+		n := l.node(columnLabel(c), NodeColumn, node.data.Schema, c.Name, node.data.DBName)
 		// The owning table, as the Keys and Indexes loaders carry it: Name here is
 		// the column's own, so without this nothing downstream can say which table an
 		// ALTER TABLE ... DROP COLUMN belongs to.
@@ -178,6 +194,35 @@ func loadColumnsChildren(l loaderCtx, node *explorerNode) ([]*explorerNode, erro
 		out = append(out, n)
 	}
 	return out, nil
+}
+
+// loadViewColumnsChildren returns one view's columns, read by name through
+// gosmo's Database.ObjectColumns (a View carries no Columns method). They are
+// NodeViewColumn, not NodeColumn: a view's column has no Delete or Rename.
+// TableName carries the view's name, as a table column's carries its table's.
+func loadViewColumnsChildren(l loaderCtx, node *explorerNode) ([]*explorerNode, error) {
+	dbObj, err := l.sc.Server.DatabaseByName(l.ctx, node.data.DBName)
+	if err != nil {
+		return nil, err
+	}
+	return listChildren(
+		func() ([]*gosmo.Column, error) {
+			return dbObj.ObjectColumns(l.ctx, node.data.Schema, node.data.Name)
+		},
+		func(c *gosmo.Column) *explorerNode {
+			n := l.node(columnLabel(c), NodeViewColumn, node.data.Schema, c.Name, node.data.DBName)
+			n.data.TableName = node.data.Name
+			return n
+		})
+}
+
+// columnLabel is a column node's label: "name (type, null|not null)".
+func columnLabel(c *gosmo.Column) string {
+	nullWord := "null"
+	if !c.IsNullable {
+		nullWord = "not null"
+	}
+	return fmt.Sprintf("%s (%s, %s)", c.Name, c.TypeString(), nullWord)
 }
 
 // loadKeysChildren returns one table's Keys folder: its primary key and
@@ -228,9 +273,9 @@ func loadConstraintsChildren(l loaderCtx, node *explorerNode) ([]*explorerNode, 
 		})
 }
 
-// loadIndexesChildren returns one table's Indexes folder.
+// loadIndexesChildren returns one table's or view's Indexes folder.
 func loadIndexesChildren(l loaderCtx, node *explorerNode) ([]*explorerNode, error) {
-	table, err := tableFor(l, node)
+	table, err := indexedFor(l, node)
 	if err != nil {
 		return nil, err
 	}
@@ -242,6 +287,7 @@ func loadIndexesChildren(l loaderCtx, node *explorerNode) ([]*explorerNode, erro
 	for _, idx := range indexes {
 		n := l.node(indexNodeLabel(idx), NodeIndex, node.data.Schema, idx.Name, node.data.DBName)
 		n.data.TableName = node.data.Name
+		n.data.OnView = node.data.OnView
 		out = append(out, n)
 	}
 	return out, nil
@@ -267,9 +313,9 @@ func indexNodeLabel(idx *gosmo.Index) string {
 	return fmt.Sprintf("%s (%s)", idx.Name, kind)
 }
 
-// loadStatisticsChildren returns one table's Statistics folder.
+// loadStatisticsChildren returns one table's or view's Statistics folder.
 func loadStatisticsChildren(l loaderCtx, node *explorerNode) ([]*explorerNode, error) {
-	table, err := tableFor(l, node)
+	table, err := indexedFor(l, node)
 	if err != nil {
 		return nil, err
 	}
@@ -277,6 +323,7 @@ func loadStatisticsChildren(l loaderCtx, node *explorerNode) ([]*explorerNode, e
 		func(st *gosmo.Statistic) *explorerNode {
 			n := l.node(st.Name, NodeStatistic, node.data.Schema, st.Name, node.data.DBName)
 			n.data.TableName = node.data.Name
+			n.data.OnView = node.data.OnView
 			return n
 		})
 }
@@ -508,7 +555,7 @@ func foreignKeyMenuItems(a *App, sc *db.ServerConn, node *explorerNode, newQuery
 
 func indexMenuItems(a *App, sc *db.ServerConn, node *explorerNode, newQuery, refresh controls.MenuItem) []controls.MenuItem {
 	return propertiesOnlyMenu(newQuery, refresh, func() {
-		a.showIndexPropertiesFor(sc, node.data.DBName, node.data.Schema, node.data.TableName, node.data.Name)
+		a.showIndexPropertiesFor(sc, node.data.DBName, node.data.Schema, node.data.TableName, node.data.Name, node.data.OnView)
 	})
 }
 
@@ -548,7 +595,7 @@ func statisticMenuItems(a *App, sc *db.ServerConn, node *explorerNode, newQuery,
 		{Divider: true},
 		refresh,
 		{Label: "Properties...", Action: func() {
-			a.showStatisticPropertiesFor(sc, node.data.DBName, node.data.Schema, node.data.TableName, node.data.Name)
+			a.showStatisticPropertiesFor(sc, node.data.DBName, node.data.Schema, node.data.TableName, node.data.Name, node.data.OnView)
 		}},
 	}
 }

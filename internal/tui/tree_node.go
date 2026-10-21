@@ -216,6 +216,11 @@ const (
 	NodeFullTextStoplist
 	NodeSearchPropertyLists
 	NodeSearchPropertyList
+	// NodeViewColumns and NodeViewColumn are a view's Columns folder and its
+	// columns: types of their own, not NodeColumns/NodeColumn, because every
+	// table-column action (Delete, Rename) is ALTER TABLE, which a view refuses.
+	NodeViewColumns
+	NodeViewColumn
 	NodeLoading
 	NodeError
 
@@ -231,7 +236,7 @@ func isContainerNode(t NodeType) bool {
 	switch t {
 	case NodeDatabases, NodeSystemDatabases, NodeDatabaseSnapshots, NodeTables,
 		NodeSystemTables, NodeFileTables, NodeExternalTables, NodeGraphTables,
-		NodeColumns, NodeKeys, NodeIndexes,
+		NodeColumns, NodeViewColumns, NodeKeys, NodeIndexes,
 		NodeStatistics, NodeViews, NodeSystemViews,
 		NodeStoredProcedures, NodeSystemProcedures, NodeFunctions, NodeSystemFunctions,
 		NodeSecurity, NodeLogins,
@@ -317,6 +322,8 @@ func nodeTypeName(t NodeType) string {
 		return "Server Trigger"
 	case NodeDatabaseTrigger:
 		return "Database Trigger"
+	case NodeViewColumn:
+		return "View Column"
 	case NodeEndpoint:
 		return "Endpoint"
 	case NodeAvailabilityGroup:
@@ -415,7 +422,7 @@ func nodeTypeName(t NodeType) string {
 // hasChildren reports whether this node type can ever have children.
 func hasChildren(t NodeType) bool {
 	switch t {
-	case NodeColumn, NodeLogin, NodeUser, NodeServerRole, NodeDatabaseRole,
+	case NodeColumn, NodeViewColumn, NodeLogin, NodeUser, NodeServerRole, NodeDatabaseRole,
 		NodeCredential, NodeDatabaseScopedCredential, NodeCertificate,
 		NodeAsymmetricKey, NodeSymmetricKey, NodeMasterKey, NodeCryptographicProvider,
 		NodeAudit, NodeServerAuditSpecification,
@@ -460,11 +467,16 @@ func hasChildren(t NodeType) bool {
 // the dialog "Primary Key Properties" vs. "Unique Key Properties" without
 // another round trip.
 type nodeData struct {
-	Type         NodeType
-	Schema       string
-	Name         string
-	TableName    string
-	DBName       string
+	Type      NodeType
+	Schema    string
+	Name      string
+	TableName string
+	DBName    string
+	// OnView marks a view's Indexes and Statistics folders and their leaves,
+	// where TableName (or the folder's Name) is the view's: what an index or
+	// statistic is on decides the extended-property level (VIEW, not TABLE)
+	// and which New Index kinds the folder offers, before anything is read.
+	OnView       bool
 	Loaded       bool
 	IsPrimaryKey bool
 	IsOffline    bool

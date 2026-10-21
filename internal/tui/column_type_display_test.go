@@ -73,3 +73,35 @@ func TestColumnTypeReadsTheSameInTreeAndTableProperties(t *testing.T) {
 		}
 	}
 }
+
+// A view's Columns folder reads through Database.ObjectColumns (by name — a
+// View has no Columns method) and labels its columns as a table's are. They
+// are NodeViewColumn, which has no Delete or Rename: both are ALTER TABLE,
+// which a view refuses.
+func TestViewColumnsLoadAndOfferNoTableColumnOps(t *testing.T) {
+	cols := typedColumnResp()
+	cols.match = "OBJECT_ID(@p1)"
+	cols.arg = "[" + idxSchema + "].[vOrders]"
+	sc, _ := newFakeConn(t, dbByNameResp(idxDatabase, 5), cols)
+	l := loaderCtx{ctx: t.Context(), sc: sc}
+	children, err := loadViewColumnsChildren(l, &explorerNode{data: nodeData{
+		Type: NodeViewColumns, DBName: idxDatabase, Schema: idxSchema, Name: "vOrders", conn: sc}})
+	if err != nil {
+		t.Fatalf("loadViewColumnsChildren: %v", err)
+	}
+	want := []string{"PlacedAt (datetime2(0), null)", "ContactPhone ([sales].[Phone], null)"}
+	if len(children) != len(want) {
+		t.Fatalf("got %d column nodes, want %d", len(children), len(want))
+	}
+	for i, c := range children {
+		if c.label != want[i] {
+			t.Errorf("column %d label = %q, want %q", i, c.label, want[i])
+		}
+		if c.data.Type != NodeViewColumn || c.data.TableName != "vOrders" || c.data.Schema != idxSchema {
+			t.Errorf("column %d data = %+v, want a NodeViewColumn of %s.vOrders", i, c.data, idxSchema)
+		}
+	}
+	if op := objectOpFor(NodeViewColumn); op != nil {
+		t.Errorf("objectOpFor(NodeViewColumn) = %+v, want nil — a view column cannot be dropped or renamed", op)
+	}
+}

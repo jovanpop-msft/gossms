@@ -295,12 +295,30 @@ func credNames(creds []*gosmo.Credential) []string {
 	return names
 }
 
+// whereTarget is what a Filter page's Check Syntax and Estimate Rows run
+// against: a *gosmo.Table. A view's index or statistic has none (SQL Server
+// allows no filter on either), so for one it is nil and both buttons answer
+// "no filter expression" before reaching it.
+type whereTarget interface {
+	CheckWhereSyntax(ctx context.Context, predicate string) error
+	CountWhere(ctx context.Context, predicate string) (int64, error)
+}
+
+// whereTargetOf is t as a whereTarget, a nil interface (not one holding a
+// nil *Table) for a view's index or statistic, whose Table is nil.
+func whereTargetOf(t *gosmo.Table) whereTarget {
+	if t == nil {
+		return nil
+	}
+	return t
+}
+
 // buildFilterInfoForm builds the read-only Filter page shared by Index and
 // Statistics Properties. SQL Server accepts a filtered predicate only at CREATE
 // time, so on an existing index or statistic it is read-only, with Check
 // Syntax compiling the predicate against the table (never running it) and
 // Estimate Rows counting the rows it qualifies, live.
-func buildFilterInfoForm(d *PropDialog, t *gosmo.Table, hasFilter bool, filterDef string) *propsheet.Form {
+func buildFilterInfoForm(d *PropDialog, t whereTarget, hasFilter bool, filterDef string) *propsheet.Form {
 	statusRow := propsheet.Static("Status", "Not checked")
 	rowsRow := propsheet.Static("Estimated qualifying rows", "")
 
