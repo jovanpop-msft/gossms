@@ -1,10 +1,7 @@
 //go:build livedb
 
-// Live check of Peer's fallback to parentPeerOptions against a real Always On
-// pair: a resolver hit that won't connect (undecryptable saved password,
-// dropped login) must never leave an instance less reachable than without saved
-// credentials. peer_test.go pins the option derivation; only two real instances
-// prove the second Connect happens and works.
+// Live check of registered peer credentials against a real Always On pair:
+// a failed peer login must not retry with the parent's credentials.
 //
 //	go test -tags livedb ./internal/db/ -run TestLivePeer -v \
 //	  -live-primary ubusql1.fritz.box -live-replica ubusql2 \
@@ -13,10 +10,7 @@
 // -live-replica is spelled as sys.availability_replicas.replica_server_name, as
 // Peer receives it. Skipped without the flags.
 //
-// Run it a second time with a parent dialled by port and a peer that is another
-// named instance on the same host (-live-primary 'HOST\A,55253' -live-replica
-// 'HOST\B'): the fallback must drop the parent's port and resolve B through
-// Browser. Keeping the port connects to A again, which the name check catches.
+// The resolver's registered address, port and login are authoritative.
 package db
 
 import (
@@ -101,11 +95,9 @@ func createLivePeerLogin(t *testing.T) {
 	})
 }
 
-// A resolver answer with a wrong password must still yield a working peer via
-// the parent's credentials (Login proves which).
-func TestLivePeerFallsBackToTheParentCredentials(t *testing.T) {
-	createLivePeerLogin(t)
+func TestLivePeerDoesNotFallBackToTheParentCredentials(t *testing.T) {
 	parent := liveParent(t)
+	createLivePeerLogin(t)
 
 	broken := liveOpts(*liveReplica, livePeerLogin, "wrong-password")
 	parent.SetPeerCredentials(func(server string) (config.Connection, bool) {
@@ -118,36 +110,19 @@ func TestLivePeerFallsBackToTheParentCredentials(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	peer, err := parent.Peer(ctx, *liveReplica)
-	if err != nil {
-		t.Fatalf("Peer(%q) = %v, want the parentPeerOptions retry to connect", *liveReplica, err)
+	if err == nil || peer != nil {
+		t.Fatalf("Peer(%q) = %v, %v; want the registered login's failure, not a fallback", *liveReplica, peer, err)
 	}
-	if peer == parent {
-		t.Fatal("Peer returned the parent connection; the replica name was read as self")
-	}
-	if !strings.EqualFold(peer.Server.Info().Login, *liveUser) {
-		t.Errorf("the peer is authenticated as %q, want the parent's %q — the retry did not use parentPeerOptions",
-			peer.Server.Info().Login, *liveUser)
-	}
-	if name := peer.Server.Name(); !strings.EqualFold(name, config.InstanceKey(*liveReplica)) &&
-		!strings.EqualFold(name, *liveReplica) {
-		t.Errorf("the peer is connected to %q, want %q", name, *liveReplica)
-	}
-	// The fallback peer is cached and credentialled like any other, or the next
-	// expansion repeats the failed attempt.
 	again, err := parent.Peer(ctx, *liveReplica)
-	if err != nil || again != peer {
-		t.Errorf("the second Peer(%q) = %p, %v; want the cached %p", *liveReplica, again, err, peer)
-	}
-	if parent.peerCredentials() == nil || peer.peerCredentials() == nil {
-		t.Error("the resolver did not reach the peer opened by the fallback")
+	if err == nil || again != nil {
+		t.Errorf("the second Peer(%q) = %v, %v; want the cached failure", *liveReplica, again, err)
 	}
 }
 
-// A working resolver hit is used as given, so the fallback isn't the only path;
-// otherwise a Peer ignoring the resolver would pass the test above.
+// A registered peer with a working login remains reachable.
 func TestLivePeerPrefersAWorkingResolverHit(t *testing.T) {
-	createLivePeerLogin(t)
 	parent := liveParent(t)
+	createLivePeerLogin(t)
 
 	parent.SetPeerCredentials(func(server string) (config.Connection, bool) {
 		if config.InstanceKey(server) == config.InstanceKey(*liveReplica) {
