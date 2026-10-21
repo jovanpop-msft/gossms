@@ -6,6 +6,7 @@ import (
 	"unicode"
 
 	"github.com/radix29/gossms/internal/tuikit/core"
+	"github.com/radix29/gossms/internal/tuikit/sqltext"
 )
 
 // ---------------------------------------------------------------------------
@@ -485,6 +486,15 @@ func (e *Editor) SelectedLinesText() (text string, ok bool) {
 		sb.WriteString(string(e.doc.Line(r)))
 	}
 	return sb.String(), true
+}
+
+// SQLLineState returns the SQL lexer state line row begins in — inside a string,
+// comment or quoted identifier carried over from the lines above, or
+// sqltext.ModeNormal — as the SQL highlighter colours it. A line-oriented rewrite
+// of SQL checks it before treating the line as code. Cached per document version,
+// so a repeat costs nothing and an edit costs only the lines whose state changed.
+func (e *Editor) SQLLineState(row int) sqltext.State {
+	return e.sqlStarts.at(e.doc, row, sqltext.State{}, sqltext.LineEnd)
 }
 
 // ReplaceSelectedLines replaces the lines SelectedLinesText returns with text as

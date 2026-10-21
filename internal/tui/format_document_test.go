@@ -305,3 +305,88 @@ func TestFormatDocumentAsyncRepeatSupersedes(t *testing.T) {
 		t.Fatalf("text = %q, want the second run's OUT2", got)
 	}
 }
+
+// selectLines selects whole lines from..to (0-based) of qp's editor.
+func selectLines(qp *QueryPanel, from, to int) {
+	e := qp.editor
+	e.HandleKey(tcell.NewEventKey(tcell.KeyHome, "", tcell.ModCtrl))
+	for range from {
+		e.HandleKey(tcell.NewEventKey(tcell.KeyDown, "", tcell.ModNone))
+	}
+	for range to - from {
+		e.HandleKey(tcell.NewEventKey(tcell.KeyDown, "", tcell.ModShift))
+	}
+	e.HandleKey(tcell.NewEventKey(tcell.KeyEnd, "", tcell.ModShift))
+}
+
+// A selection whose lines lie inside a string, comment or CDATA section that
+// began above it is refused, and the text is unchanged. Cut out of the
+// document those lines lex as code, so formatting them on their own passed
+// the guard and silently rewrote the value.
+func TestFormatDocumentSelectionInsideValueIsRefused(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		lang format.Language
+		src  string
+		from int
+		to   int
+		want string
+	}{
+		{"SQL literal", format.LangSQL, "SELECT N'header\n   select a,b from t\nfooter' AS template;", 1, 1,
+			"Format failed: the selection starts inside a string, comment or quoted identifier"},
+		{"SQL block comment", format.LangSQL, "/* note\n   select a,b from t\n*/\nselect 1", 1, 1,
+			"Format failed: the selection starts inside a string, comment or quoted identifier"},
+		// Ends inside a literal: the selection's own lexing already refuses it.
+		{"SQL literal opened in the selection", format.LangSQL, "select 1\nselect N'x\n   select a,b from t\n'", 1, 2,
+			"Format failed: selection does not lex as SQL: line 2 col 9: unterminated string literal"},
+		{"XML CDATA", format.LangXML, "<r><![CDATA[\n<a><b>x</b></a>\n]]></r>", 1, 1,
+			"Format failed: the selection starts or ends inside a string, comment or CDATA section"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			a, qp := newFormatTestPanel(t, c.lang, c.src)
+			selectLines(qp, c.from, c.to)
+			a.formatActiveDocument()
+			if got := qp.editor.Text(); got != c.src || a.statusText != c.want {
+				t.Errorf("text = %q, status = %q; want unchanged and %q", got, a.statusText, c.want)
+			}
+		})
+	}
+}
+
+// The document check also runs on the asynchronous path, and an ordinary
+// selection still formats there and on the synchronous one.
+func TestFormatDocumentSelectionInsideValueIsRefusedAsync(t *testing.T) {
+	const src = "SELECT N'header\nselect a,b from t\nfooter' AS template;\nselect a,b from t"
+	for _, async := range []bool{false, true} {
+		if async {
+			old := formatSyncBytes
+			formatSyncBytes = -1
+			t.Cleanup(func() { formatSyncBytes = old })
+		}
+		run := func(a *App) {
+			a.formatActiveDocument()
+			if async {
+				waitAndDrain(t, a)
+			}
+		}
+		// The XML case reaches the document guard; the SQL one is refused
+		// before formatting starts.
+		const xml = "<r><![CDATA[\n<a><b>x</b></a>\n]]></r>"
+		a, qp := newFormatTestPanel(t, format.LangXML, xml)
+		selectLines(qp, 1, 1)
+		run(a)
+		if got := qp.editor.Text(); got != xml || !strings.Contains(a.statusText, "inside a string, comment or CDATA") {
+			t.Errorf("async=%v XML: text = %q, status = %q", async, got, a.statusText)
+		}
+
+		a, qp = newFormatTestPanel(t, format.LangSQL, src)
+		selectLines(qp, 3, 3)
+		run(a)
+		ind := strings.Repeat(" ", qp.editor.IndentWidth())
+		lead := strings.Repeat(" ", qp.editor.IndentWidth()-2) + ", "
+		want := "SELECT N'header\nselect a,b from t\nfooter' AS template;\nSELECT\n" + ind + "a\n" + lead + "b\nFROM t"
+		if got := qp.editor.Text(); got != want {
+			t.Errorf("async=%v control: text = %q, want %q (status %q)", async, got, want, a.statusText)
+		}
+	}
+}

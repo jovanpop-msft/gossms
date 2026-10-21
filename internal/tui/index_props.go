@@ -282,7 +282,8 @@ func pageIndexOptions(sc *db.ServerConn, dbName, schema, table, name string) pro
 				ignoreDupRow = propsheet.Check("Ignore duplicate keys", idx.IgnoreDupKey)
 				rows = append(rows, ignoreDupRow)
 			}
-			rows = append(rows, rowLocksRow, pageLocksRow)
+			rows = append(rows, rowLocksRow, pageLocksRow,
+				propsheet.Static("Incremental statistics", boolStr(idx.StatisticsIncremental)))
 			rows = append(rows, rebuild.compressionRows()...)
 			f := propsheet.NewForm(rows...)
 

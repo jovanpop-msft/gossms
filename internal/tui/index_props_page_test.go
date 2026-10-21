@@ -42,7 +42,7 @@ func idxTableResp() fakeResponse {
 // idxListResp answers Table.indexList with one index. The scan order is
 // sys.indexes' own; see gosmo's table.go.
 func idxListResp(name string, indexID int64, opts indexFixture) fakeResponse {
-	return fakeResponse{match: "FROM   sys.indexes i", db: idxDatabase, cols: 38, rows: [][]driver.Value{{
+	return fakeResponse{match: "FROM   sys.indexes i", db: idxDatabase, cols: 39, rows: [][]driver.Value{{
 		name, indexID, opts.typeDesc,
 		opts.unique, opts.primaryKey, opts.uniqueConstraint, false, opts.hypothetical,
 		opts.fillFactor, opts.filter,
@@ -50,7 +50,7 @@ func idxListResp(name string, indexID int64, opts indexFixture) fakeResponse {
 		// Per-partition compression, a FOR JSON list; one partition here.
 		`[{"n":1,"c":"` + opts.compression + `"}]`,
 		"PRIMARY", int64(0), true, "",
-		opts.noRecompute, false,
+		opts.noRecompute, opts.statsIncremental, false,
 		int64(0), int64(0),
 		// The XML and selective XML forms and spatial tessellation
 		// columns, all zero.
@@ -73,6 +73,7 @@ type indexFixture struct {
 	pageLocks        bool
 	compression      string
 	noRecompute      bool
+	statsIncremental bool
 	hypothetical     bool
 }
 
@@ -199,6 +200,28 @@ func TestIndexOptionsOnAConstraintBackedIndexNeverSendsIgnoreDupKey(t *testing.T
 // TestIndexOptionsWritesNothingWhenUntouched. Every row on this page is
 // populated from the server, and a page that mistook "loaded" for "edited"
 // would rebuild an index on an Apply the user made for a different page.
+// TestIndexOptionsShowsIncrementalStatistics: STATISTICS_INCREMENTAL comes
+// from sys.stats, not sys.indexes, and is shown read-only.
+func TestIndexOptionsShowsIncrementalStatistics(t *testing.T) {
+	for _, on := range []bool{false, true} {
+		fx := plainIndex()
+		fx.statsIncremental = on
+		_, _, form := loadIndexOptions(t, fx)
+		var got *propsheet.StaticRow
+		for _, r := range form.Rows() {
+			if sr, ok := r.(*propsheet.StaticRow); ok && sr.Label() == "Incremental statistics" {
+				got = sr
+			}
+		}
+		if got == nil {
+			t.Fatal("no Incremental statistics row")
+		}
+		if want := boolStr(on); got.Value() != want {
+			t.Errorf("Incremental statistics = %q, want %q", got.Value(), want)
+		}
+	}
+}
+
 func TestIndexOptionsWritesNothingWhenUntouched(t *testing.T) {
 	inst, apply, _ := loadIndexOptions(t, plainIndex())
 

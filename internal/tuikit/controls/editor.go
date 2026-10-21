@@ -7,6 +7,7 @@ import (
 
 	"github.com/gdamore/tcell/v3"
 	"github.com/radix29/gossms/internal/tuikit/core"
+	"github.com/radix29/gossms/internal/tuikit/sqltext"
 )
 
 // ---------------------------------------------------------------------------
@@ -140,6 +141,10 @@ type Editor struct {
 	// through the OS clipboard from ordinary multi-line text, pasting it back
 	// rectangularly. Cleared by any non-block copy.
 	blockClip string
+
+	// sqlStarts is SQLLineState's cache, separate from the SQL highlighter's: that
+	// one lives in its closure, and an Editor showing XML has none.
+	sqlStarts prefixStates[sqltext.State]
 
 	// sbDragging latches a scrollbar-thumb drag. Separate from mouseDragging: once
 	// set, every Button1 event controls the bar regardless of x.

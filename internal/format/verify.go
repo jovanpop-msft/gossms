@@ -15,6 +15,13 @@ import (
 // formatter without its guard can't ship output.
 func verify(l Language, in, out string) error { return verifyLexed(l, in, nil, out) }
 
+// Verify is the guard Format runs, for a caller that formatted part of a
+// document and must check the result in the whole one: a selection that starts
+// inside a string, comment or CDATA section above it passes the guard on its
+// own (it lexes as code) yet rewrites that value in place. It returns nil or
+// an error wrapping ErrGuard.
+func Verify(l Language, before, after string) error { return verify(l, before, after) }
+
 // verifyLexed is verify with in's SQL lexing already done (inLex, from
 // lexSQL(in)); nil lexes in here.
 func verifyLexed(l Language, in string, inLex *sqlLexed, out string) error {

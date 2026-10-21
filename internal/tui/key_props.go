@@ -119,6 +119,7 @@ func pageKeyOptions(sc *db.ServerConn, dbName, schema, table string, name *strin
 			rows := []propsheet.Row{
 				propsheet.Section("Key options"),
 				rebuild.fillFactor, rebuild.pad, rowLocksRow, pageLocksRow,
+				propsheet.Static("Incremental statistics", boolStr(idx.StatisticsIncremental)),
 			}
 			f := propsheet.NewForm(append(rows, rebuild.compressionRows()...)...)
 

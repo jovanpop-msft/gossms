@@ -1391,7 +1391,11 @@ it from the string 'NULL'.
 - **One undo step** (`Editor.ReplaceText`/`ReplaceSelectedLines`; `SetText`
   resets history). A selection formats its whole lines, re-indented at the
   first line's indent *before* the guard (`Options.LineIndent`) so the guard
-  sees the re-indent too. Block selection and read-only viewers: disabled.
+  sees the re-indent too. The guard then runs again on the whole document
+  with the lines replaced (`format.Verify`), because lines cut out of a
+  literal, comment or CDATA section lex as code; SQL refuses such a selection
+  up front from `Editor.SQLLineState`. Block selection and read-only viewers:
+  disabled.
 
 ## By design — not issues, do not re-raise
 

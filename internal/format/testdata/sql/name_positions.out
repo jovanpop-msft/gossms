@@ -36,3 +36,44 @@ SELECT
 FROM month m
 JOIN log (nolock) l ON l.id = m.log_id
 CROSS APPLY OPENJSON(l.msg) j
+-- Names spelled like an unreserved clause keyword or join hint, and their keyword twins.
+SELECT x
+FROM t
+ORDER BY
+    level
+  , offset DESC;
+SELECT x
+FROM t
+ORDER BY x
+OFFSET 5 ROWS FETCH NEXT 10 ROWS ONLY;
+UPDATE t
+SET output = 1
+WHERE id = 2;
+DELETE FROM t
+WHERE output = 1;
+UPDATE t
+SET a = 1
+OUTPUT inserted.id
+WHERE id = 2;
+SELECT log.msg
+FROM (
+    VALUES (1)
+) AS log(msg);
+SELECT *
+FROM t
+CROSS APPLY dbo.f(a.id) AS log(msg);
+SELECT *
+FROM (
+    SELECT 1 a
+) count(a);
+CREATE TABLE part (c INT) ON day (c);
+SELECT *
+FROM t hash
+JOIN u ON hash.id = u.id;
+SELECT *
+FROM t
+INNER HASH JOIN u ON t.id = u.id;
+SELECT
+    CAST(x AS CHAR(10))
+  , TRIM(' ' FROM LEFT(s, 3))
+FROM t;

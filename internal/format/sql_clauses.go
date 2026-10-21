@@ -443,7 +443,7 @@ func (l *sqlLayout) clause(i int, o *sqlFrame) bool {
 			return true
 		}
 	case "OUTPUT":
-		if dmlKinds[s.kind] {
+		if dmlKinds[s.kind] && l.clauseWord(i) {
 			s.act, base = false, o.base
 			line("OUTPUT")
 			l.list(o, l.nextC[i], base, outputEnds, false)
@@ -456,7 +456,7 @@ func (l *sqlLayout) clause(i int, o *sqlFrame) bool {
 			return true
 		}
 	case "OFFSET":
-		if s.clause == "ORDER BY" {
+		if s.clause == "ORDER BY" && l.clauseWord(i) {
 			line("OFFSET")
 			return true
 		}
@@ -525,11 +525,65 @@ func (l *sqlLayout) clause(i int, o *sqlFrame) bool {
 	return false
 }
 
+// clauseWord reports whether word i, spelled like a clause keyword that is
+// not reserved (OUTPUT, OFFSET), can be one where it stands: no operand is
+// due before it and its neighbor after is no operator or list punctuation.
+// SET output = 1, WHERE output = 1 and ORDER BY level, offset DESC name a
+// column; OUTPUT inserted.id and OFFSET 5 ROWS begin a clause.
+func (l *sqlLayout) clauseWord(i int) bool {
+	return !l.operandDue(i) && !l.valueNext(i)
+}
+
+// operandDue reports whether the code token before word i leaves an operand
+// to come: ",", "(", an operator, or a word an expression or assignment
+// follows.
+func (l *sqlLayout) operandDue(i int) bool {
+	p := l.tok(l.prevC[i])
+	if p.kind == sqltext.KindPunct {
+		return p.text == "," || p.text == "(" || cmpOp(p.text) || arithOp(p.text)
+	}
+	switch p.up {
+	case "SET", "SELECT", "WHERE", "AND", "OR", "NOT", "ON", "BY", "WHEN", "THEN", "ELSE":
+		return true
+	}
+	return false
+}
+
+// valueNext reports whether the code token after word i is one no keyword
+// comes before — an operator, ",", ")", ";", "." or the end of the
+// statement — so i is a name or a value whatever its spelling.
+func (l *sqlLayout) valueNext(i int) bool {
+	n := l.nextC[i]
+	if n < 0 || l.start[n] {
+		return true
+	}
+	t := &l.t[n]
+	if t.kind != sqltext.KindPunct {
+		return false
+	}
+	switch t.text {
+	case ",", ")", ";", ".":
+		return true
+	}
+	return cmpOp(t.text) || arithOp(t.text)
+}
+
+// joinHint reports whether word i is a join hint: HASH, LOOP, MERGE or
+// REMOTE between a join's type and JOIN. Without the type before it the
+// word is an alias (FROM t hash JOIN u).
+func (l *sqlLayout) joinHint(i int) bool {
+	switch l.prevUp(i) {
+	case "INNER", "LEFT", "RIGHT", "FULL", "OUTER":
+		return sqlJoinHints[l.t[i].up] && l.nextUp(i) == "JOIN"
+	}
+	return false
+}
+
 // joinAt reports whether word i opens a join phrase: [INNER|LEFT|RIGHT|FULL]
 // [OUTER] [hint] JOIN, CROSS JOIN|APPLY, OUTER APPLY.
 func (l *sqlLayout) joinAt(i int) bool {
 	up, nx := l.t[i].up, l.nextUp(i)
-	if sqlJoinWords[l.prevUp(i)] || sqlJoinHints[l.prevUp(i)] {
+	if p := l.prevC[i]; sqlJoinWords[l.prevUp(i)] || (p >= 0 && l.joinHint(p)) {
 		return false // inside a phrase already begun
 	}
 	switch up {
@@ -666,14 +720,22 @@ func (l *sqlLayout) text(i int) string {
 // namePos reports whether word i stands where an object name does, so that
 // a "(" after it opens a column list or a table hint rather than a call:
 // INSERT INTO log (msg), CREATE TABLE year (...), WITH rank (r) AS,
-// JOIN log (NOLOCK). A position missed here costs only casing; one wrongly
-// counted would re-case a name, so each is a place no call can stand.
+// JOIN log (NOLOCK), a row source's alias and column list (... ) AS log
+// (msg), ... ) count (a)) and CREATE TABLE ... ON scheme (col). A position
+// missed here costs only casing; one wrongly counted would re-case a name,
+// so each is a place no call can stand.
 func (l *sqlLayout) namePos(i int) bool {
 	p := l.prevC[i]
 	f, o := l.top(), l.owner()
 	cte := f == o && len(f.cases) == 0 && o.st.kind == "WITH" && o.st.clause == "CTE"
-	if l.tok(p).isPunct(",") {
+	switch pt := l.tok(p); {
+	case pt.isPunct(","):
 		return cte
+	case pt.isPunct(")"):
+		return !l.start[i] // nothing calls a function straight after ")"
+	case pt.isWord("AS"):
+		// Not a computed column, c AS YEAR(d): only a row source ends in ")".
+		return l.tok(l.prevC[p]).isPunct(")")
 	}
 	switch l.tok(p).up {
 	case "INTO", "INSERT", "TABLE", "UPDATE", "MERGE", "REFERENCES", "STATISTICS",
@@ -690,7 +752,7 @@ func (l *sqlLayout) namePos(i int) bool {
 		for k := p; k >= 0; k = l.prevC[k] {
 			if t := &l.t[k]; t.kind == sqltext.KindWord && !l.qualified(k) {
 				switch t.up {
-				case "INDEX", "STATISTICS", "GRANT", "DENY", "REVOKE":
+				case "INDEX", "STATISTICS", "GRANT", "DENY", "REVOKE", "TABLE":
 					return true
 				case "JOIN", "USING":
 					return false
@@ -751,15 +813,15 @@ func (l *sqlLayout) phraseWord(i int) bool {
 	case "APPLY":
 		return pu == "CROSS" || pu == "OUTER"
 	case "HASH", "LOOP", "REMOTE":
-		return nu == "JOIN"
+		return l.joinHint(i)
 	case "OUTPUT":
-		return (l.top() == o && dmlKinds[o.st.kind]) || o.st.kind == "MODULE"
+		return (l.top() == o && dmlKinds[o.st.kind] && l.clauseWord(i)) || o.st.kind == "MODULE"
 	case "OUT", "READONLY":
 		return o.st.kind == "MODULE"
 	case "USING":
 		return o.st.kind == "MERGE"
 	case "OFFSET":
-		return l.top() == o && o.st.clause == "ORDER BY"
+		return l.top() == o && o.st.clause == "ORDER BY" && l.clauseWord(i)
 	case "THROW":
 		return l.start[i]
 	case "RETURNS":

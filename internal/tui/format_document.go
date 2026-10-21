@@ -8,6 +8,7 @@ import (
 
 	"github.com/radix29/gossms/internal/format"
 	"github.com/radix29/gossms/internal/tuikit/controls"
+	"github.com/radix29/gossms/internal/tuikit/sqltext"
 )
 
 // canFormatActiveDocument gates Edit > Format Document (and Alt+F): a query
@@ -34,7 +35,12 @@ var formatText = format.Format
 // the first line's indent; otherwise the whole document. A parse failure or a
 // guard refusal leaves the text untouched and says why on the status bar.
 //
-// Text over formatSyncBytes is formatted off the UI goroutine. Its result
+// A selection is guarded twice: by Format on its own, and in the whole
+// document (formatJob.verifyInDocument). Lines inside a multi-line literal,
+// comment or CDATA section lex as code when cut out, so the first check alone
+// let their text be re-laid-out and upper-cased — a silent change to the value.
+//
+// A document over formatSyncBytes is formatted off the UI goroutine. Its result
 // lands only if the panel's formatRun is still current (a repeat supersedes
 // it, closing the panel abandons it) and the text and selection are as they
 // were when it started; otherwise the typing done meanwhile wins.
@@ -60,17 +66,27 @@ func (a *App) formatActiveDocument() {
 		sel: e.HasSelection(), top: e.SelectionTopRow()}
 	o := format.Options{IndentWidth: e.IndentWidth()}
 	if j.sel {
+		// Refused here for SQL with a clearer message than verifyInDocument's,
+		// which still covers XML and anything this misses.
+		if j.lang == format.LangSQL && e.SQLLineState(j.top).Mode != sqltext.ModeNormal {
+			a.setStatus("Format failed: the selection starts inside a string, comment or quoted identifier")
+			return
+		}
 		j.src, _ = e.SelectedLinesText()
+		j.full = e.Text()
 		// The formatter indents the lines it lays out, not those inside a
 		// multi-line literal or text value, before its guard checks the result.
 		o.LineIndent = leadingIndent(j.src)
 	} else {
 		j.src = e.Text()
+		j.full = j.src
 	}
 
-	if len(j.src) <= formatSyncBytes {
+	// Sized by the whole document, not the selection: verifyInDocument lexes
+	// all of it.
+	if len(j.full) <= formatSyncBytes {
 		qp.formatRun.Abandon() // this one is newer than any still running
-		out, err := formatText(j.lang, st.ID, j.src, o)
+		out, err := j.format(o)
 		a.applyFormatted(j, out, err)
 		return
 	}
@@ -80,7 +96,7 @@ func (a *App) formatActiveDocument() {
 	a.setStatus(fmt.Sprintf("Formatting as %s...", j.lang))
 	repair := func() { qp.formatRun.Done(token) }
 	a.safegoRepair("Format Document", repair, func() {
-		out, err := formatText(j.lang, st.ID, j.src, o)
+		out, err := j.format(o)
 		a.postAndWake(func() {
 			if !qp.formatRun.Done(token) {
 				return
@@ -101,10 +117,37 @@ type formatJob struct {
 	st   format.Style
 	lang format.Language
 	src  string // the text formatted: the whole document or the selected lines
+	full string // the whole document
 	doc  *controls.Document
 	ver  uint64
 	sel  bool
 	top  int // the selection's first line
+}
+
+// format formats j.src and, for a selection, checks the result in the whole
+// document.
+func (j formatJob) format(o format.Options) (string, error) {
+	out, err := formatText(j.lang, j.st.ID, j.src, o)
+	if err == nil && j.sel {
+		err = j.verifyInDocument(out)
+	}
+	return out, err
+}
+
+// verifyInDocument runs the formatter's guard on the whole document with the
+// selected lines replaced by out. It refuses what the selection's own guard
+// cannot see: a selection starting or ending inside a string, comment or CDATA
+// section, whose lines lex as code once cut out of it.
+func (j formatJob) verifyInDocument(out string) error {
+	start := 0 // byte offset of line j.top in j.full
+	for range j.top {
+		start += strings.IndexByte(j.full[start:], '\n') + 1
+	}
+	after := j.full[:start] + out + j.full[start+len(j.src):]
+	if format.Verify(j.lang, j.full, after) != nil {
+		return errors.New("the selection starts or ends inside a string, comment or CDATA section")
+	}
+	return nil
 }
 
 // current reports whether j's editor still holds the text j formatted, at the
