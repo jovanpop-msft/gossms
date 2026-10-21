@@ -492,6 +492,8 @@ gossms/
 │       ├── new_database_dialog.go # New Database — newObjectDialog config, runs CREATE DATABASE
 │       ├── new_database_pages.go  # New Database's page definitions
 │       ├── detach_database_dialog.go # Detach Database — newObjectDialog config, runs sp_detach_db and shows the files it leaves on disk
+│       ├── shrink_database_dialog.go # Shrink > Database — script-only newObjectDialog for DBCC SHRINKDATABASE, plus the Shrink cascade, size wording and WAIT_AT_LOW_PRIORITY row Shrink > Files shares
+│       ├── shrink_files_dialog.go # Shrink > Files — script-only DBCC SHRINKFILE for one file picked by type, filegroup and name: release unused space, shrink to a target MB, or EMPTYFILE
 │       ├── attach_database_dialog.go # Attach Database — browses the server for a primary .mdf, reads its file list back with DBCC CHECKPRIMARYFILE, runs CREATE DATABASE ... FOR ATTACH
 │       ├── new_login_dialog.go    # New Login — newObjectDialog config, runs CREATE LOGIN
 │       ├── new_login_pages.go     # New Login's page definitions

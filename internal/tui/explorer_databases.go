@@ -547,6 +547,9 @@ func databaseMenuItems(a *App, sc *db.ServerConn, node *explorerNode, newQuery, 
 				a.showDetachDatabaseDialog(sc, node.data.DBName)
 			}}, sc, node.data.DBName, gate.ControlDB, gate.AlterAnyDatabase), sc))
 	}
+	if shrink, ok := shrinkMenuItem(a, sc, node); ok {
+		items = append(items, shrink)
+	}
 	return append(items,
 		controls.MenuItem{Divider: true},
 		refresh,

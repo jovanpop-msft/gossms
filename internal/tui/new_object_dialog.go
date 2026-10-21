@@ -47,6 +47,12 @@ type newObjectConfig[P any] struct {
 	// refresh resyncs the Object Explorer folder the new object belongs to, once
 	// creation has succeeded.
 	refresh func(*db.ServerConn)
+	// scriptOnly makes the dialog a script generator (Shrink Database): its
+	// buttons are Script and Cancel, nothing is ever executed, and Script
+	// closes the dialog as it opens the query window — the user runs the
+	// statements from there, and a query window under a modal dialog cannot
+	// be reached (docs/ui-rules.md § Dialogs).
+	scriptOnly bool
 }
 
 // pageRequest is one outstanding OnLoadPage call, held until its prefetch
@@ -178,6 +184,7 @@ func (d *newObjectDialog[P]) init(app *App, cfg newObjectConfig[P]) {
 	d.ConfirmDiscard = d.onConfirmDiscard
 	d.OnScript = d.runScript
 	d.OnCancelApply = d.run.cancel
+	d.SetScriptOnly(cfg.scriptOnly)
 }
 
 // show opens the dialog against sc, discarding the previous showing's state: a
@@ -520,6 +527,9 @@ func (d *newObjectDialog[P]) runScript() {
 		if script.Len() == 0 {
 			d.SetMessage("No changes to script.", false)
 			return
+		}
+		if d.scriptOnly {
+			d.Dismiss()
 		}
 		d.app.openQueryWithText(sc, d.scriptDatabase, script.String())
 	})

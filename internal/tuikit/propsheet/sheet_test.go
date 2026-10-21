@@ -279,6 +279,41 @@ func TestSheetScriptButtonFiresOnScript(t *testing.T) {
 	}
 }
 
+// TestScriptOnlySheetOffersScriptAndCancel pins SetScriptOnly: the row is
+// Script then Cancel on every page, Script reaches OnScript, and nothing can
+// reach OnOK or OnApply — the dialog has nothing to run.
+func TestScriptOnlySheetOffersScriptAndCancel(t *testing.T) {
+	p := newTestSheet("General")
+	p.OnLoadPage = func(page, seq int) {}
+	p.SetScriptOnly(true)
+	p.Show()
+	p.SetPageForm(0, 1, NewForm(Static("Name", "srv01")))
+
+	var scripted, ran bool
+	p.OnScript = func() { scripted = true }
+	p.OnOK = func() { ran = true }
+	p.OnApply = func() { ran = true }
+
+	if got := p.buttonLabels(); len(got) != 2 || got[0] != "Script" || got[1] != "Cancel" {
+		t.Fatalf("buttons = %q, want [Script Cancel]", got)
+	}
+	p.setZone(zoneButtons)
+	p.btnFocus = 0
+	p.HandleKey(key(tcell.KeyEnter, tcell.ModNone))
+	if !scripted {
+		t.Fatal("Script did not call OnScript")
+	}
+	p.HandleKey(key(tcell.KeyRight, tcell.ModNone))
+	p.HandleKey(key(tcell.KeyRight, tcell.ModNone))
+	p.HandleKey(key(tcell.KeyEnter, tcell.ModNone))
+	if ran {
+		t.Fatal("a script-only sheet ran OnOK or OnApply")
+	}
+	if p.Visible() {
+		t.Error("Cancel left the sheet open")
+	}
+}
+
 // TestSheetEscapeClosesOpenDropdownInsteadOfCancelling pins down that, with
 // a SelectRow's dropdown open, Escape closes the dropdown
 // (DropDown.HandleKey consumes it) rather than the whole sheet vanishing

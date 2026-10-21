@@ -227,8 +227,8 @@ func TestDetachOnAnOnlineDatabaseDoesNotReadTheServerCatalog(t *testing.T) {
 		fakeResponse{match: "FROM sys.databases", arg: "AppDB", cols: 11, rows: [][]driver.Value{
 			{"AppDB", int64(7), "ONLINE", "FULL", int64(160), "SQL_Latin1_General_CP1_CI_AS", "SQL_Latin1_General_CP1_CI_AS", false, time.Now(), int64(0), false},
 		}},
-		fakeResponse{match: "sys.database_files", cols: 10, rows: [][]driver.Value{
-			{int64(1), "AppDB", `C:\Data\AppDB.mdf`, "ROWS", "PRIMARY", "ONLINE", int64(8192), int64(-1), int64(65536), false},
+		fakeResponse{match: "sys.database_files", cols: 11, rows: [][]driver.Value{
+			{int64(1), "AppDB", `C:\Data\AppDB.mdf`, "ROWS", "PRIMARY", "ONLINE", int64(8192), int64(-1), int64(65536), false, int64(2816)},
 		}},
 		// Deliberately not scripted: if the fallback runs anyway, this
 		// answer is wrong on purpose and the assertion below catches it.

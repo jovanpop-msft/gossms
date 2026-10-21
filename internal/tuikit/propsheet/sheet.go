@@ -58,6 +58,11 @@ var sheetButtonLabels = []string{"OK", "Cancel", "Apply", "Script Changes"}
 // generating the statements is what a user without rights to run them needs.
 var readOnlyButtonLabels = []string{"Close", "Script Changes"}
 
+// scriptOnlyButtonLabels is the row of a sheet that only ever generates
+// statements (SetScriptOnly): there is nothing for OK or Apply to run, and
+// "Changes" would misname a script of an action rather than of edits.
+var scriptOnlyButtonLabels = []string{"Script", "Cancel"}
+
 const defaultHints = "Tab Move focus   ↑↓ Navigate   F5 Refresh   Ctrl+Z Revert   Ctrl+C Copy   Esc Cancel"
 
 const pageListWidth = 24
@@ -103,6 +108,10 @@ type PropertySheet struct {
 	// mid-gesture. ModalDialog's mouseDragging can't stop that: a press on a button
 	// arms it. Cleared on the ButtonNone release.
 	dragZone focusZone
+
+	// scriptOnly swaps the button row for scriptOnlyButtonLabels on every page;
+	// see SetScriptOnly.
+	scriptOnly bool
 
 	headerLeft, headerRight string
 	hints                   string
@@ -319,8 +328,19 @@ func (p *PropertySheet) SetEditorIndentWidth(n int) {
 	}
 }
 
+// SetScriptOnly makes the sheet a script generator: its button row is Script
+// and Cancel on every page, Script calling OnScript. For a task whose
+// statements the user runs themselves, never the dialog.
+func (p *PropertySheet) SetScriptOnly(on bool) {
+	p.scriptOnly = on
+	p.btnFocus = min(p.btnFocus, len(p.buttonLabels())-1)
+}
+
 // buttonLabels is the button row for the page on screen.
 func (p *PropertySheet) buttonLabels() []string {
+	if p.scriptOnly {
+		return scriptOnlyButtonLabels
+	}
 	if p.current >= 0 && p.current < len(p.pages) && p.pages[p.current].readOnly != "" {
 		return readOnlyButtonLabels
 	}
@@ -555,7 +575,7 @@ func (p *PropertySheet) activateButton(i int) {
 		if p.OnApply != nil {
 			p.OnApply()
 		}
-	case "Script Changes":
+	case "Script Changes", "Script":
 		if p.OnScript != nil {
 			p.OnScript()
 		}

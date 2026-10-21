@@ -28,9 +28,9 @@ func filesPageResponses() []fakeResponse {
 		{match: "fg.name, fg.type_desc, fg.is_default, fg.is_read_only", cols: 13, rows: [][]driver.Value{
 			{"PRIMARY", gosmo.RowsFileGroup, true, false, int64(1), "appdb", `C:\data\appdb.mdf`, "ROWS", "ONLINE", int64(204800), int64(-1), int64(8192), false},
 		}},
-		{match: "df.file_id, df.name, df.physical_name", cols: 10, rows: [][]driver.Value{
-			{int64(1), "appdb", `C:\data\appdb.mdf`, "ROWS", "PRIMARY", "ONLINE", int64(204800), int64(-1), int64(8192), false},
-			{int64(2), "appdb_log", `C:\data\appdb_log.ldf`, "LOG", "", "ONLINE", int64(51200), int64(-1), int64(1280), false},
+		{match: "df.file_id, df.name, df.physical_name", cols: 11, rows: [][]driver.Value{
+			{int64(1), "appdb", `C:\data\appdb.mdf`, "ROWS", "PRIMARY", "ONLINE", int64(204800), int64(-1), int64(8192), false, int64(2816)},
+			{int64(2), "appdb_log", `C:\data\appdb_log.ldf`, "LOG", "", "ONLINE", int64(51200), int64(-1), int64(1280), false, int64(1024)},
 		}},
 	}
 }
@@ -123,7 +123,7 @@ func TestFilesPageWritesNothingWhenNothingChanged(t *testing.T) {
 // percentage looks like this, and the Files page's spinners are whole MB.
 func nonWholeMBFilesResponses() []fakeResponse {
 	r := filesPageResponses()
-	r[3].rows[0] = []driver.Value{int64(1), "appdb", `C:\data\appdb.mdf`, "ROWS", "PRIMARY", "ONLINE", int64(9016), int64(2000), int64(8), false}
+	r[3].rows[0] = []driver.Value{int64(1), "appdb", `C:\data\appdb.mdf`, "ROWS", "PRIMARY", "ONLINE", int64(9016), int64(2000), int64(8), false, int64(2816)}
 	return r
 }
 
@@ -214,7 +214,7 @@ func filestreamFilesResponses() []fakeResponse {
 	// extension, because that is what a real FILESTREAM file reports — measured
 	// against a FILESTREAM database on win10cli, 2026-09-05.
 	r[3].rows = append(r[3].rows, []driver.Value{
-		int64(3), "appdb_fs", `C:\data\appdb_fs`, "FILESTREAM", "fsgroup", "ONLINE", int64(0), int64(-1), int64(0), false,
+		int64(3), "appdb_fs", `C:\data\appdb_fs`, "FILESTREAM", "fsgroup", "ONLINE", int64(0), int64(-1), int64(0), false, int64(0),
 	})
 	r[2].rows = append(r[2].rows, []driver.Value{
 		"fsgroup", gosmo.FileStreamFileGroup, true, false, int64(65537), "appdb_fs", `C:\data\appdb_fs`, "FILESTREAM", "ONLINE", int64(0), int64(-1), int64(0), false,

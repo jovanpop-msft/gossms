@@ -27,6 +27,7 @@ type CheckRow struct {
 	// disabled is SetEnabled's state: see TextRow.SetEnabled.
 	disabled bool
 	validate func(bool) error
+	onChange func(bool)
 	x, y, w  int
 }
 
@@ -56,7 +57,20 @@ func (r *CheckRow) Edit(v bool) {
 	if r.disabled || r.pageReadOnly {
 		return
 	}
+	before := r.box.Checked()
 	r.box.SetChecked(v)
+	r.notifyChanged(before)
+}
+
+// SetOnChange installs a callback fired when user interaction changes the
+// state (RadioRow.SetOnChange's counterpart, for a box that drives other
+// rows). Not fired by SetChecked, which is programmatic.
+func (r *CheckRow) SetOnChange(fn func(bool)) { r.onChange = fn }
+
+func (r *CheckRow) notifyChanged(before bool) {
+	if r.onChange != nil && r.box.Checked() != before {
+		r.onChange(r.box.Checked())
+	}
 }
 
 // Label returns the row's label; a checkbox draws it inline at full width, so
@@ -117,13 +131,19 @@ func (r *CheckRow) HandleKey(ev *tcell.EventKey) bool {
 	if r.flat() {
 		return false
 	}
-	return r.box.HandleKey(ev)
+	before := r.box.Checked()
+	handled := r.box.HandleKey(ev)
+	r.notifyChanged(before)
+	return handled
 }
 func (r *CheckRow) HandleMouse(ev *tcell.EventMouse) bool {
 	if r.flat() {
 		return false
 	}
-	return r.box.HandleMouse(ev)
+	before := r.box.Checked()
+	handled := r.box.HandleMouse(ev)
+	r.notifyChanged(before)
+	return handled
 }
 func (r *CheckRow) CopyText() string {
 	if r.box.Checked() {
@@ -132,7 +152,14 @@ func (r *CheckRow) CopyText() string {
 	return "false"
 }
 func (r *CheckRow) Dirty() bool { return r.box.Checked() != r.orig }
-func (r *CheckRow) Revert()     { r.box.SetChecked(r.orig) }
+
+// Revert restores the dirty baseline and fires onChange, as RadioRow.Revert
+// does, so the rows the box drives follow it back.
+func (r *CheckRow) Revert() {
+	before := r.box.Checked()
+	r.box.SetChecked(r.orig)
+	r.notifyChanged(before)
+}
 func (r *CheckRow) Validate() error {
 	if r.validate == nil {
 		return nil

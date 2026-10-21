@@ -121,6 +121,9 @@ func (r *TextRow) SetEnabled(v bool) {
 	r.field.SetEnabled(v)
 }
 
+// Enabled reports SetEnabled's state.
+func (r *TextRow) Enabled() bool { return r.enabled }
+
 // SetValidate installs a custom validator, replacing Int's numeric one or
 // adding one to a plain Text row.
 func (r *TextRow) SetValidate(fn func(string) error) { r.validate = fn }

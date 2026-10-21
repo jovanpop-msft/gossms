@@ -135,6 +135,8 @@ type App struct {
 	backupMasterKeyDialog       *BackupMasterKeyDialog
 	regenerateMasterKeyDialog   *RegenerateMasterKeyDialog
 	detachDatabaseDialog        *DetachDatabaseDialog
+	shrinkDatabaseDialog        *ShrinkDatabaseDialog
+	shrinkFilesDialog           *ShrinkFilesDialog
 	attachDatabaseDialog        *AttachDatabaseDialog
 	newSnapshotDialog           *NewSnapshotDialog
 	fileDialog                  *dialogs.FileDialog
@@ -552,6 +554,8 @@ func (a *App) buildUI() {
 	a.backupMasterKeyDialog = registerDialog(a, NewBackupMasterKeyDialog(a))
 	a.regenerateMasterKeyDialog = registerDialog(a, NewRegenerateMasterKeyDialog(a))
 	a.detachDatabaseDialog = registerDialog(a, NewDetachDatabaseDialog(a))
+	a.shrinkDatabaseDialog = registerDialog(a, NewShrinkDatabaseDialog(a))
+	a.shrinkFilesDialog = registerDialog(a, NewShrinkFilesDialog(a))
 	a.attachDatabaseDialog = registerDialog(a, NewAttachDatabaseDialog(a))
 	a.newSnapshotDialog = registerDialog(a, NewNewSnapshotDialog(a))
 	a.fileDialog = registerDialog(a, dialogs.NewFileDialog(a.screen))

@@ -262,3 +262,29 @@ func TestDisabledSelectAndCheckRowsRefuseEdits(t *testing.T) {
 		t.Fatal("re-enabled rows refuse Edit")
 	}
 }
+
+// A CheckRow driving other rows has to tell them on Space, on Edit and on
+// Revert — and not on SetChecked, which is the page loading its baseline.
+func TestCheckRowOnChangeFiresOnUserChangesOnly(t *testing.T) {
+	r := Check("Reorganize", false)
+	r.box.Focus(true)
+	var seen []bool
+	r.SetOnChange(func(v bool) { seen = append(seen, v) })
+
+	r.HandleKey(tcell.NewEventKey(tcell.KeyRune, " ", tcell.ModNone))
+	r.Edit(false)
+	r.Edit(false) // no change, no call
+	r.SetChecked(true)
+	r.Edit(false)
+	r.Revert()
+
+	want := []bool{true, false, false, true}
+	if len(seen) != len(want) {
+		t.Fatalf("onChange saw %v, want %v", seen, want)
+	}
+	for i := range want {
+		if seen[i] != want[i] {
+			t.Fatalf("onChange saw %v, want %v", seen, want)
+		}
+	}
+}
