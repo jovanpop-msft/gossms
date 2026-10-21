@@ -186,7 +186,6 @@ func NewConnectDialog(app *App) *ConnectDialog {
 	d.ddEncrypt = widgets.NewDropDown(label("Encrypt"), encryptItems, connectValueWidth)
 	d.setEncryptMode(config.EncryptMandatory)
 	d.cbTrust = widgets.NewCheckBox("Trust Server Certificate")
-	d.cbTrust.SetChecked(true)
 	d.fHostCert = widgets.NewInputField(label("Host Name In Certificate"), connectValueWidth, false)
 
 	d.fExtraProps = controls.NewEditor(nil)
@@ -438,7 +437,7 @@ func (d *ConnectDialog) buttonsDisabled() []bool {
 }
 
 // resetForm clears the right pane to its built state: empty fields, SQL
-// Server Authentication, Trust Server Certificate on, Encrypt Mandatory,
+// Server Authentication, Trust Server Certificate off, Encrypt Mandatory,
 // Remember Password off. History is left alone.
 //
 // The emptied Server field is what Show reads to decide on a History
@@ -454,7 +453,7 @@ func (d *ConnectDialog) resetForm() {
 	d.fHostCert.SetValue("")
 	d.fExtraProps.SetText("")
 	d.cbRemember.SetChecked(false)
-	d.cbTrust.SetChecked(true)
+	d.cbTrust.SetChecked(false)
 	d.ddAuth.SetSelected(0)
 	d.setEncryptMode(config.EncryptMandatory)
 	d.setTab(connectTabProperties)
