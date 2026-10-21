@@ -152,6 +152,12 @@ method does not use are greyed out.
 Sessions appear on the server as `goSSMS`, `goSSMS - Query` and
 `goSSMS - Activity Monitor`.
 
+Always On peer discovery uses each replica's registered connection. Connect to
+each replica explicitly through **File > Connect** first. A unique short-name
+alias still uses the original saved address; ambiguous aliases and unregistered
+peers are refused. Failed peer connections never retry with another server's
+credentials.
+
 ## Supported SQL Server versions
 
 goSSMS supports **SQL Server 2016 SP1 (13.0.4001) and later** on Windows and

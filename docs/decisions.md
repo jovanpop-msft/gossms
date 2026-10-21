@@ -484,23 +484,27 @@ Peer credentials, easy to undo:
 
 - **Peer credentials come from connections already made.**
   `ServerConn.SetPeerCredentials` installs a resolver `peerOptions` consults
-  before the parent's settings — connecting to a replica once via File >
+  for each peer — connecting to a replica once via File >
   Connect gives it its own login/port/auth/TLS. A saved connection is taken
   whole (so new `config.Connection` fields aren't dropped). Keyed by
   `config.InstanceKey` (case, port, instance spelling); since `@@SERVERNAME` is the
   short name, a saved connection is also registered under its short host at
-  strictly lower priority, so `sql.a.example`/`sql.b.example` never swap logins.
-- **The resolver never makes an instance less reachable.** `Peer` retries once
-  with `parentPeerOptions` when the resolver's answer won't connect;
-  `loadPeerCredentials` skips entries whose password can't be decrypted. A saved
-  low-privilege login still wins on purpose. Removing the retry or ignoring the
-  resolver each break a half.
+  strictly lower priority. An alias shared by different instance keys is
+  refused; an exact registered name still wins.
+- **A peer never retargets registered credentials.** The registered address,
+  port, auth and TLS options are kept intact, even for short-name metadata.
+  Unregistered or ambiguous destinations are refused with instructions to use
+  File > Connect first. A failed peer login reports its own error, never retries
+  with the parent's credentials. This security boundary supersedes the former
+  reachability-first fallback (GitHub issue #3).
+  `loadPeerCredentials` still skips entries whose password can't be decrypted.
 - **`ServerConn.Peer` blanks `Opts.Database`** — a named database fails the
   connect at ping, and everything `Peer` reaches is server-scoped. The other
   three `sc.Opts` clones (query panel, Activity Monitor ×2) keep it.
 - **The peer failure cache is short on purpose.** `recordPeerFailureLocked`
-  keeps the last failure per `InstanceKey` for `peerFailureTTL` (30 s) so a
-  blackholed primary doesn't cost the 15 s connect timeout per expansion.
+  keeps the last dial failure per registered destination's `InstanceKey` for
+  `peerFailureTTL` (30 s) so a blackholed primary doesn't cost the 15 s connect
+  timeout per expansion.
   Invalidated by a successful direct File > Connect to it and by Refresh
   anywhere in the Always On subtree (both recurse into cached peers, where
   chained reads record failures). The 15 s timeout stays (WAN peers).
@@ -510,8 +514,8 @@ Peer credentials, easy to undo:
   silence a superseded load still do.
 - **An unknown saved auth method is refused, not dialled as SQL auth.**
   `db.toGosmoAuth` errors (a hand-edited or newer-gossms config.json), so
-  Connect and the preview refuse it alike; as a peer credential the resolver
-  falls back to the parent's options. The Connect dialog opens such an entry on
+  Connect and the preview refuse it alike; a peer using that entry reports the
+  error without trying another login. The Connect dialog opens such an entry on
   its first method — picking one and connecting is the repair. config.json is
   never rewritten for it.
 - **A hand-edited non-canonical `encrypt_mode` is left as is — author's call.**

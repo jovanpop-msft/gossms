@@ -64,8 +64,8 @@ func ResolveServer(server string, dialogPort int) string {
 // count a login attempt against the other key toward a lockout.
 //
 // The catalog reports names without ports, so a default instance saved as
-// "host,1500" doesn't answer a peer read for "HOST"; Peer then falls back to the
-// parent's settings.
+// "host,1500" doesn't answer a peer read for "HOST"; that destination must be
+// registered explicitly rather than guessed from another connection.
 func InstanceKey(server string) string {
 	host, instance, port := gosmo.ParseServerAddress(strings.TrimSpace(server))
 	key := strings.ToLower(host)

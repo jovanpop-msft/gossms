@@ -29,7 +29,7 @@ func TestPeerCredentialsResolveByInstanceNotSpelling(t *testing.T) {
 	}
 
 	if _, ok := a.peerCredentialsFor("ubusql9"); ok {
-		t.Error("an instance nobody has connected to resolved to something; the fallback to the parent is unreachable")
+		t.Error("an unregistered instance resolved to another connection's credentials")
 	}
 	// A named instance must not resolve to the default instance's login.
 	if _, ok := a.peerCredentialsFor("ubusql2"); ok {
@@ -88,6 +88,30 @@ func TestRememberPeerCredentialsRefreshesTheMap(t *testing.T) {
 // at compile time because a signature drift there would otherwise only show up
 // as a peer read quietly using the wrong login.
 var _ db.PeerCredentials = (*App)(nil).peerCredentialsFor
+
+func TestPeerCredentialsRefuseAmbiguousShortAliases(t *testing.T) {
+	a := newTestApp()
+	a.rememberPeerCredentials(config.Connection{Server: "sql.a.example", User: "a_login"})
+	a.rememberPeerCredentials(config.Connection{Server: "sql.a.example", User: "new_a_login"})
+	if got, ok := a.peerCredentialsFor("SQL"); !ok || got.User != "new_a_login" || got.Server != "sql.a.example" {
+		t.Fatal("a unique alias did not resolve to the latest connection at its saved address")
+	}
+
+	a.rememberPeerCredentials(config.Connection{Server: "sql.b.example", User: "b_login"})
+	a.rememberPeerCredentials(config.Connection{Server: "sql.a.example", User: "latest_a_login"})
+	if _, ok := a.peerCredentialsFor("sql"); ok {
+		t.Fatal("an ambiguous short alias selected one domain's credentials")
+	}
+	for _, server := range []string{"sql.a.example", "sql.b.example"} {
+		if got, ok := a.peerCredentialsFor(server); !ok || got.Server != server {
+			t.Errorf("exact destination %q stopped resolving", server)
+		}
+	}
+	a.rememberPeerCredentials(config.Connection{Server: "sql", User: "explicit_short_login"})
+	if got, ok := a.peerCredentialsFor("sql"); !ok || got.User != "explicit_short_login" {
+		t.Fatal("an explicitly registered short name did not override ambiguous aliases")
+	}
+}
 
 // TestPeerCredentialsKeepTwoInstancesOnOneHostApart is R12: win10cli's
 // default instance and its SQL2017 instance on port 55253 were one key, so the
@@ -181,16 +205,15 @@ func TestShortHostKeyOnlyAliasesADottedHost(t *testing.T) {
 }
 
 // A saved connection whose password this session cannot decrypt must not be
-// seeded. It would win over the parent connection's own credentials — which
-// are live and working — and connect with an empty password, turning a peer
-// read that used to work into a login failure. A replaced config key blanks
-// every saved password at once, so this is the whole file, not one entry.
+// seeded: connecting with an empty password is not an approved alternative.
+// A replaced config key blanks every saved password at once.
 //
 // Driven through config.Load rather than a hand-built Connection: the sealed
 // ciphertext that marks the state is unexported, and Load is what produces it.
 func TestPeerCredentialsSkipAPasswordThisSessionCannotRead(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", dir)
+	t.Setenv("APPDATA", dir)
 	waitForSavesAtCleanup(t)
 	cfgDir := filepath.Join(dir, "gossms")
 	if err := os.MkdirAll(cfgDir, 0o700); err != nil {
