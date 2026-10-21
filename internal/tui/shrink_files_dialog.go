@@ -206,7 +206,7 @@ func (d *ShrinkFilesDialog) buildPages(pf *shrinkFilesPrefetch) {
 		case f.SpaceUsedKB > 0:
 			free.SetValue(shrinkFreeText(f.SizeKB-f.SpaceUsedKB, f.SizeKB))
 			// DBCC SHRINKFILE's own target 0 stops at the file's creation size,
-			// not its contents, so opts sends 0 as 1.
+			// not its contents, so gosmo sends 0 as 1.
 			occupies := "the space the file's data occupies"
 			if f.Type == "LOG" {
 				// A log shrinks only down to its last active VLF, which the
@@ -296,9 +296,6 @@ func (d *ShrinkFilesDialog) buildPages(pf *shrinkFilesPrefetch) {
 			return nil, gosmo.ShrinkFileOptions{}, fmt.Errorf("pick a file to shrink")
 		}
 		o := gosmo.ShrinkFileOptions{Wait: wait()}
-		if f.Type == "FILESTREAM" && action.Selected() != shrinkFileEmpty {
-			return nil, o, fmt.Errorf("a FILESTREAM container can only be emptied (EMPTYFILE)")
-		}
 		switch action.Selected() {
 		case shrinkFileRelease:
 			o.Truncate = gosmo.ShrinkTruncateOnly
@@ -308,29 +305,30 @@ func (d *ShrinkFilesDialog) buildPages(pf *shrinkFilesPrefetch) {
 				return nil, o, fmt.Errorf("shrink file to must be a whole number of MB from 0 to %d, the file's current size, not %q",
 					maxMB, strings.TrimSpace(target.Value()))
 			}
-			// 0 goes as 1: SHRINKFILE's own 0 stops at the file's creation
-			// size, so the shrink the note promises would silently not happen.
-			// gosmo's DatabaseFileInfo.Shrink floors it the same way.
-			o.TargetMB = new(max(mb, 1))
+			// gosmo sends 0 as 1, the shrink the note promises: SHRINKFILE's
+			// own 0 stops at the file's creation size.
+			o.TargetMB = new(mb)
 		case shrinkFileEmpty:
 			o.EmptyFile = true
 		}
 		return f, o, nil
 	}
 	// preflight reads the rows on the UI goroutine and leaves the request for
-	// the apply, which runs on the pipeline's. A FileRef carries no Type, so
-	// gosmo can't refuse a FILESTREAM container's other forms; opts does.
-	var name string
+	// the apply, which runs on the pipeline's. The file is the one Files
+	// loaded, not a FileRef: it carries its Type, so gosmo refuses a
+	// FILESTREAM container's other forms itself.
+	var file *gosmo.DatabaseFileInfo
 	var req gosmo.ShrinkFileOptions
 	d.preflight = func() error {
 		f, o, err := opts()
 		if err == nil {
-			name, req = f.Name, o
+			file, req = f, o
 		}
 		return err
 	}
 	d.applyFns[0] = func(ctx context.Context) error {
-		return sc.Server.DatabaseRef(dbName).FileRef(name).ShrinkWith(ctx, req)
+		_, err := file.Shrink(ctx, req)
+		return err
 	}
 }
 

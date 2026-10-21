@@ -227,8 +227,8 @@ func fileSizeText(kb int64) string {
 // shrinkStoppedNote says where a shrink to targetKB stopped when that is above
 // the target, "" otherwise: SHRINKFILE stops at the space the file's data
 // occupies, without an error, and without this the only sign is the reloaded
-// grid (review plan N2). The target is compared as sent — whole MB, at least
-// 1 (gosmo's Shrink) — so 0 MB reaching 1 MB isn't reported. Under WithScript
+// grid (review plan N2). The target is compared as sent — whole MB, rounded up
+// by the apply, at least 1 (gosmo's Shrink) — so 0 MB reaching 1 MB isn't reported. Under WithScript
 // reached is 0, never above.
 func shrinkStoppedNote(name string, targetKB, reachedKB int64) string {
 	sentKB := max((targetKB+1023)/1024, 1) * 1024
@@ -587,11 +587,12 @@ func pageDatabaseFiles(sc *db.ServerConn, dbName string) propPage {
 						}
 						// After the Alter, so a renamed file is shrunk by its new name.
 						if e.shrinks() {
-							reached, err := d.FileRef(e.name).Shrink(ctx, e.sizeKB)
+							// SHRINKFILE takes whole MB: rounded up, so the file never ends below the size asked for.
+							res, err := d.FileRef(e.name).Shrink(ctx, gosmo.ShrinkFileOptions{TargetMB: new((e.sizeKB + 1023) / 1024)})
 							if err != nil {
 								return err
 							}
-							if note := shrinkStoppedNote(e.name, e.sizeKB, reached); note != "" {
+							if note := shrinkStoppedNote(e.name, e.sizeKB, res.CurrentKB); note != "" {
 								noteApply(ctx, note)
 							}
 						}
