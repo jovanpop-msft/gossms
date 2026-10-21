@@ -869,9 +869,13 @@ MI).
   Server Certificate). On win10cli every Strict attempt fails `TLS Handshake
   failed: EOF` — only SQL Server's self-signed fallback cert, which TDS 8.0
   refuses. Server config, not a defect; don't chase without a real cert.
-- **Mandatory with Trust off fails on every on-prem instance here** (`x509:
-  certificate is not valid for any names`) — why Trust defaults on beside
-  Mandatory.
+- **Trust Server Certificate defaults off beside Mandatory** (#4, PR #5,
+  2026-10-21), as in SSMS 20+: on by default let anyone on the network path
+  impersonate the server and collect a SQL login's password. The cost is
+  known: Mandatory with Trust off fails on every on-prem instance here (`x509:
+  certificate is not valid for any names` — SQL Server's self-signed fallback
+  cert), so those need the box ticked, which the label marks as skipping
+  validation. Saved connections keep their setting.
 - **Host Name In Certificate verified on MI by IP**: fixes `doesn't contain any
   IP SANs`; the login is then refused by Azure's gateway (40532, routes on
   name) — Azure's, not TLS's.

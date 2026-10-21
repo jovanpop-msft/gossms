@@ -185,7 +185,7 @@ func NewConnectDialog(app *App) *ConnectDialog {
 	}
 	d.ddEncrypt = widgets.NewDropDown(label("Encrypt"), encryptItems, connectValueWidth)
 	d.setEncryptMode(config.EncryptMandatory)
-	d.cbTrust = widgets.NewCheckBox("Trust Server Certificate")
+	d.cbTrust = widgets.NewCheckBox("Trust Server Certificate (skip validation)")
 	d.fHostCert = widgets.NewInputField(label("Host Name In Certificate"), connectValueWidth, false)
 
 	d.fExtraProps = controls.NewEditor(nil)

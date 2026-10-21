@@ -493,6 +493,33 @@ func TestCertStoreHint(t *testing.T) {
 	}
 }
 
+// TestTrustHint covers the Trust Server Certificate suffix: any x509 failure,
+// typed or flattened, with Trust off; never with Trust on or for a non-TLS cause.
+func TestTrustHint(t *testing.T) {
+	hostname := errors.New("TLS Handshake failed: x509: certificate is not valid for any names")
+	typed := fmt.Errorf("gosmo: connect: %w", x509.UnknownAuthorityError{})
+	login := errors.New("mssql: Login failed for user 'sa'.")
+
+	for _, tc := range []struct {
+		name  string
+		trust bool
+		err   error
+		want  bool
+	}{
+		{"self-signed, flattened", false, hostname, true},
+		{"unknown authority, typed", false, typed, true},
+		{"trust already on", true, hostname, false},
+		{"login failure", false, login, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			opts := config.Connection{TrustServerCertificate: tc.trust}
+			if got := trustHint(opts, tc.err) != ""; got != tc.want {
+				t.Errorf("trustHint(%v) non-empty = %v, want %v", tc.err, got, tc.want)
+			}
+		})
+	}
+}
+
 // An auth method gossms doesn't know is refused by Connect and the dialog
 // preview alike, never dialled as SQL Server Authentication; every known one
 // maps.

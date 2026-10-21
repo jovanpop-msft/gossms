@@ -135,7 +135,7 @@ func ConnectContext(ctx context.Context, opts config.Connection, role Role) (*Se
 	srv, err := gosmo.Connect(ctx, co)
 	if err != nil {
 		err = explainExtraProperty(err)
-		return nil, &ConnectionError{Server: opts.Server, Cause: err.Error() + certStoreHint(err), Err: err}
+		return nil, &ConnectionError{Server: opts.Server, Cause: err.Error() + certStoreHint(err) + trustHint(opts, err), Err: err}
 	}
 	return newServerConn(parent, opts, srv, role), nil
 }
@@ -431,4 +431,24 @@ func certStoreHint(err error) string {
 		return ""
 	}
 	return " (SSL_CERT_FILE/SSL_CERT_DIR is set, so the system certificate store is not consulted)"
+}
+
+// trustHint is a suffix for a connect cause that failed certificate validation
+// with Trust Server Certificate off; "" otherwise. Since Trust defaults off
+// (docs/decisions.md § Connection settings), SQL Server's self-signed fallback
+// cert fails every new connection to an instance without a real one, and the
+// x509 text alone doesn't say which setting gets past it.
+//
+// Matched by text as well as type, for the reason certStoreHint gives.
+func trustHint(opts config.Connection, err error) string {
+	if opts.TrustServerCertificate {
+		return ""
+	}
+	_, unknown := errors.AsType[x509.UnknownAuthorityError](err)
+	_, host := errors.AsType[x509.HostnameError](err)
+	_, invalid := errors.AsType[x509.CertificateInvalidError](err)
+	if !unknown && !host && !invalid && !strings.Contains(err.Error(), "x509: ") {
+		return ""
+	}
+	return " (to connect without validating the certificate, tick Trust Server Certificate)"
 }
