@@ -1,6 +1,7 @@
 package theme
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/gdamore/tcell/v3"
@@ -31,5 +32,22 @@ func TestSetPaletteReplacesWhatActiveReads(t *testing.T) {
 	SetPalette(saved)
 	if got := Active().Background; got != saved.Background {
 		t.Errorf("after restoring: Background = %v, want %v", got, saved.Background)
+	}
+}
+
+// Each palette must set every colour: a field left zero renders as the terminal's
+// default and silently mixes the user's terminal theme into the UI.
+func TestPalettesSetEveryColour(t *testing.T) {
+	v := reflect.ValueOf(Light)
+	for i := range v.NumField() {
+		if v.Field(i).Interface().(tcell.Color) == tcell.ColorDefault {
+			t.Errorf("Light.%s is unset", v.Type().Field(i).Name)
+		}
+	}
+	d := reflect.ValueOf(Default)
+	for i := range d.NumField() {
+		if d.Field(i).Interface().(tcell.Color) == tcell.ColorDefault {
+			t.Errorf("Default.%s is unset", d.Type().Field(i).Name)
+		}
 	}
 }

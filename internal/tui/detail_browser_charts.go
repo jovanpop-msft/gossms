@@ -174,6 +174,9 @@ func (db *DetailBrowser) drawCharts(s tcell.Screen) {
 	core.DrawTextClipped(s, sec.X+1, sec.Y, sec.W-2, theme.StyleChartSection(), "DISK USAGE")
 
 	body := core.Rect{X: r.X, Y: r.Y + detailChartSectionH, W: r.W, H: r.H - detailChartSectionH}
+	// The panel ground first: the gutter, the rounding remainder and the bars'
+	// margins are never drawn, and would otherwise show the screen's ground.
+	core.FillRect(s, body, ' ', theme.StylePanel())
 	for i, panel := range detailChartPanels(body, len(db.charts)) {
 		c := db.charts[i]
 		charts.StackedBar{

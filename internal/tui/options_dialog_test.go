@@ -10,6 +10,7 @@ import (
 	"github.com/radix29/gossms/internal/config"
 	"github.com/radix29/gossms/internal/tuikit/controls"
 	"github.com/radix29/gossms/internal/tuikit/propsheet"
+	"github.com/radix29/gossms/internal/tuikit/theme"
 )
 
 // internal/config can't import tuikit, so it carries its own copy of the
@@ -157,6 +158,8 @@ func optionsFocusName(d *OptionsDialog) string {
 	switch d.focusable[d.focusIdx] {
 	case d.rbIconStyle:
 		return "icons"
+	case d.rbTheme:
+		return "theme"
 	case d.fMaxCellLen:
 		return "cell"
 	case d.fMaxTextLen:
@@ -175,7 +178,7 @@ func optionsFocusName(d *OptionsDialog) string {
 // switch the focus slice replaced: after each key, what has focus, whether
 // the dialog consumed the key, and whether Copy/Paste has a target. Pins the
 // quirks as well as the order — Backtab does not wrap off the first control,
-// the radio box swallows the keys it does not use while the fields pass them
+// the radio boxes swallow the keys they do not use while the fields pass them
 // on, Down moves the radio selection before it moves focus, and Up from
 // either button returns to the checkbox.
 func TestOptionsDialogKeyboardWalk(t *testing.T) {
@@ -189,15 +192,16 @@ func TestOptionsDialogKeyboardWalk(t *testing.T) {
 	}{
 		{"Tab", tcell.KeyTab}, {"Tab", tcell.KeyTab}, {"Tab", tcell.KeyTab}, {"Tab", tcell.KeyTab},
 		{"Tab", tcell.KeyTab}, {"Tab", tcell.KeyTab}, {"Tab", tcell.KeyTab}, {"Tab", tcell.KeyTab},
+		{"Tab", tcell.KeyTab},
 		{"Right", tcell.KeyRight}, {"Left", tcell.KeyLeft}, {"Left", tcell.KeyLeft},
 		{"Tab", tcell.KeyTab}, {"Up", tcell.KeyUp},
 		{"Backtab", tcell.KeyBacktab}, {"Up", tcell.KeyUp}, {"Backtab", tcell.KeyBacktab},
-		{"Up", tcell.KeyUp}, {"Backtab", tcell.KeyBacktab},
+		{"Up", tcell.KeyUp}, {"Backtab", tcell.KeyBacktab}, {"Backtab", tcell.KeyBacktab},
 		{"Down", tcell.KeyDown}, {"Up", tcell.KeyUp}, {"Down", tcell.KeyDown}, {"Down", tcell.KeyDown},
 		{"Down", tcell.KeyDown}, {"Down", tcell.KeyDown}, {"Down", tcell.KeyDown},
 		{"F5", tcell.KeyF5}, {"Up", tcell.KeyUp}, {"F5", tcell.KeyF5}, {"Up", tcell.KeyUp},
 		{"F5", tcell.KeyF5}, {"Up", tcell.KeyUp}, {"Up", tcell.KeyUp}, {"Up", tcell.KeyUp},
-		{"F5", tcell.KeyF5},
+		{"F5", tcell.KeyF5}, {"Tab", tcell.KeyTab}, {"Tab", tcell.KeyTab}, {"F5", tcell.KeyF5},
 	}
 	var b strings.Builder
 	b.WriteString(optionsFocusName(d))
@@ -205,16 +209,17 @@ func TestOptionsDialogKeyboardWalk(t *testing.T) {
 		ok := d.HandleKey(tcell.NewEventKey(k.k, "", tcell.ModNone))
 		fmt.Fprintf(&b, " %s>%s(%v,%v)", k.n, optionsFocusName(d), ok, d.FocusedClipboardTarget() != nil)
 	}
-	const want = "icons Tab>cell(true,true) Tab>text(true,true) Tab>indent(true,true) Tab>xecap(true,true) " +
-		"Tab>intellisense(true,false) Tab>button0(true,false) Tab>button1(true,false) " +
+	const want = "icons Tab>theme(true,false) Tab>cell(true,true) Tab>text(true,true) Tab>indent(true,true) " +
+		"Tab>xecap(true,true) Tab>intellisense(true,false) Tab>button0(true,false) Tab>button1(true,false) " +
 		"Tab>button0(true,false) Right>button1(true,false) Left>button0(true,false) " +
 		"Left>intellisense(true,false) Tab>button0(true,false) Up>intellisense(true,false) " +
 		"Backtab>xecap(true,true) Up>indent(true,true) Backtab>text(true,true) Up>cell(true,true) " +
-		"Backtab>icons(true,false) Down>icons(true,false) Up>icons(true,false) " +
-		"Down>icons(true,false) Down>icons(true,false) Down>icons(true,false) Down>cell(true,true) " +
-		"Down>text(true,true) F5>text(false,true) Up>cell(true,true) F5>cell(false,true) " +
+		"Backtab>theme(true,false) Backtab>icons(true,false) Down>icons(true,false) Up>icons(true,false) " +
+		"Down>icons(true,false) Down>icons(true,false) Down>icons(true,false) Down>theme(true,false) " +
+		"Down>theme(true,false) F5>theme(true,false) Up>theme(true,false) F5>theme(true,false) " +
 		"Up>icons(true,false) F5>icons(true,false) Up>icons(true,false) Up>icons(true,false) " +
-		"Up>icons(true,false) F5>icons(true,false)"
+		"Up>icons(true,false) F5>icons(true,false) Tab>theme(true,false) Tab>cell(true,true) " +
+		"F5>cell(false,true)"
 	if got := b.String(); got != want {
 		t.Errorf("keyboard walk:\n got %s\nwant %s", got, want)
 	}
@@ -251,5 +256,30 @@ func TestOptionsDialogPressFocusesTheControlUnderIt(t *testing.T) {
 		if got := optionsFocusName(d); got != tc.name {
 			t.Errorf("a press on %s focused %s", tc.name, got)
 		}
+	}
+}
+
+// Options pre-selects the configured theme, and OK both records the choice and
+// swaps the live palette: styles are read from it at draw time, so nothing
+// else has to be rebuilt.
+func TestOptionsApplySwitchesColorTheme(t *testing.T) {
+	saved := *theme.Active()
+	defer theme.SetPalette(saved)
+
+	a := newTestApp()
+	a.cfg.Theme = config.ThemeLight
+	d := NewOptionsDialog(a)
+	d.Show()
+	if got := d.rbTheme.Selected(); got != 1 {
+		t.Fatalf("Show() selected theme %d, want 1 (Light)", got)
+	}
+	d.apply()
+	if a.cfg.Theme != config.ThemeLight || theme.Active().Background != theme.Light.Background {
+		t.Errorf("apply(Light): Theme = %v, Background = %v", a.cfg.Theme, theme.Active().Background)
+	}
+	d.rbTheme.SetSelected(0)
+	d.apply()
+	if a.cfg.Theme != config.ThemeDark || theme.Active().Background != theme.Default.Background {
+		t.Errorf("apply(Dark): Theme = %v, Background = %v", a.cfg.Theme, theme.Active().Background)
 	}
 }

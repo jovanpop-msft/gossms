@@ -1,4 +1,4 @@
-grid. select with shift+click all the rows between current selection and where shift+click was clicked
+shrink database
 
 add command line parameters for agentic use.
 all functionality of the application should be accessible as command line parameters with formatted text output
@@ -9,11 +9,8 @@ new sql formatting designs
 new tab: waits
 at the top a section that show the grpahic from history: sql server aẃaits and from the sample the graphic the same one each occupy 50% the width
 
-shrink database
 
 group by schema
-
-white/light style ? -> options, default dark
 
 keyboard shortcuts for mac (platform dependednt)?
 

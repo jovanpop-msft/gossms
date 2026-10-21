@@ -101,6 +101,7 @@ func (d *demo) draw(s tcell.Screen) {
 		cw = w
 	}
 	c := charts.NewCanvas(cw, ch)
+	c.Fill(' ', theme.StylePanel()) // see ActivityMonitor.dashboardCanvas
 	if d.onSample {
 		dashboard.DrawSample(c, c.Rect(), d.sample)
 	} else {

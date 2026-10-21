@@ -177,8 +177,8 @@ Settings and the 30 most recent connections are saved automatically in:
 - Linux/macOS: `~/.config/gossms/config.json`
 - Windows: `%APPDATA%\gossms\config.json`
 
-Tools > Options sets icon style, grid and text column widths, indent size and
-IntelliSense. Unsaved query tabs are recovered to the `recovered` folder beside
+Tools > Options sets icon style, color theme (Dark, the default, or Light),
+grid and text column widths, indent size and IntelliSense. Unsaved query tabs are recovered to the `recovered` folder beside
 `config.json` after a crash.
 
 Saved passwords are encrypted with AES-256-GCM using `gossms.key` in the same

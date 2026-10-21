@@ -77,7 +77,7 @@ func (p *QueryStorePanel) drawChart(s tcell.Screen) {
 		return
 	}
 	pal := theme.Active()
-	core.FillRect(s, r, ' ', theme.StyleDefault())
+	core.FillRect(s, r, ' ', theme.StylePanel())
 	if p.seriesMode {
 		p.drawSeriesChart(s, r)
 		return
@@ -85,7 +85,7 @@ func (p *QueryStorePanel) drawChart(s tcell.Screen) {
 	p.barBuf = p.res.bars(p.barBuf, pal.ChartCyan)
 	bars := p.barBuf
 	if len(bars) == 0 {
-		core.DrawTextClipped(s, r.X+1, r.Y, r.W-2, theme.StyleDefault().Foreground(pal.TextDim),
+		core.DrawTextClipped(s, r.X+1, r.Y, r.W-2, theme.StylePanel().Foreground(pal.TextDim),
 			"Nothing to plot for "+p.report().Title)
 		return
 	}
@@ -117,7 +117,7 @@ func (p *QueryStorePanel) drawSeriesChart(s tcell.Screen, r core.Rect) {
 	pal := theme.Active()
 	core.DrawTextClipped(s, r.X+1, r.Y, r.W-2, theme.StyleChartAxis(), p.seriesTitle())
 	if p.series.empty() {
-		core.DrawTextClipped(s, r.X+1, r.Y+1, r.W-2, theme.StyleDefault().Foreground(pal.TextDim), p.seriesNote)
+		core.DrawTextClipped(s, r.X+1, r.Y+1, r.W-2, theme.StylePanel().Foreground(pal.TextDim), p.seriesNote)
 		return
 	}
 	p.series.chart().Draw(s, core.Rect{X: r.X + 1, Y: r.Y + 1, W: r.W - 2, H: r.H - 1})

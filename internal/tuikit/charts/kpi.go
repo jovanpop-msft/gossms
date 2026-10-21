@@ -46,7 +46,7 @@ func (k KPI) Draw(s tcell.Screen, r core.Rect) {
 		valueBg = pal.GridSelected
 	}
 	if valueFg == tcell.ColorDefault {
-		valueFg = pal.TextHighlight
+		valueFg = pal.SelectedText
 	}
 
 	value := " " + k.Value + " "

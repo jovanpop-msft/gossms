@@ -6,6 +6,7 @@ import (
 
 	"github.com/radix29/gossms/internal/activity"
 	"github.com/radix29/gossms/internal/tuikit/charts"
+	"github.com/radix29/gossms/internal/tuikit/theme"
 )
 
 // amBenchWidth keeps the History canvas at its fixed width, as on a normal
@@ -103,5 +104,41 @@ func BenchmarkActivityMonitorDraw(b *testing.B) {
 
 	for b.Loop() {
 		am.Draw(s)
+	}
+}
+
+// Every canvas cell must carry a background. Blit copies cells as they are, so a
+// colourless one (a column gutter, the corner under a Y axis) showed the
+// screen's default ground as a strip, and DimArea skipped it behind a dialog.
+func TestActivityMonitorCanvasLeavesNoCellColourless(t *testing.T) {
+	for _, tab := range []amTab{amTabHistory, amTabSample, amTabTempDB, amTabInstance} {
+		am := newTestActivityMonitor(amBenchWidth, 40)
+		amWithSamples(am, 30)
+		am.tab = tab
+		cw, ch := am.canvasSize()
+		c := am.dashboardCanvas(cw, ch)
+		for y := range ch {
+			for x := range cw {
+				if _, st, _ := c.Get(x, y); !st.GetBackground().Valid() {
+					t.Fatalf("tab %v: cell (%d,%d) has no background", tab, x, y)
+				}
+			}
+		}
+	}
+}
+
+// A theme switch must re-render: a paused monitor gets no new sample to do it.
+func TestActivityMonitorCanvasFollowsAPaletteSwitch(t *testing.T) {
+	saved := *theme.Active()
+	defer theme.SetPalette(saved)
+
+	theme.SetPalette(theme.Default)
+	am := newTestActivityMonitor(amBenchWidth, 40)
+	amWithSamples(am, 30)
+	cw, ch := am.canvasSize()
+	before := am.dashboardCanvas(cw, ch)
+	theme.SetPalette(theme.Light)
+	if am.dashboardCanvas(cw, ch) == before {
+		t.Error("switching to Light left the cached canvas in place")
 	}
 }

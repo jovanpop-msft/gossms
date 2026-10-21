@@ -163,14 +163,15 @@ var sqlKeywords = map[string]bool{
 // at every pass boundary and row 1 is never helped. Same treatment, for the same
 // reason, as XMLHighlighter (xml_highlighter.go).
 func SQLHighlighter(p *theme.Palette) Highlighter {
-	kwStyle := tcell.StyleDefault.Background(p.EditorBg).Foreground(p.EditorKeyword).Bold(true)
-	strStyle := tcell.StyleDefault.Background(p.EditorBg).Foreground(p.EditorString)
-	cmtStyle := tcell.StyleDefault.Background(p.EditorBg).Foreground(p.EditorComment)
-	numStyle := tcell.StyleDefault.Background(p.EditorBg).Foreground(p.EditorNumber)
-
 	var starts prefixStates[sqltext.State]
 
 	return func(doc *Document, idx int) []ColorRun {
+		// Built per call, not once: p is the live palette, so a theme switch
+		// recolours an open editor.
+		kwStyle := tcell.StyleDefault.Background(p.EditorBg).Foreground(p.EditorKeyword).Bold(true)
+		strStyle := tcell.StyleDefault.Background(p.EditorBg).Foreground(p.EditorString)
+		cmtStyle := tcell.StyleDefault.Background(p.EditorBg).Foreground(p.EditorComment)
+		numStyle := tcell.StyleDefault.Background(p.EditorBg).Foreground(p.EditorNumber)
 		line := doc.Line(idx)
 		runs := make([]ColorRun, 0, 8)
 		st := starts.at(doc, idx, sqltext.State{}, sqltext.LineEnd)

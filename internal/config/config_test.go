@@ -474,6 +474,7 @@ func TestSaveCarriesUnnamedFields(t *testing.T) {
 
 	cfg := &Config{
 		IconStyle:            IconStylePortable,
+		Theme:                ThemeLight,
 		MaxCellLength:        123,
 		MaxTextColumnLength:  512,
 		IntelliSenseDisabled: true,
@@ -483,7 +484,7 @@ func TestSaveCarriesUnnamedFields(t *testing.T) {
 		t.Fatalf("Save() = %v", err)
 	}
 	got := Load()
-	if got.IconStyle != IconStylePortable || got.MaxCellLength != 123 || got.MaxTextColumnLength != 512 ||
+	if got.IconStyle != IconStylePortable || got.Theme != ThemeLight || got.MaxCellLength != 123 || got.MaxTextColumnLength != 512 ||
 		!got.IntelliSenseDisabled || got.IndentWidth != 2 {
 		t.Errorf("round-tripped config = %+v, want every field preserved", got)
 	}

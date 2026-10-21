@@ -6,6 +6,18 @@ behind the mouse and async rules.
 
 ## Editor, widgets and grids
 
+- **Read colours from `theme.Active()` (or a `theme.Style*()` call) at draw
+  time, never once at construction** — Options switches the palette live
+  (Dark/Light), and a style captured earlier keeps the old theme. The editor
+  highlighters did exactly that until they built their styles per call. A
+  palette switch must also go through `applyColorTheme`
+  (`options_dialog.go`), which resets the screen's default style and `Sync`s:
+  cells drawn with no background (chart gutters) otherwise keep the old ground.
+- **Fill a `charts.Canvas` with a styled ground before rendering onto it** —
+  `NewCanvas` starts every cell colourless and `Blit` copies cells as they are,
+  so whatever a render leaves unpainted (Activity Monitor's column gutters, the
+  corner under each Y axis) shows the screen's default ground as a strip, and
+  `core.DimArea` skips it, leaving it bright behind a dialog.
 - **Seed `QueryPanel.savedText` through `qp.markSaved()`, never from the string
   passed to `SetText` and never by assigning it** — `markSaved` reads
   `editor.Text()` and drops `Dirty`'s per-version cache, which a direct

@@ -19,6 +19,10 @@ type Palette struct {
 	TextDim       tcell.Color
 	TextHighlight tcell.Color
 	TextDisabled  tcell.Color
+	// SelectedText is text on an accent (selection blue) ground. Not
+	// TextHighlight, which also emphasises text on panel and dialog grounds: in
+	// a light theme the two need opposite lightness.
+	SelectedText tcell.Color
 
 	// Tree
 	TreeSelected tcell.Color
@@ -80,11 +84,11 @@ type Palette struct {
 	// the app maps each metric to a role once, so a series keeps its colour
 	// across refreshes and dashboards.
 	//
-	// ChartPlotBg is darker than PanelBg so the plot reads as a recessed well;
-	// a stacked column's partial top cell blends against it, so it must differ
-	// from the series colours.
+	// ChartPlotBg sets the plot apart from PanelBg (darker in Default, a
+	// recessed well; white in Light); a stacked column's partial top cell blends
+	// against it, so it must differ from the series colours.
 	//
-	// ChartSectionBg backs section title strips; lighter than panel and
+	// ChartSectionBg backs section title strips; it contrasts with panel and
 	// grid-header backgrounds so strips divide the chart wall.
 	ChartCyan      tcell.Color
 	ChartGreen     tcell.Color
@@ -114,6 +118,7 @@ var Default = Palette{
 	TextDim:       tcell.NewRGBColor(150, 150, 150),
 	TextHighlight: tcell.NewRGBColor(255, 255, 255),
 	TextDisabled:  tcell.NewRGBColor(100, 100, 100),
+	SelectedText:  tcell.NewRGBColor(255, 255, 255),
 
 	TreeSelected: tcell.NewRGBColor(0, 122, 204),
 	TreeHover:    tcell.NewRGBColor(62, 62, 64),
@@ -170,6 +175,83 @@ var Default = Palette{
 	ChartAxis:      tcell.NewRGBColor(150, 150, 150),
 	ChartPlotBg:    tcell.NewRGBColor(0, 0, 0),
 	ChartSectionBg: tcell.NewRGBColor(66, 66, 72),
+}
+
+// Light is the built-in SSMS light (Blue/Light) theme. Accent backgrounds keep
+// the dark theme's blue, so the hardcoded white-on-accent styles read in both.
+var Light = Palette{
+	Background:    tcell.NewRGBColor(255, 255, 255),
+	MenuBar:       tcell.NewRGBColor(238, 238, 242),
+	StatusBar:     tcell.NewRGBColor(0, 122, 204),
+	PanelBg:       tcell.NewRGBColor(245, 245, 245),
+	Border:        tcell.NewRGBColor(204, 206, 219),
+	BorderActive:  tcell.NewRGBColor(0, 122, 204),
+	Splitter:      tcell.NewRGBColor(204, 206, 219),
+	SplitterHover: tcell.NewRGBColor(0, 122, 204),
+
+	Text:          tcell.NewRGBColor(30, 30, 30),
+	TextDim:       tcell.NewRGBColor(110, 110, 110),
+	TextHighlight: tcell.NewRGBColor(0, 0, 0),
+	TextDisabled:  tcell.NewRGBColor(160, 160, 160),
+	SelectedText:  tcell.NewRGBColor(255, 255, 255),
+
+	TreeSelected: tcell.NewRGBColor(0, 122, 204),
+	TreeHover:    tcell.NewRGBColor(220, 230, 244),
+
+	MenuSelected: tcell.NewRGBColor(0, 122, 204),
+	MenuHover:    tcell.NewRGBColor(220, 230, 244),
+
+	GridHeader:   tcell.NewRGBColor(225, 225, 230),
+	GridRowAlt:   tcell.NewRGBColor(236, 236, 240),
+	GridSelected: tcell.NewRGBColor(0, 120, 215),
+	GridBorder:   tcell.NewRGBColor(204, 206, 219),
+
+	EditorBg:      tcell.NewRGBColor(255, 255, 255),
+	EditorCursor:  tcell.NewRGBColor(30, 30, 30),
+	EditorKeyword: tcell.NewRGBColor(0, 0, 255),
+	EditorString:  tcell.NewRGBColor(163, 21, 21),
+	EditorComment: tcell.NewRGBColor(0, 128, 0),
+	EditorNumber:  tcell.NewRGBColor(9, 134, 88),
+	EditorLineNum: tcell.NewRGBColor(43, 145, 175),
+	EditorMatch:   tcell.NewRGBColor(255, 226, 130),
+
+	// DialogOverlay is mid-grey, not black: what a modal dims is mostly light
+	// ground, which a blend toward black turns muddy.
+	DialogBg:      tcell.NewRGBColor(240, 240, 240),
+	DialogBorder:  tcell.NewRGBColor(0, 122, 204),
+	DialogTitle:   tcell.NewRGBColor(0, 0, 0),
+	DialogOverlay: tcell.NewRGBColor(128, 128, 128),
+
+	ButtonBg:     tcell.NewRGBColor(221, 221, 221),
+	ButtonFg:     tcell.NewRGBColor(30, 30, 30),
+	ButtonActive: tcell.NewRGBColor(0, 122, 204),
+	ButtonHover:  tcell.NewRGBColor(229, 241, 251),
+
+	InputBg:      tcell.NewRGBColor(255, 255, 255),
+	InputFg:      tcell.NewRGBColor(30, 30, 30),
+	InputBorder:  tcell.NewRGBColor(171, 173, 179),
+	InputFocused: tcell.NewRGBColor(0, 122, 204),
+
+	TooltipBg:     tcell.NewRGBColor(255, 255, 225),
+	TooltipFg:     tcell.NewRGBColor(30, 30, 30),
+	TooltipBorder: tcell.NewRGBColor(118, 118, 118),
+
+	Success: tcell.NewRGBColor(16, 124, 16),
+	Error:   tcell.NewRGBColor(196, 30, 30),
+	Warning: tcell.NewRGBColor(170, 110, 0),
+	Info:    tcell.NewRGBColor(0, 90, 170),
+
+	ChartCyan:      tcell.NewRGBColor(0, 140, 140),
+	ChartGreen:     tcell.NewRGBColor(30, 150, 50),
+	ChartYellow:    tcell.NewRGBColor(200, 140, 0),
+	ChartBlue:      tcell.NewRGBColor(40, 80, 220),
+	ChartRed:       tcell.NewRGBColor(210, 40, 50),
+	ChartPurple:    tcell.NewRGBColor(150, 50, 170),
+	ChartNeutral:   tcell.NewRGBColor(120, 120, 120),
+	ChartGrid:      tcell.NewRGBColor(200, 200, 200),
+	ChartAxis:      tcell.NewRGBColor(90, 90, 90),
+	ChartPlotBg:    tcell.NewRGBColor(255, 255, 255),
+	ChartSectionBg: tcell.NewRGBColor(218, 220, 228),
 }
 
 // active is the current palette.

@@ -247,6 +247,7 @@ func (a *App) Run() error {
 	a.screen = s
 	defer s.Fini()
 
+	applyColorTheme(s, a.cfg.Theme)
 	a.buildUI()
 	a.layoutAll()
 	installEntraSignIn(a)

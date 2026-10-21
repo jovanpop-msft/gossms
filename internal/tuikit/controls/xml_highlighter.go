@@ -48,14 +48,15 @@ var (
 // document and reused for every redraw in between (see prefixStates, and
 // SQLHighlighter for why a one-line memo cannot help the first row of a pass).
 func XMLHighlighter(p *theme.Palette) Highlighter {
-	tagStyle := tcell.StyleDefault.Background(p.EditorBg).Foreground(p.EditorKeyword).Bold(true)
-	attrStyle := tcell.StyleDefault.Background(p.EditorBg).Foreground(p.EditorNumber)
-	valStyle := tcell.StyleDefault.Background(p.EditorBg).Foreground(p.EditorString)
-	cmtStyle := tcell.StyleDefault.Background(p.EditorBg).Foreground(p.EditorComment)
-
 	var starts prefixStates[xmlBlockState]
 
 	return func(doc *Document, idx int) []ColorRun {
+		// Built per call, not once: p is the live palette, so a theme switch
+		// recolours an open editor.
+		tagStyle := tcell.StyleDefault.Background(p.EditorBg).Foreground(p.EditorKeyword).Bold(true)
+		attrStyle := tcell.StyleDefault.Background(p.EditorBg).Foreground(p.EditorNumber)
+		valStyle := tcell.StyleDefault.Background(p.EditorBg).Foreground(p.EditorString)
+		cmtStyle := tcell.StyleDefault.Background(p.EditorBg).Foreground(p.EditorComment)
 		line := doc.Line(idx)
 		runs := make([]ColorRun, 0, 8)
 		i := 0

@@ -29,7 +29,7 @@ func StyleStatusBar() tcell.Style {
 	return tcell.StyleDefault.Background(active.StatusBar).Foreground(color.White)
 }
 func StyleSelected() tcell.Style {
-	return tcell.StyleDefault.Background(active.TreeSelected).Foreground(active.TextHighlight)
+	return tcell.StyleDefault.Background(active.TreeSelected).Foreground(active.SelectedText)
 }
 func StyleSearchMatch() tcell.Style {
 	return tcell.StyleDefault.Background(active.EditorMatch).Foreground(active.TextHighlight)

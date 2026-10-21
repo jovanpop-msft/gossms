@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/gdamore/tcell/v3"
+	"github.com/gdamore/tcell/v3/vt"
 
 	gosmo "github.com/radix29/gosmo"
 	"github.com/radix29/gossms/internal/tuikit/charts"
@@ -339,5 +340,36 @@ func TestDetailGridDragEndingOverTheStripReleasesTheGrid(t *testing.T) {
 	clickAt(db, x, y)
 	if db.tooltip == nil {
 		t.Error("a fresh click on the strip pinned nothing")
+	}
+}
+
+// Every cell of the strip must be painted: the gutter between panels, the
+// rounding remainder and the bars' margins showed whatever was beneath (the
+// screen's ground, a shade off the panel's) as strips. 100 wide leaves a
+// remainder column on the right.
+func TestDetailChartStripPaintsEveryCell(t *testing.T) {
+	s, err := tcell.NewTerminfoScreenFromTty(vt.NewMockTerm(vt.MockOptSize{X: 100, Y: 30}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Init(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(s.Fini)
+
+	db := NewDetailBrowser("test")
+	db.SetBounds(0, 0, 100, 30)
+	db.setCharts(stripCharts())
+	strip := db.chartsRect()
+	sentinel := tcell.NewRGBColor(255, 0, 255)
+	core.FillRect(s, strip, ' ', tcell.StyleDefault.Background(sentinel))
+	db.drawCharts(s)
+
+	for y := strip.Y; y < strip.Bottom(); y++ {
+		for x := strip.X; x < strip.Right(); x++ {
+			if _, st, _ := s.Get(x, y); st.GetBackground() == sentinel {
+				t.Fatalf("cell (%d,%d) of the chart strip was left unpainted", x, y)
+			}
+		}
 	}
 }

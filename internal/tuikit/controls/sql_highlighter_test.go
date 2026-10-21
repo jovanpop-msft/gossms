@@ -438,3 +438,32 @@ func TestSQLHighlighterDoesNotAllocatePerWord(t *testing.T) {
 		t.Errorf("SQLHighlighter allocated %v times per line, want at most 2 (the run slice and its growth)", n)
 	}
 }
+
+// A theme switch must recolour an editor already open: each highlighter is
+// handed the live palette and must read it per call, not once at construction.
+func TestHighlightersFollowAPaletteSwitch(t *testing.T) {
+	saved := *theme.Active()
+	defer theme.SetPalette(saved)
+
+	for _, tc := range []struct {
+		name string
+		h    Highlighter
+		text string
+	}{
+		{"sql", SQLHighlighter(theme.Active()), "select 1"},
+		{"xml", XMLHighlighter(theme.Active()), "<a/>"},
+		{"json", JSONHighlighter(theme.Active()), `{"a": 1}`},
+	} {
+		doc := docOf([][]rune{[]rune(tc.text)})
+		theme.SetPalette(theme.Default)
+		before := tc.h(doc, 0)
+		theme.SetPalette(theme.Light)
+		after := tc.h(doc, 0)
+		if len(before) == 0 || len(after) == 0 {
+			t.Fatalf("%s: no runs for %q", tc.name, tc.text)
+		}
+		if bg := after[0].Style.GetBackground(); bg != theme.Light.EditorBg {
+			t.Errorf("%s: after switching to Light the first run's background is %v, want %v", tc.name, bg, theme.Light.EditorBg)
+		}
+	}
+}

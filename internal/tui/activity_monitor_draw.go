@@ -152,12 +152,18 @@ func (am *ActivityMonitor) dashboardCanvas(cw, ch int) *charts.Canvas {
 		gen:      am.viewGen,
 		header:   am.header(),
 		interval: am.drawInterval(),
+		palette:  *theme.Active(),
 	}
 	if am.canvas != nil && am.canvasKey == key {
 		return am.canvas
 	}
 
 	c := charts.NewCanvas(cw, ch)
+	// The panel ground first: the renders leave column gutters and the corner
+	// under each Y axis unpainted, and Blit copies those cells as they are. Left
+	// colourless they showed the screen's default ground (a strip of a different
+	// shade), and DimArea skips them, so they stayed bright behind a dialog.
+	c.Fill(' ', theme.StylePanel())
 	switch am.tab {
 	case amTabSample:
 		v := am.sample

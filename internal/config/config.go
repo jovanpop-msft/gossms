@@ -139,6 +139,26 @@ func AllIconStyles() []IconStyle {
 	return []IconStyle{IconStyleEmoji, IconStyleSymbols, IconStylePortable, IconStyleNone}
 }
 
+// ColorTheme selects the UI palette. The zero value, ThemeDark, is the default
+// for a config.json missing the field.
+type ColorTheme int
+
+const (
+	ThemeDark ColorTheme = iota
+	ThemeLight
+)
+
+// ColorThemeName returns the Options dialog label for t.
+func ColorThemeName(t ColorTheme) string {
+	if t == ThemeLight {
+		return "Light"
+	}
+	return "Dark"
+}
+
+// AllColorThemes returns the color themes in Options-dialog order.
+func AllColorThemes() []ColorTheme { return []ColorTheme{ThemeDark, ThemeLight} }
+
 // Connection is one saved server connection. Password is plaintext in memory;
 // Load and Save encrypt at the JSON boundary (see secret.go).
 type Connection struct {
@@ -308,6 +328,7 @@ type Config struct {
 	// RemoveConnection: Save replays the recorded operations, not this slice.
 	Connections   []Connection `json:"connections"`
 	IconStyle     IconStyle    `json:"icon_style"`
+	Theme         ColorTheme   `json:"theme"`
 	MaxCellLength int          `json:"max_cell_length"`
 	// MaxTextColumnLength is how many characters Results to Text shows of each
 	// column, SSMS's "Maximum number of characters displayed in each column".

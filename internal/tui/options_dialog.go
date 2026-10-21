@@ -8,6 +8,7 @@ import (
 	"github.com/radix29/gossms/internal/tuikit/controls"
 	"github.com/radix29/gossms/internal/tuikit/core"
 	"github.com/radix29/gossms/internal/tuikit/dialogs"
+	"github.com/radix29/gossms/internal/tuikit/theme"
 	"github.com/radix29/gossms/internal/tuikit/widgets"
 )
 
@@ -18,6 +19,7 @@ type OptionsDialog struct {
 	app *App
 
 	rbIconStyle    *widgets.RadioBox
+	rbTheme        *widgets.RadioBox
 	fMaxCellLen    *widgets.InputField
 	fMaxTextLen    *widgets.InputField
 	fIndentWidth   *widgets.InputField
@@ -50,12 +52,19 @@ func NewOptionsDialog(app *App) *OptionsDialog {
 	}
 	d.rbIconStyle = widgets.NewRadioBox("Object Explorer Icons:", labels)
 
+	themes := config.AllColorThemes()
+	themeLabels := make([]string, len(themes))
+	for i, t := range themes {
+		themeLabels[i] = config.ColorThemeName(t)
+	}
+	d.rbTheme = widgets.NewRadioBox("Color Theme:", themeLabels)
+
 	d.fMaxCellLen = widgets.NewInputField("Max default cell length:", 5, false)
 	d.fMaxTextLen = widgets.NewInputField("Max characters per column (text):", 5, false)
 	d.fIndentWidth = widgets.NewInputField("Indent size (spaces):", 5, false)
 	d.fXECapacity = widgets.NewInputField("Extended Events viewer holds (events):", 9, false)
 	d.cbIntelliSense = widgets.NewCheckBox("Enable IntelliSense (autocomplete) in Query editor")
-	d.focusable = []focusable{d.rbIconStyle, d.fMaxCellLen, d.fMaxTextLen, d.fIndentWidth, d.fXECapacity, d.cbIntelliSense}
+	d.focusable = []focusable{d.rbIconStyle, d.rbTheme, d.fMaxCellLen, d.fMaxTextLen, d.fIndentWidth, d.fXECapacity, d.cbIntelliSense}
 	return d
 }
 
@@ -66,6 +75,12 @@ func (d *OptionsDialog) Show() {
 	for i, st := range config.AllIconStyles() {
 		if st == d.app.cfg.IconStyle {
 			d.rbIconStyle.SetSelected(i)
+			break
+		}
+	}
+	for i, t := range config.AllColorThemes() {
+		if t == d.app.cfg.Theme {
+			d.rbTheme.SetSelected(i)
 			break
 		}
 	}
@@ -101,6 +116,8 @@ func (d *OptionsDialog) Draw(s tcell.Screen) {
 	inner := d.InnerRect()
 	d.rbIconStyle.SetBounds(inner.X+1, inner.Y+1)
 	d.rbIconStyle.Draw(s)
+	d.rbTheme.SetBounds(inner.X+31, inner.Y+1)
+	d.rbTheme.Draw(s)
 
 	d.fMaxCellLen.SetBounds(inner.X+1, inner.Y+6)
 	d.fMaxCellLen.Draw(s)
@@ -168,9 +185,10 @@ func (d *OptionsDialog) HandleKey(ev *tcell.EventKey) bool {
 	case tcell.KeyEnter:
 		d.doButton()
 	default:
-		// The icon-style radio box swallows the keys it does not use; the fields and the
+		// The radio boxes swallow the keys they do not use; the fields and the
 		// checkbox pass them on.
-		return d.focusIdx == 0
+		_, isRadio := d.focusable[d.focusIdx].(*widgets.RadioBox)
+		return isRadio
 	}
 	return true
 }
@@ -181,7 +199,7 @@ func (d *OptionsDialog) HandleMouse(ev *tcell.EventMouse) bool {
 		return false
 	}
 	// A release outside the dialog is consumed by ConsumeOutsideClick below before
-	// rbIconStyle/cbIntelliSense's own HandleMouse calls see it, leaving their
+	// the radio boxes'/cbIntelliSense's own HandleMouse calls see it, leaving their
 	// mouseDragging latch set and swallowing the next press. Reset it here first;
 	// each returns false on ButtonNone so this has no other effect. drag.Release
 	// does the same for the input fields and must likewise come before
@@ -264,10 +282,11 @@ func (d *OptionsDialog) doButton() {
 // sheets host a writable EditorRow changes with the pages.
 type editorIndentHost interface{ SetEditorIndentWidth(n int) }
 
-// apply commits all six settings (icon style, max cell length, max text column
+// apply commits all seven settings (icon style, color theme, max cell length, max text column
 // length, indent size, the Extended Events viewer's event limit, IntelliSense
 // enabled) to the config, persists it, and rebuilds the Object Explorer so the
-// icon change shows immediately.
+// icon change shows immediately. The theme needs only the palette swapped: every
+// style is read from it at draw time.
 //
 // The indent size needs one step the others don't: MaxCellLength,
 // MaxTextColumnLength and IntelliSenseDisabled are read from cfg where used, but
@@ -277,6 +296,10 @@ func (d *OptionsDialog) apply() {
 	styles := config.AllIconStyles()
 	if i := d.rbIconStyle.Selected(); i >= 0 && i < len(styles) {
 		d.app.cfg.IconStyle = styles[i]
+	}
+	if themes := config.AllColorThemes(); d.rbTheme.Selected() >= 0 && d.rbTheme.Selected() < len(themes) {
+		d.app.cfg.Theme = themes[d.rbTheme.Selected()]
+		applyColorTheme(d.app.screen, d.app.cfg.Theme)
 	}
 	if n, err := strconv.Atoi(d.fMaxCellLen.Value()); err == nil && n > 0 {
 		d.app.cfg.MaxCellLength = n
@@ -324,4 +347,22 @@ func (d *OptionsDialog) apply() {
 // has focus. The radio box, checkbox and button row answer nil.
 func (d *OptionsDialog) FocusedClipboardTarget() core.ClipboardTarget {
 	return focusedClipboardTarget(d.focusable, d.focusIdx)
+}
+
+// applyColorTheme makes t's palette the active one, and s's default style its
+// ground: a cell drawn without a background (a chart canvas's gaps) takes the
+// screen style, which core.Init set from whatever palette was active then. The
+// Sync repaints every cell: tcell resolves the screen style only when it emits a
+// cell, and one whose content and style are unchanged is never re-emitted, so it
+// would keep the old ground. s may be nil (an App from newTestApp).
+func applyColorTheme(s tcell.Screen, t config.ColorTheme) {
+	if t == config.ThemeLight {
+		theme.SetPalette(theme.Light)
+	} else {
+		theme.SetPalette(theme.Default)
+	}
+	if s != nil {
+		s.SetStyle(theme.StyleDefault())
+		s.Sync()
+	}
 }

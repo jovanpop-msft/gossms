@@ -14,6 +14,7 @@ import (
 	"github.com/radix29/gossms/internal/tuikit/charts"
 	"github.com/radix29/gossms/internal/tuikit/controls"
 	"github.com/radix29/gossms/internal/tuikit/core"
+	"github.com/radix29/gossms/internal/tuikit/theme"
 )
 
 // amTab identifies an Activity Monitor tab. Which tabs a connection offers is
@@ -271,6 +272,9 @@ type amCanvasKey struct {
 	gen      uint64
 	header   dashboard.Header
 	interval time.Duration
+	// palette re-renders on a theme switch; without it a paused monitor (no new
+	// gen) keeps the old theme's colours.
+	palette theme.Palette
 }
 
 // amTooltip is a pinned readout of one sample: every series of a chart at the

@@ -22,12 +22,13 @@ import (
 // column actually arrives in: one enormous single line. Cost is linear in the
 // line, once.
 func JSONHighlighter(p *theme.Palette) Highlighter {
-	keyStyle := tcell.StyleDefault.Background(p.EditorBg).Foreground(p.EditorKeyword).Bold(true)
-	strStyle := tcell.StyleDefault.Background(p.EditorBg).Foreground(p.EditorString)
-	numStyle := tcell.StyleDefault.Background(p.EditorBg).Foreground(p.EditorNumber)
-	litStyle := tcell.StyleDefault.Background(p.EditorBg).Foreground(p.EditorComment)
-
 	return func(doc *Document, idx int) []ColorRun {
+		// Built per call, not once: p is the live palette, so a theme switch
+		// recolours an open editor.
+		keyStyle := tcell.StyleDefault.Background(p.EditorBg).Foreground(p.EditorKeyword).Bold(true)
+		strStyle := tcell.StyleDefault.Background(p.EditorBg).Foreground(p.EditorString)
+		numStyle := tcell.StyleDefault.Background(p.EditorBg).Foreground(p.EditorNumber)
+		litStyle := tcell.StyleDefault.Background(p.EditorBg).Foreground(p.EditorComment)
 		line := doc.Line(idx)
 		runs := make([]ColorRun, 0, 8)
 		for i := 0; i < len(line); {
