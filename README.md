@@ -170,7 +170,9 @@ failed peer connection never retries with another server's credentials.
 
 goSSMS supports **SQL Server 2016 SP1 (13.0.4001) and later** on Windows and
 Linux, and **Azure SQL Managed Instance**. Features that are unavailable on the
-connected SQL Server version or engine edition are hidden or disabled.
+connected SQL Server version or engine edition are hidden or disabled. An
+older instance still connects, with a warning that some folders and dialogs
+will fail.
 
 ## Required rights
 

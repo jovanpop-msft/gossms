@@ -154,7 +154,7 @@ func (d *ShrinkDatabaseDialog) buildPages(pf *shrinkDatabasePrefetch) {
 		propsheet.Static("Available free space", shrinkFreeText(pf.freeKB, pf.allocatedKB)),
 		propsheet.Section("Shrink action"),
 		reorganize,
-		propsheet.Note("Selecting this option may affect performance."),
+		propsheet.Note("Ticked or not, the shrink moves pages toward the start of each file, then releases the free space at the end. Ticking only adds the free-space target below."),
 		percent,
 		propsheet.Note("The free space, as a percentage of each file, left in it once shrunk. Unticked, the database shrinks as far as its contents allow."),
 	}

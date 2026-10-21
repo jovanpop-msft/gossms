@@ -7,6 +7,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/radix29/gosmo"
+
 	"github.com/radix29/gossms/internal/config"
 	"github.com/radix29/gossms/internal/db"
 	"github.com/radix29/gossms/internal/query"
@@ -63,11 +65,24 @@ func (a *App) connectServer(ctx context.Context, opts config.Connection, phase f
 			a.explorer.ExpandNode(a.explorer.AddRoot(sc.Label(), sc))
 			info := sc.Server.Info()
 			a.setStatus(fmt.Sprintf("Connected to %s  |  %s %s", opts.Server, info.Edition, info.ProductVersion))
+			a.warnIfUnsupported(info)
 			a.ensureSysCompletionInventory(sc)
 			a.ensureCompletionDirectory(sc)
 			a.rememberConnection(opts)
 		})
 	})
+}
+
+// warnIfUnsupported tells the user, once per connect, that the instance is
+// older than gosmo's floor (2016 SP1). The connection is kept: most reads
+// still work, but those naming a newer column fail one by one with "Invalid
+// column name", which without this reads as a goSSMS bug.
+func (a *App) warnIfUnsupported(info *gosmo.ServerInfo) {
+	if info.Supported() {
+		return
+	}
+	a.alertDialog.ShowAlert("Unsupported Version",
+		fmt.Sprintf("SQL Server %s is older than 2016 SP1, the oldest version goSSMS supports; some folders and dialogs will fail.", info.ProductVersion))
 }
 
 // reportConnectError puts a failed dial on the status bar and, when the attempt

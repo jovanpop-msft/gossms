@@ -1432,6 +1432,14 @@ it from the string 'NULL'.
   would otherwise do. The explorer, Table Properties and Index Properties show
   them marked, not hidden, and Delete still works: dropping DTA leftovers is
   the usual cleanup. The full-text key-index picker leaves them out.
+- **Shrink Database's unticked "Reorganize files" scripts the bare
+  `DBCC SHRINKDATABASE (N'db')`** (checked against SSMS 21, 2026-10-21).
+  Ticked with N% it scripts `(N'db', N)`; neither form adds `TRUNCATEONLY` or
+  `NOTRUNCATE`, so both move pages, and the box only adds the free-space
+  target. Microsoft's dialog page, which equates unticked with
+  `TRUNCATEONLY`, is wrong; gosmo's `ShrinkDatabaseOptions` zero value is
+  right. SSMS 21 has no WAIT_AT_LOW_PRIORITY option there — gossms's Locking
+  rows (SQL 2025+) are an extra.
 - **Format Document upper-cases table hints only inside `WITH (…)`**: the
   legacy `JOIN log (nolock)` form stays as typed, since `(…)` after an
   unqualified name there may be a TVF's arguments (`CROSS APPLY f(nolock)`

@@ -390,9 +390,9 @@ gossms within each step, with `replace` active.
 | # | Item | Repo | Why here |
 |---|------|------|----------|
 | 1 | **B1** AG gates + **C1/R1** gate helpers | gosmo | **Done 2026-10-21** (uncommitted). FixedDrives gate lowered to 2017 after the live check; D3's C1 rule is in gosmo `CLAUDE.md`. |
-| 2 | **B4** doubled prefix + the guard test | gosmo | Tiny; the test finds siblings. |
-| 3 | **B2** pre-2016 warning | gosmo `Supported()` → gossms | Small; fixes a misleading first impression. |
-| 4 | **B3** verify against SSMS 21, then fix | gossms (+ gosmo doc) | **Blocked:** the user scripts it from SSMS 21 and reports; skip until then. |
+| 2 | **B4** doubled prefix + the guard test | gosmo | **Done 2026-10-21** (uncommitted). Five more sites fixed (`scriptExecProc`, `bindScriptArgs`, `parseEntraConfig`, and two exported-to-exported wraps); static guard `TestNoWrapOfAnAlreadyPrefixedError`; rule added to gosmo `CLAUDE.md`. |
+| 3 | **B2** pre-2016 warning | gosmo `Supported()` → gossms | **Done 2026-10-21** (uncommitted). `ServerInfo.Supported()` also checks the SP1 build (13.0.4001), as `MinimumServerVersion` documents; Object Explorer connects only. Driven live on win10cli\SQL2016 SP3 (no warning); no pre-2016 instance exists to drive the warning itself, so `TestWarnIfUnsupported` covers it. |
+| 4 | **B3** verify against SSMS 21, then fix | gossms (+ gosmo doc) | **Done 2026-10-21** (uncommitted). SSMS 21 scripts the bare form unticked and `(N'db', N)` ticked, so option 3: the note under the box now says both forms move pages; gosmo unchanged. Recorded in `docs/decisions.md` § By design. |
 | 5 | **S1** one shrink-file method, then **C3** | gosmo → gossms | Breaking, but one caller; shrink code is fresh in mind. |
 | 6 | **C2** `Server.exec` shape | gosmo | Mechanical; makes later moves cheaper. |
 | 7 | **S2** `Partitions []PartitionOptions` | gosmo → gossms | Breaking; do it before more per-partition options arrive. |

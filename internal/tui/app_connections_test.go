@@ -1,8 +1,10 @@
 package tui
 
 import (
+	"strings"
 	"testing"
 
+	"github.com/radix29/gosmo"
 	"github.com/radix29/gossms/internal/config"
 	"github.com/radix29/gossms/internal/db"
 	"github.com/radix29/gossms/internal/tuikit/controls"
@@ -126,5 +128,30 @@ func TestResolveConn(t *testing.T) {
 	}
 	if a.isConnected(nil) {
 		t.Errorf("isConnected(nil) = true, want false")
+	}
+}
+
+// A pre-2016 SP1 instance gets the warning and a supported or Azure one does
+// not: without it, the first folder that names a newer column fails with
+// "Invalid column name", which reads as a goSSMS bug.
+func TestWarnIfUnsupported(t *testing.T) {
+	for _, c := range []struct {
+		info *gosmo.ServerInfo
+		want bool
+	}{
+		{&gosmo.ServerInfo{ProductVersion: "12.0.6024.0", VersionMajor: 12, VersionBuild: 6024}, true},
+		{&gosmo.ServerInfo{ProductVersion: "13.0.1601.5", VersionMajor: 13, VersionBuild: 1601}, true},
+		{&gosmo.ServerInfo{ProductVersion: "13.0.6300.2", VersionMajor: 13, VersionBuild: 6300}, false},
+		{&gosmo.ServerInfo{ProductVersion: "12.0.2000.8", VersionMajor: 12, EngineEdition: int(gosmo.EngineAzureManagedInst)}, false},
+	} {
+		a := newTestApp()
+		a.alertDialog = dialogs.NewAlertDialog(nil)
+		a.warnIfUnsupported(c.info)
+		if got := a.alertDialog.Visible(); got != c.want {
+			t.Errorf("%s: warned = %v, want %v", c.info.ProductVersion, got, c.want)
+		}
+		if c.want && !strings.Contains(a.alertDialog.Message(), c.info.ProductVersion) {
+			t.Errorf("%s: warning %q does not name the version", c.info.ProductVersion, a.alertDialog.Message())
+		}
 	}
 }
