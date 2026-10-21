@@ -25,10 +25,11 @@ import (
 // shrinkMenuItem is the database node's Shrink cascade. Script-only, so it asks
 // no right: generating a statement is what a login without the right to run
 // it can still use, as Script Changes on a read-only page is. Offered on an
-// ONLINE database only — DBCC SHRINK* needs the database open, and the
-// dialogs' size reads go through a USE.
+// ONLINE, writable database only — DBCC SHRINK* needs the database open (the
+// dialogs' size reads go through a USE) and fails on a read-only one, so the
+// script could only fail.
 func shrinkMenuItem(a *App, sc *db.ServerConn, node *explorerNode) (controls.MenuItem, bool) {
-	if node.data.DBState != "ONLINE" {
+	if node.data.DBState != "ONLINE" || node.data.DBReadOnly {
 		return controls.MenuItem{}, false
 	}
 	dbName := node.data.DBName

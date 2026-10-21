@@ -1,0 +1,8 @@
+-- Names spelled like built-in functions, followed by "(" where no call stands.
+create table log (id int identity, msg nvarchar(200), year as year(sysdatetime()))
+create index ix_log on log (msg) where msg is not null
+create table month (id int primary key, log_id int references log (id))
+insert into log (msg) select left(name, 10) from sys.objects
+update log set msg = format(getdate(), 'yyyy') where id = 1
+;with rank (r, c) as (select rank() over (order by id), count(*) over () from log), day (d) as (select day(getdate())) select r, c, d from rank cross join day
+select l.msg, len(l.msg) from month m join log (nolock) l on l.id = m.log_id cross apply openjson(l.msg) j

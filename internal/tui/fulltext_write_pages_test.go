@@ -646,8 +646,8 @@ func TestNewFullTextIndexPreflightRefusals(t *testing.T) {
 	}
 }
 
-// The key-index candidates: unique, enabled, unfiltered, rowstore, one
-// non-nullable column.
+// The key-index candidates: unique, enabled, real (not a tuning advisor's
+// hypothetical index), unfiltered, rowstore, one non-nullable column.
 func TestFullTextKeyIndexes(t *testing.T) {
 	cols := []*gosmo.Column{{Name: "ID"}, {Name: "Code"}, {Name: "Maybe", IsNullable: true}, {Name: "A"}, {Name: "B"}}
 	key := func(c ...string) []gosmo.IndexColumn {
@@ -665,6 +665,7 @@ func TestFullTextKeyIndexes(t *testing.T) {
 		{Name: "UQ_Two", IsUnique: true, Type: gosmo.IndexTypeNonClustered, KeyColumns: key("A", "B")},
 		{Name: "UQ_Filtered", IsUnique: true, Type: gosmo.IndexTypeNonClustered, KeyColumns: key("A"), FilterDefinition: "([A]>(0))"},
 		{Name: "UQ_Disabled", IsUnique: true, IsDisabled: true, Type: gosmo.IndexTypeNonClustered, KeyColumns: key("B")},
+		{Name: "UQ_Hypothetical", IsUnique: true, IsHypothetical: true, Type: gosmo.IndexTypeNonClustered, KeyColumns: key("Code")},
 	}
 	if got := fullTextKeyIndexes(idx, cols); !slices.Equal(got, []string{"PK", "UQ_Code"}) {
 		t.Errorf("key indexes = %q", got)

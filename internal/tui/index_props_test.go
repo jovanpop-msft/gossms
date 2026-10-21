@@ -82,3 +82,20 @@ func TestColumnStoreIndexTypesRenderDistinctly(t *testing.T) {
 		t.Fatal("clustered and nonclustered columnstore must not render identically")
 	}
 }
+
+// The Indexes folder lists a hypothetical (tuning advisor) index marked, not
+// hidden — dropping the advisor's leftovers is why one goes looking.
+func TestIndexNodeLabelMarksHypothetical(t *testing.T) {
+	for _, c := range []struct {
+		idx  gosmo.Index
+		want string
+	}{
+		{gosmo.Index{Name: "IX", Type: gosmo.IndexTypeNonClustered}, "IX (Nonclustered)"},
+		{gosmo.Index{Name: "UX", Type: gosmo.IndexTypeNonClustered, IsUnique: true}, "UX (Nonclustered, Unique)"},
+		{gosmo.Index{Name: "_dta_index_t_5", Type: gosmo.IndexTypeNonClustered, IsHypothetical: true}, "_dta_index_t_5 (Nonclustered, Hypothetical)"},
+	} {
+		if got := indexNodeLabel(&c.idx); got != c.want {
+			t.Errorf("indexNodeLabel(%s) = %q, want %q", c.idx.Name, got, c.want)
+		}
+	}
+}

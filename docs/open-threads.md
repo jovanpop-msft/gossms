@@ -72,6 +72,15 @@ Settled design: `docs/decisions.md` § Format Document.
   the built-ins resolve case-insensitively; `sysname` and the CLR types are
   left alone because a CS server collation was not available to check them.
 
+## Shrink: what is left
+
+- **A log file's "Minimum is N MB" is its used space, not its real floor.**
+  A log shrinks no further than its last active VLF, so Shrink > Files now
+  calls the figure a lower bound (`shrink_files_dialog.go`). The real floor
+  is readable from `sys.dm_db_log_info` (2016 SP2+; `DBCC LOGINFO` before):
+  the end offset of the highest active VLF. Showing that needs a gosmo read
+  and a version gate for 2016 RTM/SP1.
+
 ## Fix order
 
 Outstanding work by priority within each subsection. Each item points to where

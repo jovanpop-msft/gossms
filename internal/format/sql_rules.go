@@ -34,7 +34,8 @@ VALUES VARYING VIEW WAITFOR WHEN WHERE WHILE WITH WITHIN WRITETEXT
 `)
 
 // sqlFunctions are built-in functions, upper-cased only where called — the
-// next token is "(" and no "." qualifies the name — since COUNT, LEFT or
+// next token is "(", no "." qualifies the name, and it is not where an object
+// name stands (sqlLayout.namePos: INSERT INTO log (msg)) — since COUNT, LEFT or
 // FORMAT standing alone may be a column. A scalar UDF needs its schema, so an
 // unqualified call is a built-in.
 var sqlFunctions = wordSet(`
@@ -61,6 +62,11 @@ SYSUTCDATETIME TAN TIMEFROMPARTS TODATETIMEOFFSET TRANSLATE TRIM TRY_CAST
 TRY_PARSE TYPE_ID TYPE_NAME UNICODE UPPER USER_ID USER_NAME VAR VARP
 XACT_STATE YEAR
 `)
+
+// sqlTableFunctions are the built-ins called where a table name stands
+// (FROM OPENJSON(@j), CROSS APPLY STRING_SPLIT(...)), so sqlLayout.namePos
+// leaves them to be upper-cased there.
+var sqlTableFunctions = wordSet(`GENERATE_SERIES OPENJSON STRING_SPLIT`)
 
 // sqlTypes are system data types, upper-cased only in a type position (after
 // a @variable or parameter, a column name in a table definition, CAST's AS,
@@ -111,11 +117,21 @@ ABSENT AUTO BASE64 BINARY BROWSE ELEMENTS EXPLICIT INCLUDE_NULL_VALUES JSON
 PATH RAW ROOT TYPE WITHOUT_ARRAY_WRAPPER XML XMLDATA XMLSCHEMA XSINIL
 `)
 
+// sqlTableHints are the table hints of a WITH (...) after a table in a
+// SELECT or DML statement (WITH (NOLOCK, INDEX(ix))), upper-cased only as an
+// item of that list. HOLDLOCK and INDEX are reserved already.
+var sqlTableHints = wordSet(`
+FORCESCAN FORCESEEK IGNORE_CONSTRAINTS IGNORE_TRIGGERS KEEPDEFAULTS
+KEEPIDENTITY NOEXPAND NOLOCK NOWAIT PAGLOCK READCOMMITTED READCOMMITTEDLOCK
+READPAST READUNCOMMITTED REPEATABLEREAD ROWLOCK SERIALIZABLE SNAPSHOT TABLOCK
+TABLOCKX UPDLOCK XLOCK
+`)
+
 // sqlKeywords is every word the style may upper-case: the guard compares
 // these case-insensitively and every other word exactly.
 var sqlKeywords = func() map[string]bool {
 	m := map[string]bool{}
-	for _, s := range []map[string]bool{sqlReserved, sqlFunctions, sqlTypes, sqlSetOptions, sqlPhraseWords, sqlModuleWords, sqlForWords} {
+	for _, s := range []map[string]bool{sqlReserved, sqlFunctions, sqlTypes, sqlSetOptions, sqlPhraseWords, sqlModuleWords, sqlForWords, sqlTableHints} {
 		for w := range s {
 			m[w] = true
 		}

@@ -102,21 +102,58 @@ func formatSQLOrFail(t *testing.T, src string) string {
 // function, since a case-sensitive database tells date from DATE.
 func TestFormatSQLKeywordCase(t *testing.T) {
 	for src, want := range map[string]string{
-		"select date, count from t":               "SELECT\n    date\n  , count\nFROM t",
-		"select count(*), left(a, 1) from t":      "SELECT\n    COUNT(*)\n  , LEFT(a, 1)\nFROM t",
-		"select dbo.count(x), t.select from t":    "SELECT\n    dbo.count(x)\n  , t.select\nFROM t",
-		"declare @d date, @v varchar(5)":          "DECLARE\n    @d DATE\n  , @v VARCHAR(5)",
-		"select cast(a as int), convert(date, b)": "SELECT\n    CAST(a AS INT)\n  , CONVERT(DATE, b)",
-		"select int, text from t":                 "SELECT\n    int\n  , text\nFROM t",
-		"set nocount on":                          "SET NOCOUNT ON",
-		"set @nocount = 1":                        "SET @nocount = 1",
-		"select @@rowcount, @Select":              "SELECT\n    @@rowcount\n  , @Select",
-		"select [select], \"from\" from [t]":      "SELECT\n    [select]\n  , \"from\"\nFROM [t]",
-		"exec p @x output":                        "EXEC p @x output",
-		"select sysname from t":                   "SELECT sysname\nFROM t",
+		"select date, count from t":                    "SELECT\n    date\n  , count\nFROM t",
+		"select count(*), left(a, 1) from t":           "SELECT\n    COUNT(*)\n  , LEFT(a, 1)\nFROM t",
+		"select dbo.count(x), t.select from t":         "SELECT\n    dbo.count(x)\n  , t.select\nFROM t",
+		"declare @d date, @v varchar(5)":               "DECLARE\n    @d DATE\n  , @v VARCHAR(5)",
+		"select cast(a as int), convert(date, b)":      "SELECT\n    CAST(a AS INT)\n  , CONVERT(DATE, b)",
+		"select int, text from t":                      "SELECT\n    int\n  , text\nFROM t",
+		"set nocount on":                               "SET NOCOUNT ON",
+		"set @nocount = 1":                             "SET @nocount = 1",
+		"select @@rowcount, @Select":                   "SELECT\n    @@rowcount\n  , @Select",
+		"select [select], \"from\" from [t]":           "SELECT\n    [select]\n  , \"from\"\nFROM [t]",
+		"exec p @x output":                             "EXEC p @x output",
+		"select sysname from t":                        "SELECT sysname\nFROM t",
+		"select * from t with (nolock, index(ix))":     "SELECT *\nFROM t WITH (NOLOCK, INDEX(ix))",
+		"update t with (tablock) set a = 1":            "UPDATE t WITH (TABLOCK)\nSET a = 1",
+		"select * from openjson(@j) with (nolock int)": "SELECT *\nFROM OPENJSON(@j) WITH (nolock int)",
+		"create index ix on t (a) with (online = on)":  "CREATE INDEX ix ON t (a) WITH (online = ON)",
 	} {
 		if got := formatSQLOrFail(t, src); got != want {
 			t.Errorf("Format(%q) =\n%s\nwant\n%s", src, got, want)
+		}
+	}
+}
+
+// A name spelled like a built-in function keeps its source case where an
+// object name stands, though a "(" follows it — a column list or a table
+// hint, not a call — while the real calls around it are still upper-cased.
+func TestFormatSQLNamePositionKeepsCase(t *testing.T) {
+	for _, tc := range []struct{ src, want string }{
+		{"insert into log (msg) select left(s.x, 2) from s",
+			"INSERT INTO log (msg)\nSELECT LEFT(s.x, 2)\nFROM s"},
+		{"insert log (msg) select count(*) from t",
+			"INSERT log (msg)\nSELECT COUNT(*)\nFROM t"},
+		{"create table year (id int, m as month(getdate()))",
+			"CREATE TABLE year (\n    id INT\n  , m AS MONTH(GETDATE())\n)"},
+		{"create index ix on log (msg)", "CREATE INDEX ix ON log (msg)"},
+		{"create statistics s on log (msg)", "CREATE STATISTICS s ON log (msg)"},
+		{"update statistics log (s)", "UPDATE STATISTICS log (s)"},
+		{"grant select on log (msg) to u", "GRANT SELECT ON log (msg) TO u"},
+		{"with rank (r) as (select count(*) from t), month (m) as (select 1) select r from rank",
+			"WITH rank (r) AS (\n    SELECT COUNT(*)\n    FROM t\n)\n, month (m) AS (\n    SELECT 1\n)\nSELECT r\nFROM rank"},
+		{"create table t (id int references month (id))",
+			"CREATE TABLE t (id INT REFERENCES month (id))"},
+		{"select * from t join log (nolock) on left(t.a, 1) = log.b",
+			"SELECT *\nFROM t\nJOIN log (nolock) ON LEFT(t.a, 1) = log.b"},
+		{"select * from openjson(@j) cross apply string_split(a, ',') s",
+			"SELECT *\nFROM OPENJSON(@j)\nCROSS APPLY STRING_SPLIT(a, ',') s"},
+		{"select trim(' ' from left(s, 3)) from t where a is distinct from left(b, 1)",
+			"SELECT TRIM(' ' FROM LEFT(s, 3))\nFROM t\nWHERE a IS DISTINCT FROM LEFT(b, 1)"},
+		{"create view rank (a) as select 1", "CREATE VIEW rank (a)\nAS\nSELECT 1"},
+	} {
+		if got := formatSQLOrFail(t, tc.src); got != tc.want {
+			t.Errorf("Format(%q) =\n%s\nwant\n%s", tc.src, got, tc.want)
 		}
 	}
 }

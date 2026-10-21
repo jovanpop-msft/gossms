@@ -93,12 +93,28 @@ func pageTableGeneral(sc *db.ServerConn, dbName, schema, name string) propPage {
 				propsheet.Section("Dependencies"),
 				propsheet.Static("Primary key", orDefault(detail.PrimaryKeyName, "None")),
 				propsheet.Static("Foreign keys", strconv.Itoa(len(fks))),
-				propsheet.Static("Indexes", strconv.Itoa(len(idxs))),
+				propsheet.Static("Indexes", indexCountText(idxs)),
 				propsheet.Static("Triggers", strconv.Itoa(len(triggers))),
 			)
 			return f, nil, nil
 		},
 	}
+}
+
+// indexCountText is Table Properties' index count, with how many of them
+// are hypothetical (tuning advisor) indexes — which have no data, so a count
+// that folded them in silently overstated what the table carries.
+func indexCountText(idxs []*gosmo.Index) string {
+	hypo := 0
+	for _, i := range idxs {
+		if i.IsHypothetical {
+			hypo++
+		}
+	}
+	if hypo == 0 {
+		return strconv.Itoa(len(idxs))
+	}
+	return strconv.Itoa(len(idxs)) + " (" + strconv.Itoa(hypo) + " hypothetical)"
 }
 
 // tableOwnerText names the table's owner, marking one the table takes from

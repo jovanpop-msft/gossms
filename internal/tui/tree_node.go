@@ -472,6 +472,9 @@ type nodeData struct {
 	// RESTORING, …), read at load time; IsOffline is DBState != "ONLINE". The
 	// delete confirmation names what a drop in that state leaves on disk.
 	DBState string
+	// DBReadOnly is a NodeDatabase's sys.databases is_read_only, read with
+	// DBState: Shrink is not offered on one, as every DBCC SHRINK* fails there.
+	DBReadOnly bool
 	// IsSystem marks an object SQL Server owns: a system database, a sys-schema
 	// view/procedure/function, a SQL-Server-created Agent job. The System * folder
 	// loaders emit the same node types as the user ones, so without this flag

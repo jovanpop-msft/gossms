@@ -42,9 +42,9 @@ func idxTableResp() fakeResponse {
 // idxListResp answers Table.indexList with one index. The scan order is
 // sys.indexes' own; see gosmo's table.go.
 func idxListResp(name string, indexID int64, opts indexFixture) fakeResponse {
-	return fakeResponse{match: "FROM   sys.indexes i", db: idxDatabase, cols: 37, rows: [][]driver.Value{{
+	return fakeResponse{match: "FROM   sys.indexes i", db: idxDatabase, cols: 38, rows: [][]driver.Value{{
 		name, indexID, opts.typeDesc,
-		opts.unique, opts.primaryKey, opts.uniqueConstraint, false,
+		opts.unique, opts.primaryKey, opts.uniqueConstraint, false, opts.hypothetical,
 		opts.fillFactor, opts.filter,
 		opts.padded, opts.ignoreDupKey, opts.rowLocks, opts.pageLocks,
 		// Per-partition compression, a FOR JSON list; one partition here.
@@ -73,6 +73,7 @@ type indexFixture struct {
 	pageLocks        bool
 	compression      string
 	noRecompute      bool
+	hypothetical     bool
 }
 
 func plainIndex() indexFixture {

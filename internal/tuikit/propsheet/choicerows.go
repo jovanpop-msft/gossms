@@ -436,10 +436,22 @@ func (r *RadioRow) SetSelected(i int) {
 // OnChange fires. SetSelected's counterpart, for the reason TextRow.Edit
 // documents.
 func (r *RadioRow) Edit(i int) {
+	if !r.rb.OptionEnabled(i) {
+		return
+	}
 	before := r.rb.Selected()
 	r.rb.SetSelected(i)
 	r.notifyChanged(before)
 }
+
+// SetOptionEnabled greys out (or restores) one option, as
+// widgets.RadioBox.SetOptionEnabled: keys and clicks step over it, and Edit
+// refuses it as they do. It never moves the selection — a page greying the
+// selected option moves it itself.
+func (r *RadioRow) SetOptionEnabled(i int, v bool) { r.rb.SetOptionEnabled(i, v) }
+
+// OptionEnabled reports whether option i can be picked.
+func (r *RadioRow) OptionEnabled(i int) bool { return r.rb.OptionEnabled(i) }
 
 // SetOnChange installs a callback fired when user interaction changes the
 // selection, given the new index (SelectRow.SetOnChange's counterpart, for a

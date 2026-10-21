@@ -16,7 +16,7 @@ func shrinkFilesTestFiles() []*gosmo.DatabaseFileInfo {
 		{FileID: 1, Name: "App", Type: "ROWS", FileGroup: "PRIMARY", PhysicalName: `C:\d\App.mdf`, SizeKB: 72 * 1024, SpaceUsedKB: 19648},
 		{FileID: 2, Name: "App_log", Type: "LOG", PhysicalName: `C:\l\App_log.ldf`, SizeKB: 72 * 1024, SpaceUsedKB: 51064},
 		{FileID: 3, Name: "App_2", Type: "ROWS", FileGroup: "PRIMARY", PhysicalName: `C:\d\App_2.ndf`, SizeKB: 16 * 1024, SpaceUsedKB: 1024},
-		{FileID: 4, Name: "App'fg2", Type: "ROWS", FileGroup: "FG2", PhysicalName: `C:\d\App_fg2.ndf`, SizeKB: 8 * 1024, SpaceUsedKB: 512},
+		{FileID: 4, Name: "App'fg2", Type: "ROWS", FileGroup: "FG2", PhysicalName: `C:\d\App_fg2.ndf`, SizeKB: 8*1024 + 256, SpaceUsedKB: 512},
 	})
 }
 
@@ -94,9 +94,10 @@ func TestShrinkFilesPickersNarrowToTheChosenFile(t *testing.T) {
 	}
 }
 
-// Reorganize sends the typed size as given — 0 included, as SSMS does — and
-// refuses one above the file's current size.
-func TestShrinkFilesReorganizeSendsTheTargetVerbatim(t *testing.T) {
+// Reorganize sends the typed size as given, except 0, which goes as 1 —
+// SHRINKFILE's own 0 stops at the creation size, so a never-shrunk file would
+// silently stay put — and refuses one above the file's current size.
+func TestShrinkFilesReorganizeSendsTheTarget(t *testing.T) {
 	sc, _ := newFakeConn(t)
 	d := shrinkFilesTestDialog(t, sc)
 	f := d.forms[0]
@@ -114,13 +115,64 @@ func TestShrinkFilesReorganizeSendsTheTargetVerbatim(t *testing.T) {
 		t.Fatal("choosing Reorganize left Shrink file to disabled")
 	}
 	editText(t, f, "Shrink file to", "0")
-	if got := shrinkScript(t, d.preflight, d.applyFns[0]); !strings.Contains(got, "DBCC SHRINKFILE (N'App_2', 0)") {
-		t.Errorf("script = %q, want DBCC SHRINKFILE (N'App_2', 0)", got)
+	if got := shrinkScript(t, d.preflight, d.applyFns[0]); !strings.Contains(got, "DBCC SHRINKFILE (N'App_2', 1)") {
+		t.Errorf("script = %q, want 0 sent as DBCC SHRINKFILE (N'App_2', 1)", got)
+	}
+	editText(t, f, "Shrink file to", "5")
+	if got := shrinkScript(t, d.preflight, d.applyFns[0]); !strings.Contains(got, "DBCC SHRINKFILE (N'App_2', 5)") {
+		t.Errorf("script = %q, want DBCC SHRINKFILE (N'App_2', 5)", got)
 	}
 
 	editText(t, f, "Shrink file to", "17")
 	if err := d.preflight(); err == nil {
 		t.Error("preflight accepted a target above the file's 16 MB")
+	}
+}
+
+// The default target rounds the size up, so an untouched Reorganize on an
+// 8.25 MB file sends 9 — a no-op — not 8, a real shrink; 9 is also the most
+// it accepts.
+func TestShrinkFilesDefaultTargetRoundsTheSizeUp(t *testing.T) {
+	sc, _ := newFakeConn(t)
+	d := shrinkFilesTestDialog(t, sc)
+	f := d.forms[0]
+
+	editSelect(t, f, "Filegroup", "FG2")
+	editRadio(t, f, "Shrink action", "Reorganize pages before releasing unused space")
+	if got := textRow(t, f, "Shrink file to").Value(); got != "9" {
+		t.Errorf("Shrink file to starts at %q on an 8.25 MB file, want 9", got)
+	}
+	if got := shrinkScript(t, d.preflight, d.applyFns[0]); !strings.Contains(got, "DBCC SHRINKFILE (N'App''fg2', 9)") {
+		t.Errorf("script = %q, want DBCC SHRINKFILE (N'App''fg2', 9)", got)
+	}
+	editText(t, f, "Shrink file to", "10")
+	if err := d.preflight(); err == nil {
+		t.Error("preflight accepted a target above the file's rounded-up 9 MB")
+	}
+}
+
+// A log's minimum is only its used space, which a log shrink can't promise to
+// reach: the note says so for a log file and not for a data file.
+func TestShrinkFilesLogMinimumIsALowerBound(t *testing.T) {
+	sc, _ := newFakeConn(t)
+	d := shrinkFilesTestDialog(t, sc)
+	f := d.forms[0]
+
+	note := func() string {
+		var b strings.Builder
+		for _, r := range f.Rows() {
+			if n, ok := r.(*propsheet.NoteRow); ok {
+				b.WriteString(n.Text() + "\n")
+			}
+		}
+		return b.String()
+	}
+	if strings.Contains(note(), "virtual log file") {
+		t.Errorf("a data file's note mentions VLFs:\n%s", note())
+	}
+	editSelect(t, f, "File type", "Log")
+	if got := note(); !strings.Contains(got, "Minimum is 50 MB") || !strings.Contains(got, "last active virtual log file") {
+		t.Errorf("the log's note = %q, want its 50 MB used space called a lower bound", got)
 	}
 }
 
@@ -131,5 +183,57 @@ func TestShrinkFileMinimumIsUsedSpaceRoundedUp(t *testing.T) {
 	}
 	if got := shrinkFileMinMB(&gosmo.DatabaseFileInfo{SpaceUsedKB: 2048}); got != 2 {
 		t.Errorf("minimum of exactly 2 MB used = %d MB, want 2", got)
+	}
+}
+
+// A FILESTREAM container takes EMPTYFILE and nothing else (Msg 2563, live on
+// 2025), so picking one pins the action to Empty file, greys the other two,
+// and shows no size figures — the catalog has none. Picking another type
+// gives the choices back.
+func TestShrinkFilesFilestreamOnlyEmpties(t *testing.T) {
+	sc, _ := newFakeConn(t)
+	d := &ShrinkFilesDialog{dbName: "AppDB"}
+	d.sc = sc
+	d.pages = []string{"General"}
+	d.forms = make([]*propsheet.Form, 1)
+	d.applyFns = make([]propApply, 1)
+	files := append(shrinkFilesTestFiles(),
+		&gosmo.DatabaseFileInfo{FileID: 65537, Name: "fs1", Type: "FILESTREAM", FileGroup: "FSG", PhysicalName: `C:\fs\fs1`})
+	d.buildPages(&shrinkFilesPrefetch{files: files})
+	f := d.forms[0]
+	action := radioRow(t, f, "Shrink action")
+
+	editSelect(t, f, "File type", "FILESTREAM Data")
+	if got := selectRow(t, f, "File name").Value(); got != "fs1" {
+		t.Fatalf("File name = %q, want fs1", got)
+	}
+	if action.Selected() != shrinkFileEmpty {
+		t.Errorf("action = %q, want Empty file", action.CopyText())
+	}
+	if action.OptionEnabled(shrinkFileRelease) || action.OptionEnabled(shrinkFileReorganize) || !action.OptionEnabled(shrinkFileEmpty) {
+		t.Error("a FILESTREAM container leaves Release or Reorganize pickable, or Empty file not")
+	}
+	for _, label := range []string{"Currently allocated space", "Available free space"} {
+		if got := staticRowValue(t, f, label); got != shrinkFilestreamNA {
+			t.Errorf("%s = %q, want %q", label, got, shrinkFilestreamNA)
+		}
+	}
+	action.Edit(shrinkFileRelease)
+	if action.Selected() != shrinkFileEmpty {
+		t.Error("Edit picked a greyed-out Release")
+	}
+	if got := shrinkScript(t, d.preflight, d.applyFns[0]); !strings.Contains(got, "DBCC SHRINKFILE (N'fs1', EMPTYFILE)") {
+		t.Errorf("script = %q, want DBCC SHRINKFILE (N'fs1', EMPTYFILE)", got)
+	}
+	// Even were the group forced onto another action, preflight refuses it.
+	action.SetSelected(shrinkFileReorganize)
+	if err := d.preflight(); err == nil || !strings.Contains(err.Error(), "EMPTYFILE") {
+		t.Errorf("preflight = %v, want the FILESTREAM refusal", err)
+	}
+
+	editSelect(t, f, "File type", "Log")
+	if action.Selected() != shrinkFileRelease || !action.OptionEnabled(shrinkFileRelease) || !action.OptionEnabled(shrinkFileReorganize) {
+		t.Errorf("on Log: action = %q, Release/Reorganize enabled %v/%v; want Release, both enabled",
+			action.CopyText(), action.OptionEnabled(shrinkFileRelease), action.OptionEnabled(shrinkFileReorganize))
 	}
 }

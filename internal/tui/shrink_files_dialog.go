@@ -42,6 +42,10 @@ const (
 // belongs to none.
 const shrinkNoFileGroup = "(not applicable)"
 
+// shrinkFilestreamNA stands in for a FILESTREAM container's size figures,
+// which the catalog doesn't have.
+const shrinkFilestreamNA = "n/a (FILESTREAM container)"
+
 // shrinkFilesPrefetch is the database's files, data files first.
 type shrinkFilesPrefetch struct {
 	files []*gosmo.DatabaseFileInfo
@@ -144,6 +148,14 @@ func shrinkFileMinMB(f *gosmo.DatabaseFileInfo) int64 {
 	return (f.SpaceUsedKB + 1023) / 1024
 }
 
+// shrinkFileSizeMB is the file's current size in whole MB, rounded up, so that
+// the default target is a true no-op: rounded down, an 8.25 MB file's untouched
+// Reorganize would script a real 0.25 MB shrink. A target at or above the size
+// is a no-op for DBCC SHRINKFILE.
+func shrinkFileSizeMB(f *gosmo.DatabaseFileInfo) int64 {
+	return (f.SizeKB + 1023) / 1024
+}
+
 func (d *ShrinkFilesDialog) buildPages(pf *shrinkFilesPrefetch) {
 	sc := d.sc
 	dbName := d.dbName
@@ -184,16 +196,31 @@ func (d *ShrinkFilesDialog) buildPages(pf *shrinkFilesPrefetch) {
 		}
 		location.SetValue(f.PhysicalName)
 		allocated.SetValue(shrinkMB(f.SizeKB))
-		if f.SpaceUsedKB > 0 {
+		switch {
+		case f.Type == "FILESTREAM":
+			// A container has no size in sys.database_files (0) and no pages
+			// for FILEPROPERTY to count (NULL), so neither figure means anything.
+			allocated.SetValue(shrinkFilestreamNA)
+			free.SetValue(shrinkFilestreamNA)
+			minimum.SetText("A FILESTREAM container can only be emptied (EMPTYFILE): its data moves to the other containers of its filegroup.")
+		case f.SpaceUsedKB > 0:
 			free.SetValue(shrinkFreeText(f.SizeKB-f.SpaceUsedKB, f.SizeKB))
-			minimum.SetText(fmt.Sprintf("Minimum is %d MB — the space the file's data occupies. A smaller target, 0 included, shrinks as far as that.", shrinkFileMinMB(f)))
-		} else {
+			// DBCC SHRINKFILE's own target 0 stops at the file's creation size,
+			// not its contents, so opts sends 0 as 1.
+			occupies := "the space the file's data occupies"
+			if f.Type == "LOG" {
+				// A log shrinks only down to its last active VLF, which the
+				// used-space figure knows nothing about.
+				occupies = "the log's used space, a lower bound only: a log shrinks no further than its last active virtual log file"
+			}
+			minimum.SetText(fmt.Sprintf("Minimum is %d MB — %s. A smaller target shrinks as far as that; 0 is sent as 1, as SHRINKFILE's own 0 stops at the creation size.", shrinkFileMinMB(f), occupies))
+		default:
 			free.SetValue("unknown")
 			minimum.SetText("The file's used space could not be read, so its minimum size is unknown.")
 		}
 		// SSMS starts the target at the current size, so a shrink happens only
 		// once a smaller one is typed.
-		target.SetValue(fmt.Sprint(f.SizeKB / 1024))
+		target.SetValue(fmt.Sprint(shrinkFileSizeMB(f)))
 	}
 	pickFiles := func() {
 		var group string
@@ -209,7 +236,27 @@ func (d *ShrinkFilesDialog) buildPages(pf *shrinkFilesPrefetch) {
 		fileRow.SetSelected(0)
 		showFile()
 	}
+	// filestream pins the action to Empty file while a FILESTREAM container is
+	// picked — any other form is Msg 2563 — and gives the choices back, from
+	// Release, when another type is.
+	var pinned bool
+	filestream := func() {
+		fs := typeDesc() == "FILESTREAM"
+		if fs == pinned {
+			return
+		}
+		pinned = fs
+		action.SetOptionEnabled(shrinkFileRelease, !fs)
+		action.SetOptionEnabled(shrinkFileReorganize, !fs)
+		if fs {
+			action.SetSelected(shrinkFileEmpty)
+		} else {
+			action.SetSelected(shrinkFileRelease)
+		}
+		target.SetEnabled(false)
+	}
 	pickGroups := func() {
+		filestream()
 		groupRow.SetItems(picker.fileGroups(typeDesc()))
 		groupRow.SetSelected(0)
 		groupRow.SetEnabled(typeDesc() != "LOG")
@@ -243,34 +290,43 @@ func (d *ShrinkFilesDialog) buildPages(pf *shrinkFilesPrefetch) {
 		}
 		return ""
 	}
-	opts := func() (string, gosmo.ShrinkFileOptions, error) {
+	opts := func() (*gosmo.DatabaseFileInfo, gosmo.ShrinkFileOptions, error) {
 		f := current()
 		if f == nil {
-			return "", gosmo.ShrinkFileOptions{}, fmt.Errorf("pick a file to shrink")
+			return nil, gosmo.ShrinkFileOptions{}, fmt.Errorf("pick a file to shrink")
 		}
 		o := gosmo.ShrinkFileOptions{Wait: wait()}
+		if f.Type == "FILESTREAM" && action.Selected() != shrinkFileEmpty {
+			return nil, o, fmt.Errorf("a FILESTREAM container can only be emptied (EMPTYFILE)")
+		}
 		switch action.Selected() {
 		case shrinkFileRelease:
 			o.Truncate = gosmo.ShrinkTruncateOnly
 		case shrinkFileReorganize:
 			mb, err := target.IntValue()
-			if maxMB := f.SizeKB / 1024; err != nil || mb < 0 || mb > maxMB {
-				return "", o, fmt.Errorf("shrink file to must be a whole number of MB from 0 to %d, the file's current size, not %q",
+			if maxMB := shrinkFileSizeMB(f); err != nil || mb < 0 || mb > maxMB {
+				return nil, o, fmt.Errorf("shrink file to must be a whole number of MB from 0 to %d, the file's current size, not %q",
 					maxMB, strings.TrimSpace(target.Value()))
 			}
-			o.TargetMB = new(mb)
+			// 0 goes as 1: SHRINKFILE's own 0 stops at the file's creation
+			// size, so the shrink the note promises would silently not happen.
+			// gosmo's DatabaseFileInfo.Shrink floors it the same way.
+			o.TargetMB = new(max(mb, 1))
 		case shrinkFileEmpty:
 			o.EmptyFile = true
 		}
-		return f.Name, o, nil
+		return f, o, nil
 	}
 	// preflight reads the rows on the UI goroutine and leaves the request for
-	// the apply, which runs on the pipeline's.
+	// the apply, which runs on the pipeline's. A FileRef carries no Type, so
+	// gosmo can't refuse a FILESTREAM container's other forms; opts does.
 	var name string
 	var req gosmo.ShrinkFileOptions
 	d.preflight = func() error {
-		var err error
-		name, req, err = opts()
+		f, o, err := opts()
+		if err == nil {
+			name, req = f.Name, o
+		}
 		return err
 	}
 	d.applyFns[0] = func(ctx context.Context) error {

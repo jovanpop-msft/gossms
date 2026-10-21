@@ -81,7 +81,7 @@ func fullTextKeyIndexes(idx []*gosmo.Index, cols []*gosmo.Column) []string {
 	}
 	var out []string
 	for _, i := range idx {
-		if !i.IsUnique || i.IsDisabled || i.FilterDefinition != "" || len(i.KeyColumns) != 1 {
+		if !i.IsUnique || i.IsDisabled || i.IsHypothetical || i.FilterDefinition != "" || len(i.KeyColumns) != 1 {
 			continue
 		}
 		if i.Type != gosmo.IndexTypeClustered && i.Type != gosmo.IndexTypeNonClustered {

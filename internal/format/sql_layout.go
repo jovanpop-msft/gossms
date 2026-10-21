@@ -50,6 +50,7 @@ type sqlFrame struct {
 	filled bool   // body: its statement has begun
 	first  int    // sub: its first token, which starts its statement
 	opener string // paren: the word before "(", e.g. CAST
+	hints  bool   // paren: a table hint list, WITH (NOLOCK, INDEX(ix)) after a table in DML
 	expand bool   // cols: one column per line (more than one column)
 	item   int    // cols: first token of the current column definition
 	ctx    int    // indent of the current logical line — continuations sit one level deeper

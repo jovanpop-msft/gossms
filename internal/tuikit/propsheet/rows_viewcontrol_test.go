@@ -199,6 +199,31 @@ func TestRadioRowOnChangeNotFiredBySetSelected(t *testing.T) {
 	}
 }
 
+// A greyed-out option is out of reach of Edit as of a key: Shrink File greys
+// Release and Reorganize on a FILESTREAM container, which takes only EMPTYFILE.
+func TestRadioRowGreyedOptionIsSkipped(t *testing.T) {
+	r := Radio("Shrink action", []string{"Release", "Reorganize", "Empty"}, 2)
+	r.SetOptionEnabled(0, false)
+	r.SetOptionEnabled(1, false)
+	fired := 0
+	r.SetOnChange(func(int) { fired++ })
+
+	r.Edit(0)
+	r.rb.Focus(true)
+	r.HandleKey(tcell.NewEventKey(tcell.KeyUp, "", tcell.ModNone))
+	if r.Selected() != 2 || fired != 0 || r.Dirty() {
+		t.Errorf("selected %d, onChange fired %d, dirty %v; want 2, 0, false", r.Selected(), fired, r.Dirty())
+	}
+	r.SetOptionEnabled(1, true)
+	if !r.OptionEnabled(1) || r.OptionEnabled(0) {
+		t.Error("re-enabling option 1 did not take, or touched option 0")
+	}
+	r.Edit(1)
+	if r.Selected() != 1 {
+		t.Errorf("selected %d after Edit(1) on a re-enabled option, want 1", r.Selected())
+	}
+}
+
 // Ctrl+Z restores the baseline; the rows the group drives have to follow it
 // back, or the page keeps the password fields of a source no longer selected.
 func TestRadioRowRevertFiresOnChange(t *testing.T) {

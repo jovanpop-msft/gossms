@@ -1380,7 +1380,11 @@ it from the string 'NULL'.
   parser** (§ T-SQL lexing). Statements it has no rules for (EXEC, ALTER
   TABLE, CREATE INDEX, GRANT, BACKUP, …) keep their line breaks rather than
   be guessed at. Keywords are upper-cased only where they can't be a name;
-  identifiers are never re-cased. Leading commas. `;` is never added or
+  identifiers are never re-cased. A built-in function's name is a call only
+  if `(` follows *and* it isn't in a name position (`sqlLayout.namePos`:
+  after INTO/TABLE/REFERENCES/…, a CTE name, FROM/JOIN/APPLY bar
+  `sqlTableFunctions`, an index/statistics/GRANT `ON`), so `INSERT INTO log
+  (msg)` keeps `log`; a missed name position fails safe. Leading commas. `;` is never added or
   removed, and long lines never wrap.
 - **Language comes from the extension or origin only**, never content
   sniffing; Save As to `.sql`/`.xml`/`.json` re-derives it.
@@ -1390,6 +1394,18 @@ it from the string 'NULL'.
   sees the re-indent too. Block selection and read-only viewers: disabled.
 
 ## By design — not issues, do not re-raise
+
+- **Hypothetical (Tuning Advisor) indexes are scripted as a comment and shown
+  marked** (decided 2026-10-21). gosmo's scripter writes `-- hypothetical
+  index [x] on [t] (tuning advisor) not scripted` rather than CREATE INDEX —
+  no documented DDL recreates one, and a real build is what a deployed script
+  would otherwise do. The explorer, Table Properties and Index Properties show
+  them marked, not hidden, and Delete still works: dropping DTA leftovers is
+  the usual cleanup. The full-text key-index picker leaves them out.
+- **Format Document upper-cases table hints only inside `WITH (…)`**: the
+  legacy `JOIN log (nolock)` form stays as typed, since `(…)` after an
+  unqualified name there may be a TVF's arguments (`CROSS APPLY f(nolock)`
+  can pass a column).
 
 - **On a narrow terminal the main toolbar hides buttons; it never overlaps
   the menu labels.** `Toolbar.SetBounds` takes `MenuBar.LabelsEnd()` as a

@@ -240,20 +240,31 @@ func loadIndexesChildren(l loaderCtx, node *explorerNode) ([]*explorerNode, erro
 	}
 	out := make([]*explorerNode, 0, len(indexes))
 	for _, idx := range indexes {
-		// The index's own type, not just clustered-vs-not: a columnstore, XML or
-		// spatial index would read as "Nonclustered" under an IsClustered test, as
-		// would a clustered columnstore index, which gosmo reports as clustered.
-		kind := indexTypeName(idx.Type)
-		unique := ""
-		if idx.IsUnique {
-			unique = ", Unique"
-		}
-		label := fmt.Sprintf("%s (%s%s)", idx.Name, kind, unique)
-		n := l.node(label, NodeIndex, node.data.Schema, idx.Name, node.data.DBName)
+		n := l.node(indexNodeLabel(idx), NodeIndex, node.data.Schema, idx.Name, node.data.DBName)
 		n.data.TableName = node.data.Name
 		out = append(out, n)
 	}
 	return out, nil
+}
+
+// indexNodeLabel is an Indexes-folder node's label: the name, then its kind.
+//
+// The index's own type, not just clustered-vs-not: a columnstore, XML or
+// spatial index would read as "Nonclustered" under an IsClustered test, as
+// would a clustered columnstore index, which gosmo reports as clustered.
+//
+// A hypothetical (tuning advisor) index is listed, marked, rather than hidden:
+// it has no data, and dropping the advisor's leftovers is the usual reason to
+// look for one.
+func indexNodeLabel(idx *gosmo.Index) string {
+	kind := indexTypeName(idx.Type)
+	if idx.IsUnique {
+		kind += ", Unique"
+	}
+	if idx.IsHypothetical {
+		kind += ", Hypothetical"
+	}
+	return fmt.Sprintf("%s (%s)", idx.Name, kind)
 }
 
 // loadStatisticsChildren returns one table's Statistics folder.

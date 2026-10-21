@@ -128,8 +128,9 @@ func TestShrinkWaitIsNotOfferedBefore2022(t *testing.T) {
 	}
 }
 
-// The cascade is offered on an ONLINE database only: the dialogs read sizes
-// through a USE, which an offline or restoring database refuses.
+// The cascade is offered on an ONLINE, writable database only: the dialogs
+// read sizes through a USE, which an offline or restoring database refuses,
+// and every DBCC SHRINK* fails on a read-only one.
 func TestShrinkIsOfferedOnAnOnlineDatabaseOnly(t *testing.T) {
 	a := newTestApp()
 	sc, _ := newFakeConn(t)
@@ -144,6 +145,10 @@ func TestShrinkIsOfferedOnAnOnlineDatabaseOnly(t *testing.T) {
 	}
 	if findMenuItem(a.contextMenuItemsForNode(restoring), "Shrink") != nil {
 		t.Error("a RESTORING database offers Shrink")
+	}
+	master.data.DBReadOnly = true
+	if findMenuItem(a.contextMenuItemsForNode(master), "Shrink") != nil {
+		t.Error("a read-only database offers Shrink")
 	}
 }
 

@@ -1,0 +1,38 @@
+-- Names spelled like built-in functions, followed by "(" where no call stands.
+CREATE TABLE log (
+    id INT IDENTITY
+  , msg NVARCHAR(200)
+  , year AS YEAR(SYSDATETIME())
+)
+CREATE INDEX ix_log ON log (msg) WHERE msg IS NOT NULL
+CREATE TABLE month (
+    id INT PRIMARY KEY
+  , log_id INT REFERENCES log (id)
+)
+INSERT INTO log (msg)
+SELECT LEFT(name, 10)
+FROM sys.objects
+UPDATE log
+SET msg = FORMAT(GETDATE(), 'yyyy')
+WHERE id = 1;
+WITH rank (r, c) AS (
+    SELECT
+        RANK() OVER (ORDER BY id)
+      , COUNT(*) OVER ()
+    FROM log
+)
+, day (d) AS (
+    SELECT DAY(GETDATE())
+)
+SELECT
+    r
+  , c
+  , d
+FROM rank
+CROSS JOIN day
+SELECT
+    l.msg
+  , LEN(l.msg)
+FROM month m
+JOIN log (nolock) l ON l.id = m.log_id
+CROSS APPLY OPENJSON(l.msg) j

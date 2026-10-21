@@ -235,6 +235,7 @@ func pageIndexGeneral(sc *db.ServerConn, dbName, schema, table, name string) pro
 				propsheet.Static("Index type", indexTypeName(idx.Type)),
 				propsheet.Static("Unique", boolStr(idx.IsUnique)),
 				propsheet.Static("Disabled", boolStr(idx.IsDisabled)),
+				propsheet.Static("Hypothetical", boolStr(idx.IsHypothetical)),
 				propsheet.Section("Table or view"),
 				propsheet.Static("Schema", idx.Table().Schema),
 				propsheet.Static("Object", idx.Table().Name),

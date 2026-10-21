@@ -565,8 +565,17 @@ func (l *sqlLayout) openParen(i int) {
 		}
 		l.push(c)
 	default:
-		l.push(&sqlFrame{kind: frParen, opener: opener, ctx: f.ctx})
+		l.push(&sqlFrame{kind: frParen, opener: opener, hints: opener == "WITH" && l.hintParen(i, o), ctx: f.ctx})
 	}
+}
+
+// hintParen reports whether "(" at i, after WITH, opens a table hint list:
+// WITH follows a table or alias (a word, not OPENJSON(...)'s ")" whose WITH
+// lists columns) in a SELECT or DML statement (not CREATE INDEX ... WITH).
+func (l *sqlLayout) hintParen(i int, o *sqlFrame) bool {
+	w := l.prevC[i]
+	return (o.st.kind == "SELECT" || dmlKinds[o.st.kind]) && w >= 0 && l.prevC[w] >= 0 &&
+		l.t[l.prevC[w]].kind != sqltext.KindPunct
 }
 
 // colsParen reports whether "(" at i opens a table definition's column
@@ -641,16 +650,58 @@ func (l *sqlLayout) text(i int) string {
 	up := t.up
 	switch {
 	case sqlReserved[up]:
-	case sqlFunctions[up] && l.tok(l.nextC[i]).isPunct("("):
+	case sqlFunctions[up] && l.tok(l.nextC[i]).isPunct("(") && !l.namePos(i):
 	case sqlTypes[up] && l.typePos(i):
 	case sqlSetOptions[up] && l.setOption():
 	case sqlPhraseWords[up] && l.phraseWord(i):
+	case sqlTableHints[up] && l.top().hints && (l.tok(l.prevC[i]).isPunct("(") || l.tok(l.prevC[i]).isPunct(",")):
 	case sqlForWords[up] && l.top() == l.owner() && l.owner().st.clause == "FOR":
 	case sqlModuleWords[up] && l.top() == l.owner() && l.owner().st.kind == "MODULE":
 	default:
 		return t.text
 	}
 	return up
+}
+
+// namePos reports whether word i stands where an object name does, so that
+// a "(" after it opens a column list or a table hint rather than a call:
+// INSERT INTO log (msg), CREATE TABLE year (...), WITH rank (r) AS,
+// JOIN log (NOLOCK). A position missed here costs only casing; one wrongly
+// counted would re-case a name, so each is a place no call can stand.
+func (l *sqlLayout) namePos(i int) bool {
+	p := l.prevC[i]
+	f, o := l.top(), l.owner()
+	cte := f == o && len(f.cases) == 0 && o.st.kind == "WITH" && o.st.clause == "CTE"
+	if l.tok(p).isPunct(",") {
+		return cte
+	}
+	switch l.tok(p).up {
+	case "INTO", "INSERT", "TABLE", "UPDATE", "MERGE", "REFERENCES", "STATISTICS",
+		"VIEW", "PROC", "PROCEDURE", "FUNCTION", "TRIGGER":
+		return true
+	case "FROM", "JOIN", "APPLY":
+		// Not TRIM(' ' FROM LEFT(s, 3)) or a IS DISTINCT FROM LEFT(b, 1).
+		return !sqlTableFunctions[l.t[i].up] && f.kind != frParen && l.prevUp(p) != "DISTINCT"
+	case "WITH":
+		return cte
+	case "ON":
+		// CREATE INDEX ix ON log (msg), CREATE STATISTICS, GRANT SELECT ON
+		// log (msg): not JOIN ... ON, where a predicate begins.
+		for k := p; k >= 0; k = l.prevC[k] {
+			if t := &l.t[k]; t.kind == sqltext.KindWord && !l.qualified(k) {
+				switch t.up {
+				case "INDEX", "STATISTICS", "GRANT", "DENY", "REVOKE":
+					return true
+				case "JOIN", "USING":
+					return false
+				}
+			}
+			if l.start[k] {
+				break
+			}
+		}
+	}
+	return false
 }
 
 // typePos reports whether word i stands where a data type does.
