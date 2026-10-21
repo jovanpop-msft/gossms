@@ -155,11 +155,16 @@ method does not use are greyed out.
 Sessions appear on the server as `goSSMS`, `goSSMS - Query` and
 `goSSMS - Activity Monitor`.
 
-Always On peer discovery uses each replica's registered connection. Connect to
-each replica explicitly through **File > Connect** first. A unique short-name
-alias still uses the original saved address; ambiguous aliases and unregistered
-peers are refused. Failed peer connections never retry with another server's
-credentials.
+Always On peer discovery uses each replica's registered connection: one you
+have connected to through **File > Connect** or the prompt below. A unique
+short-name alias still uses the original saved address; ambiguous aliases are
+refused. Where a dialog or action needs a replica with no saved connection
+(Add Replica, New Availability Group, New Endpoint, the availability group and
+listener Properties pages, Add Database, Add Listener, failover and the other
+group actions, a group's Dashboard, or **Enter** on Object Explorer's "(partial — Enter to connect
+to …)" note), goSSMS opens the Connect dialog for it, pre-filled from the connection
+you started from; nothing is sent to that instance until you press Connect. A
+failed peer connection never retries with another server's credentials.
 
 ## Supported SQL Server versions
 

@@ -493,11 +493,21 @@ Peer credentials, easy to undo:
   refused; an exact registered name still wins.
 - **A peer never retargets registered credentials.** The registered address,
   port, auth and TLS options are kept intact, even for short-name metadata.
-  Unregistered or ambiguous destinations are refused with instructions to use
-  File > Connect first. A failed peer login reports its own error, never retries
+  Unregistered or ambiguous destinations are refused (`db.PeerNotRegisteredError`). A failed peer login reports its own error, never retries
   with the parent's credentials. This security boundary supersedes the former
   reachability-first fallback (GitHub issue #3).
   `loadPeerCredentials` still skips entries whose password can't be decrypted.
+- **A refused peer is prompted for, SSMS-style — never silently dialled.**
+  Where a refusal lands on the UI goroutine with the user present
+  (`newObjectDialog.probe`, `runAGOperation`, the Object Explorer note, a
+  property-sheet page load — `offerPeerConnectForSheet`, the AG Dashboard —
+  latched once per showing, since it re-reads on a timer),
+  `App.offerPeerConnect` opens Connect pre-filled from the parent
+  (`peerConnectTemplate`: its sign-in, the refused name, no database, no
+  Host Name In Certificate, the port only for the parent's own instance).
+  Pressing Connect is the approval; success registers it like File > Connect.
+  A probe re-runs after, and a sheet reloads its errored pages (same showing
+  only); a confirmed AG write does not (the user repeats it).
 - **`ServerConn.Peer` blanks `Opts.Database`** — a named database fails the
   connect at ping, and everything `Peer` reaches is server-scoped. The other
   three `sc.Opts` clones (query panel, Activity Monitor ×2) keep it.

@@ -32,7 +32,10 @@ type agGroupRollup struct {
 	// unreachable names the primary that couldn't be read through, if following
 	// it failed.
 	unreachable string
-	followed    bool
+	// unregistered is agView.unregistered: unreachable for want of a
+	// registered connection, not a fault.
+	unregistered bool
+	followed     bool
 }
 
 // readAllGroups reads every availability group on the instance.
@@ -52,7 +55,7 @@ func (d *AGDashboard) readAllGroups(ctx context.Context) (agSnapshot, error) {
 			rollups = append(rollups, agGroupRollup{group: g, unreachable: g.PrimaryReplicaServerName})
 			continue
 		}
-		r := agGroupRollup{group: view.ag, unreachable: view.unreachable, followed: view.followed}
+		r := agGroupRollup{group: view.ag, unreachable: view.unreachable, unregistered: view.unregistered, followed: view.followed}
 		if replicas, err := view.ag.Replicas(ctx); err == nil {
 			r.replicas = replicas
 		}
@@ -118,6 +121,9 @@ func agGroupRows(groups []agGroupRollup) [][]string {
 // issues is the group's one-line verdict. An unreachable primary explains
 // everything else, so it comes first. Empty means healthy.
 func (g agGroupRollup) issues() string {
+	if g.unregistered {
+		return "Partial — primary " + g.unreachable + " not connected (File > Connect)"
+	}
 	if g.unreachable != "" {
 		return "Partial — primary " + g.unreachable + " unreachable"
 	}

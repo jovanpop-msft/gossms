@@ -402,7 +402,7 @@ func (d *NewEndpointDialog) instanceRows() ([]propsheet.Row, func()) {
 		addNameRow,
 		propsheet.Buttons(addBtn, removeBtn),
 		hint,
-		propsheet.Note("An instance is reached with its own saved connection if you have one, otherwise with this connection's credentials — connect to it once via File > Connect to give it different ones. Each keeps its own certificate; only the public half of each is exchanged, and no private key is read or transmitted."),
+		propsheet.Note("An instance is reached with its own saved connection; one without is offered a Connect prompt pre-filled from this connection. Each keeps its own certificate; only the public half of each is exchanged, and no private key is read or transmitted."),
 		propsheet.Note("Certificates are named <instance>_Cert, and each peer gets a login and user named <instance>_login and <instance>_user to own the certificate it presents. A named instance contributes HOST$INSTANCE, not HOST\\INSTANCE. Anything already present is left alone."),
 	}, commit
 }

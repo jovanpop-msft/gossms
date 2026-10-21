@@ -156,7 +156,7 @@ func (d *newObjectDialog[P]) probeReplicaEndpoint(label, name string,
 // and reopened is dropped, and the propFetchTimeout derives from that context,
 // so a disconnect tears the probe down.
 func (d *newObjectDialog[P]) probe(label string, work func(ctx context.Context) error, onDone func(error)) {
-	sessionCtx := d.ctx
+	sessionCtx, sc := d.ctx, d.sc
 	d.app.safego(label, func() {
 		ctx, cancel := context.WithTimeout(sessionCtx, propFetchTimeout)
 		defer cancel()
@@ -166,6 +166,16 @@ func (d *newObjectDialog[P]) probe(label string, work func(ctx context.Context) 
 				return
 			}
 			onDone(err)
+			// An instance with no registered connection is offered the Connect
+			// prompt, and connecting re-runs the probe. onDone has already
+			// reported the refusal, so declining the prompt leaves the dialog
+			// as any failure does. The retry is dropped if this showing ended
+			// while the prompt was up.
+			d.app.offerPeerConnect(sc, err, func() {
+				if d.ctx == sessionCtx && sessionCtx.Err() == nil {
+					d.probe(label, work, onDone)
+				}
+			})
 		})
 	})
 }
@@ -275,6 +285,13 @@ func (d *newObjectDialog[P]) onLoadPage(page, seq int) {
 				for _, r := range waiting {
 					d.SetPageError(r.page, r.seq, displayError(err))
 				}
+				// A prefetch through the group's primary (Add Database, Add
+				// Listener, Add Replica) refused for want of a registered
+				// connection offers the Connect prompt; connecting refetches.
+				showing := d.ctx
+				d.app.offerPeerConnectForSheet(sc, err, d, len(d.pages), func() bool {
+					return d.ctx == showing && showing.Err() == nil && d.Visible()
+				})
 				return
 			}
 			d.prefetch = pf

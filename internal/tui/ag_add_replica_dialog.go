@@ -24,10 +24,9 @@ import (
 // DATABASE (without it AUTOMATIC seeding silently seeds nothing). Same shape as
 // NewAGDialog.createGroup.
 //
-// Replicas are reached through db.ServerConn.Peer: the instance's own saved
-// connection if any (and working), else this connection's credentials. A replica
-// needing a different login or port is reached by connecting once via File >
-// Connect.
+// Replicas are reached through db.ServerConn.Peer, with the instance's own saved
+// connection only. One without is refused, and the probe offers the Connect
+// prompt pre-filled from this connection (App.offerPeerConnect).
 
 // agAddReplicaPrefetch is read from the primary before building pages: what the
 // new replica must be compatible with, and its defaults.
@@ -267,8 +266,8 @@ func validateAddReplica(r newAGReplica, pf *agAddReplicaPrefetch) error {
 	return nil
 }
 
-// connect resolves the typed name: reach the instance with this connection's
-// credentials and read its endpoint.
+// connect resolves the typed name: reach the instance through its registered
+// connection and read its endpoint.
 //
 // Done before OK so the endpoint URL is on screen, and an unreachable instance
 // is a dialog message rather than a half-run pipeline.

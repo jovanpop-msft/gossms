@@ -583,6 +583,18 @@ func (oe *ObjectExplorer) handleActivate(id controls.TreeNodeID) bool {
 		}
 		oe.app.launchXEventProfilerNamed(sc, n.data.Name)
 		return true
+	case NodeError:
+		sc := resolveConn(n)
+		if sc == nil || n.data.UnregisteredPeer == "" {
+			return false
+		}
+		// The note's loader is its parent's; re-running it follows the primary
+		// through the connection just registered. Matched by key, not pointer:
+		// a Refresh while the prompt was open replaces the parent.
+		parent := sameNodeAs(n.parent)
+		return oe.app.offerPeerConnect(sc, &db.PeerNotRegisteredError{Server: n.data.UnregisteredPeer}, func() {
+			oe.ReloadFolders(sc, parent)
+		})
 	}
 	return false
 }

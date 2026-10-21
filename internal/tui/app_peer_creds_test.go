@@ -122,10 +122,10 @@ func TestPeerCredentialsRefuseAmbiguousShortAliases(t *testing.T) {
 func TestPeerCredentialsKeepTwoInstancesOnOneHostApart(t *testing.T) {
 	a := newTestApp()
 	a.cfg.Connections = []config.Connection{
-		{Server: "win10cli", Port: 1433, User: "default_login"},
-		{Server: "win10cli", Port: 55253, User: "sql2017_login"},
-		{Server: "win10cli\\inst", Port: 1500, User: "named_login"},
-		{Server: "otherhost,1600", User: "otherhost_login"},
+		{Server: "win10cli", Port: 1433, User: "default_login", Password: "pw"},
+		{Server: "win10cli", Port: 55253, User: "sql2017_login", Password: "pw"},
+		{Server: "win10cli\\inst", Port: 1500, User: "named_login", Password: "pw"},
+		{Server: "otherhost,1600", User: "otherhost_login", Password: "pw"},
 	}
 	a.loadPeerCredentials()
 
@@ -161,9 +161,9 @@ func TestPeerCredentialsKeepTwoInstancesOnOneHostApart(t *testing.T) {
 func TestPeerCredentialsPreferExactHostOverAShortAlias(t *testing.T) {
 	a := newTestApp()
 	a.cfg.Connections = []config.Connection{
-		{Server: "sql.b.example", User: "b_login"},
-		{Server: "sql.a.example", User: "a_login"},
-		{Server: "sql", User: "bare_login"},
+		{Server: "sql.b.example", User: "b_login", Password: "pw"},
+		{Server: "sql.a.example", User: "a_login", Password: "pw"},
+		{Server: "sql", User: "bare_login", Password: "pw"},
 	}
 	a.loadPeerCredentials()
 
@@ -238,5 +238,28 @@ func TestPeerCredentialsSkipAPasswordThisSessionCannotRead(t *testing.T) {
 	// damage. Windows authentication does not use one.
 	if _, ok := a.peerCredentialsFor("ubusql3"); !ok {
 		t.Error("a Windows-authentication entry was dropped along with it")
+	}
+}
+
+// A saved SQL-authentication entry without a remembered password (the
+// default) would log in with an empty one and fail; it is left unregistered so
+// the read is refused and the Connect prompt is offered instead. Windows
+// Authentication with no user (integrated sign-in) needs none and is seeded.
+func TestPeerCredentialsSkipASavedEntryWithNoPassword(t *testing.T) {
+	a := newTestApp()
+	a.cfg.Connections = []config.Connection{
+		{Server: "ubusql2", AuthMethod: config.AuthSQLServer, User: "sa"},
+		{Server: "ubusql3", AuthMethod: config.AuthWindows},
+		{Server: "ubusql4", AuthMethod: config.AuthSQLServer, User: "sa", Password: "pw"},
+	}
+	a.loadPeerCredentials()
+
+	if _, ok := a.peerCredentialsFor("ubusql2"); ok {
+		t.Error("a saved SQL login with no password was registered; its peer reads fail at login instead of prompting")
+	}
+	for _, server := range []string{"ubusql3", "ubusql4"} {
+		if _, ok := a.peerCredentialsFor(server); !ok {
+			t.Errorf("%s was not registered", server)
+		}
 	}
 }

@@ -1,10 +1,15 @@
 package tui
 
 import (
+	"errors"
+	"fmt"
 	"strings"
 	"sync"
 
+	gosmo "github.com/radix29/gosmo"
 	"github.com/radix29/gossms/internal/config"
+	"github.com/radix29/gossms/internal/db"
+	"github.com/radix29/gossms/internal/tuikit/propsheet"
 )
 
 // app_peer_creds.go holds App's answer to db.PeerCredentials: which saved
@@ -15,7 +20,8 @@ import (
 // db.ServerConn.Peer, which refuses an instance without a registered connection.
 //
 // The answer is the connections the user has already made: connect to a replica
-// once through File > Connect and every later peer read reaches it the same way.
+// once (File > Connect, or the prompt offerPeerConnect opens where a refusal
+// lands) and every later peer read reaches it the same way.
 
 // peerCredStore is how to reach each instance the user has connected to.
 // byInstance is keyed by config.InstanceKey; byShortHost maps a short name to
@@ -109,7 +115,11 @@ func shortHostKey(key string) string {
 //
 // An entry whose password could not be decrypted is not seeded. A replaced
 // config key blanks every saved password at once (config.Load), so this is a
-// whole-file state, not a rare entry.
+// whole-file state, not a rare entry. Nor is one whose method takes a password
+// and that saved none (Remember Password unticked, the default): it is certain
+// to fail at login, and unseeded it is refused instead, which offers the
+// Connect prompt (offerPeerConnect). A connection made this session is
+// registered with its password in memory by rememberConnection.
 //
 // An entry that still fails reports its own error; Peer never retries with
 // another server's credentials.
@@ -118,11 +128,21 @@ func (a *App) loadPeerCredentials() {
 		return
 	}
 	for _, c := range a.cfg.Connections {
-		if c.PasswordUnreadable() {
+		if c.PasswordUnreadable() || missingPassword(c) {
 			continue
 		}
 		a.rememberPeerCredentials(c)
 	}
+}
+
+// missingPassword reports whether c's method signs in with a password it does
+// not carry. Windows Authentication with no user is integrated sign-in, which
+// needs none.
+func missingPassword(c config.Connection) bool {
+	if c.Password != "" || !config.FieldsFor(c.AuthMethod).Password {
+		return false
+	}
+	return c.AuthMethod != config.AuthWindows || c.User != ""
 }
 
 // forgetPeerFailure tells every open connection that server is reachable
@@ -132,4 +152,89 @@ func (a *App) forgetPeerFailure(server string) {
 	for _, sc := range a.connections {
 		sc.ForgetPeerFailure(server)
 	}
+}
+
+// offerPeerConnect opens the Connect dialog for the instance err names when err
+// is Peer refusing one with no registered connection, and reports whether it
+// did. then (nil for nothing) runs once that connection succeeds and is
+// registered — the operation the refusal stopped.
+//
+// The SSMS shape: another instance is reached only through a connection the
+// user approved, prompted for where it is needed. The dialog is pre-filled
+// from parent, the connection the read started from, so a topology sharing one
+// login (or Windows authentication) costs one Enter per replica; the name it
+// shows is the one that will be dialled.
+//
+// Declined while the Connect dialog is already open: it is one instance, and a
+// second refusal (two probes in flight) must not replace the first prompt.
+func (a *App) offerPeerConnect(parent *db.ServerConn, err error, then func()) bool {
+	refused, ok := errors.AsType[*db.PeerNotRegisteredError](err)
+	if !ok || parent == nil || a.connectDialog.Visible() {
+		return false
+	}
+	a.connectDialog.ShowForPeer(peerConnectTemplate(parent.Opts, refused.Server), then)
+	a.setStatus(fmt.Sprintf("%s has no saved connection — connect to it to continue", refused.Server))
+	return true
+}
+
+// peerConnectTemplate is the Connect prompt's pre-fill for server, reached from
+// a connection made with parent: parent's sign-in and transport settings,
+// pointed at server with no database.
+//
+// Only a pre-fill — nothing reaches server until the user presses Connect.
+// Port is kept only for parent's own instance spelled without it (the catalog
+// reports names portless); on any other instance it is another listener's
+// port, and "HOSTA\SQL2017,50110" opening "HOSTB\PROD" would dial HOSTB:50110
+// and bypass SQL Browser. Host Name In Certificate names parent's certificate,
+// so it is cleared rather than validating server's against it.
+func peerConnectTemplate(parent config.Connection, server string) config.Connection {
+	opts := parent
+	if _, _, port := gosmo.ParseServerAddress(opts.Server); port != 0 {
+		opts.Port = port
+	}
+	if !sameInstanceApartFromPort(parent.Server, server) {
+		opts.Port = 0
+	}
+	opts.Server = server
+	opts.Database = ""
+	opts.HostNameInCertificate = ""
+	opts.Name = ""
+	return opts
+}
+
+// sameInstanceApartFromPort reports whether a and b name one host and one
+// instance name (case-insensitive), ignoring any port either carries.
+func sameInstanceApartFromPort(a, b string) bool {
+	hostA, instA, _ := gosmo.ParseServerAddress(strings.TrimSpace(a))
+	hostB, instB, _ := gosmo.ParseServerAddress(strings.TrimSpace(b))
+	return strings.EqualFold(hostA, hostB) && strings.EqualFold(instA, instB)
+}
+
+// pageSheet is what offerPeerConnectForSheet needs of a property sheet.
+type pageSheet interface {
+	PageState(i int) propsheet.PageState
+	InvalidatePages(pages []int)
+}
+
+// offerPeerConnectForSheet is offerPeerConnect for a property sheet whose page
+// load was refused: connecting reloads every page of it showing an error,
+// provided live still reports the same showing. pageCount is the sheet's page
+// count.
+//
+// Every errored page, not only the one that asked: a page visited while the
+// prompt was up was refused too, and offerPeerConnect declined to prompt for
+// it. Another error reloading as well is a harmless F5.
+func (a *App) offerPeerConnectForSheet(parent *db.ServerConn, err error, sheet pageSheet, pageCount int, live func() bool) {
+	a.offerPeerConnect(parent, err, func() {
+		if !live() {
+			return
+		}
+		var errored []int
+		for i := range pageCount {
+			if sheet.PageState(i) == propsheet.PageError {
+				errored = append(errored, i)
+			}
+		}
+		sheet.InvalidatePages(errored)
+	})
 }

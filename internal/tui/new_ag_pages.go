@@ -371,7 +371,7 @@ func (d *NewAGDialog) replicaRows() ([]propsheet.Row, func()) {
 		propsheet.Section("Add a replica"),
 		addNameRow,
 		propsheet.Buttons(addBtn, removeBtn),
-		propsheet.Note("A replica is reached with its own saved connection if you have one, otherwise with this connection's credentials. It must already have a started database mirroring endpoint that this instance can connect to."),
+		propsheet.Note("A replica is reached with its own saved connection; one without is offered a Connect prompt pre-filled from this connection. It must already have a started database mirroring endpoint that this instance can connect to."),
 		propsheet.Note("AUTOMATIC seeding copies the databases over the endpoint; the secondary is granted CREATE ANY DATABASE for it. MANUAL means restoring each database there WITH NORECOVERY and joining it afterwards."),
 	}, commit
 }

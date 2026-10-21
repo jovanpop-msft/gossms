@@ -33,6 +33,7 @@ const (
 	// border + history pane + rule + gap + right pane + border.
 	connectTwoPaneWidth = connectHistoryPane + connectRightWidth + 5
 	connectDialogHeight = 24
+	connectDialogTitle  = "Connect to Server"
 )
 
 // connectTab is which of the right pane's two tabs is showing.
@@ -152,6 +153,12 @@ type ConnectDialog struct {
 	target     *QueryPanel
 	targetThen func()
 
+	// forPeer is set by ShowForPeer (cleared by Hide): Connect registers the
+	// instance for peer reads rather than adding it to Object Explorer, and
+	// peerThen runs once it is registered.
+	forPeer  bool
+	peerThen func()
+
 	// drag is the text-selection gesture a field click starts; see
 	// dialogs.FieldGesture for call ordering.
 	drag dialogs.FieldGesture
@@ -160,7 +167,7 @@ type ConnectDialog struct {
 // NewConnectDialog creates the connection dialog.
 func NewConnectDialog(app *App) *ConnectDialog {
 	d := &ConnectDialog{app: app}
-	d.InitModal(app.screen, "Connect to Server", connectOnePaneWidth, connectDialogHeight)
+	d.InitModal(app.screen, connectDialogTitle, connectOnePaneWidth, connectDialogHeight)
 
 	methods := config.AllAuthMethods()
 	authItems := make([]string, len(methods))
@@ -564,6 +571,24 @@ func (d *ConnectDialog) ShowForQueryPanel(qp *QueryPanel, then func()) {
 	d.target, d.targetThen = qp, then
 }
 
+// ShowForPeer opens the dialog to connect an instance a peer read refused for
+// want of a registered connection (App.offerPeerConnect), pre-filled with opts.
+// A success is saved and registered like any connection the dialog makes, but
+// not added to Object Explorer: the user asked for the operation, not another
+// tree. then (nil for nothing) runs after.
+func (d *ConnectDialog) ShowForPeer(opts config.Connection, then func()) {
+	d.PreFill(&opts)
+	// As ShowForQueryPanel: this password is the parent's, remembered only if
+	// the parent's was.
+	d.cbRemember.SetChecked(opts.RememberPassword)
+	d.Show()
+	d.SetTitle("Connect to " + opts.Server)
+	// Onto the form, as ShowForQueryPanel: Enter on History would replace the
+	// pre-fill with an unrelated row.
+	d.setFocus(indexOfFocusable(d.focusable, d.fServer))
+	d.forPeer, d.peerThen = true, then
+}
+
 func (d *ConnectDialog) setFocus(i int) {
 	d.onButtons = false
 	d.focusIdx = setFocusIn(d.focusable, i, d.focusIdx)
@@ -716,6 +741,10 @@ func (d *ConnectDialog) startConnect(opts config.Connection) {
 		d.btnFocus = connectBtnConnect
 		return true
 	}
+	if d.forPeer {
+		d.app.registerPeer(ctx, opts, phase, done, d.peerThen)
+		return
+	}
 	if qp := d.target; qp != nil {
 		then := d.targetThen
 		d.app.dialQueryPanel(ctx, qp, opts, phase, done, func() {
@@ -749,6 +778,8 @@ func (d *ConnectDialog) stopConnecting() {
 func (d *ConnectDialog) Hide() {
 	d.stopConnecting()
 	d.target, d.targetThen = nil, nil
+	d.forPeer, d.peerThen = false, nil
+	d.SetTitle(connectDialogTitle)
 	d.ModalDialog.Hide()
 }
 

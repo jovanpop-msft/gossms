@@ -96,6 +96,9 @@ func TestPeerRefusesUnregisteredDestinationsWithoutDialling(t *testing.T) {
 			if peer != nil || err == nil || !strings.Contains(err.Error(), "File > Connect") {
 				t.Errorf("Peer = %v, %v; want an explicit registration instruction", peer, err)
 			}
+			if refused, ok := errors.AsType[*PeerNotRegisteredError](err); !ok || refused.Server != "unregistered" {
+				t.Errorf("Peer error = %#v, want a *PeerNotRegisteredError naming the instance — the UI offers its Connect prompt on that type", err)
+			}
 			if dials != 0 {
 				t.Errorf("dialled an unregistered destination %d times", dials)
 			}

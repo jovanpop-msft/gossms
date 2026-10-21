@@ -532,6 +532,11 @@ type nodeData struct {
 	// the group would be lost once the folder above is flattened away.
 	AGName string
 
+	// UnregisteredPeer is, on a NodeError note, the instance a read could not
+	// follow to because it has no registered connection (agView.unregistered).
+	// Activating the note offers the Connect prompt for it.
+	UnregisteredPeer string
+
 	// AGSuspended and AGIsPrimary carry the two pieces of availability state the
 	// Always On context menus gate on: whether this database's data movement is
 	// suspended, and whether this replica is currently the primary. Both are known

@@ -100,6 +100,9 @@ func (d *ModalDialog) Rect() core.Rect { return d.rect }
 // SetTitle updates the dialog title.
 func (d *ModalDialog) SetTitle(t string) { d.title = t }
 
+// Title is the text SetTitle (or InitModal) last set.
+func (d *ModalDialog) Title() string { return d.title }
+
 // ContainsMouse reports whether (mx,my) is inside the dialog box.
 func (d *ModalDialog) ContainsMouse(mx, my int) bool {
 	return d.rect.Contains(mx, my)

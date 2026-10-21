@@ -303,6 +303,7 @@ func (d *PropDialog) onLoadPage(page, seq int) {
 	// and d.ctx must be read here, not inside the closure (show() rewrites it for the
 	// next showing).
 	ctx, run := d.startPageRun(page, d.ctx)
+	showing := d.ctx
 
 	d.app.safegoRepair("loading a properties page", func() {
 		d.endPageRun(page, run)
@@ -316,6 +317,14 @@ func (d *PropDialog) onLoadPage(page, seq int) {
 			d.endPageRun(page, run)
 			if err != nil {
 				d.SetPageError(page, seq, displayError(err))
+				// A page reaching another instance (an availability group's
+				// primary) without a registered connection offers the Connect
+				// prompt; connecting reloads the refused pages of this showing.
+				if d.ctx == showing && d.Visible() {
+					d.app.offerPeerConnectForSheet(sc, err, d, len(d.pages), func() bool {
+						return d.ctx == showing && showing.Err() == nil && d.Visible()
+					})
+				}
 				return
 			}
 			// applyFn only once the sheet has taken the form: a load left in flight by an

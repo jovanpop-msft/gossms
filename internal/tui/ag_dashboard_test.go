@@ -1,12 +1,15 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/gdamore/tcell/v3"
 	gosmo "github.com/radix29/gosmo"
+	"github.com/radix29/gossms/internal/config"
+	"github.com/radix29/gossms/internal/db"
 	"github.com/radix29/gossms/internal/tuikit/controls"
 )
 
@@ -543,5 +546,47 @@ func TestAGCaseDistinctDatabasesStayDistinct(t *testing.T) {
 	}
 	if n := agDistinctDatabases(got); n != 2 {
 		t.Errorf("agDistinctDatabases = %d, want 2", n)
+	}
+}
+
+// The dashboard re-reads on a timer, so a primary refused for want of a
+// registered connection fails every tick: the Connect prompt opens once per
+// showing, not again after it is declined. A good reading re-arms it, so a
+// failover to another unregistered primary asks again.
+func TestAGDashboardOffersPeerConnectOncePerShowing(t *testing.T) {
+	d := hostedTestAGDashboard(t)
+	d.kick = make(chan struct{}, 1)
+	d.conn = &db.ServerConn{Opts: config.Connection{Server: "ubusql2"}}
+	refusal := fmt.Errorf("connect to primary replica UBUSQL1: %w", &db.PeerNotRegisteredError{Server: "UBUSQL1"})
+	cd := d.app.connectDialog
+
+	d.SetActive(false)
+	d.apply(agSnapshot{}, refusal)
+	if cd.Visible() {
+		t.Fatal("a refusal behind another tab opened the prompt")
+	}
+
+	d.SetActive(true)
+	d.apply(agSnapshot{}, refusal)
+	if !cd.Visible() || cd.fServer.Value() != "UBUSQL1" {
+		t.Fatal("a refused primary did not open the Connect prompt for it")
+	}
+	cd.peerThen()
+	select {
+	case <-d.kick:
+	default:
+		t.Error("connecting did not take a reading at once")
+	}
+
+	cd.Hide() // declined
+	d.apply(agSnapshot{}, refusal)
+	if cd.Visible() {
+		t.Fatal("the next tick reopened a declined prompt")
+	}
+
+	d.apply(agTestSnapshot(), nil)
+	d.apply(agSnapshot{}, refusal)
+	if !cd.Visible() {
+		t.Error("a refusal after a good reading did not prompt again")
 	}
 }

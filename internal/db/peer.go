@@ -230,7 +230,19 @@ func (sc *ServerConn) peerOptions(server string) (config.Connection, error) {
 			return saved, nil
 		}
 	}
-	return config.Connection{}, fmt.Errorf("peer %q is unregistered or ambiguous; connect to it explicitly with File > Connect first", server)
+	return config.Connection{}, &PeerNotRegisteredError{Server: server}
+}
+
+// PeerNotRegisteredError is Peer's refusal of an instance with no registered
+// connection (or only an ambiguous short alias). Server is the name as the
+// catalog reported it. The UI recognises it to offer a Connect prompt for that
+// instance instead of only reporting it.
+type PeerNotRegisteredError struct {
+	Server string
+}
+
+func (e *PeerNotRegisteredError) Error() string {
+	return fmt.Sprintf("peer %q is unregistered or ambiguous; connect to it explicitly with File > Connect first", e.Server)
 }
 
 // PeerCredentials returns the saved connection for an instance name; false
