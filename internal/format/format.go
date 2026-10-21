@@ -93,7 +93,12 @@ func (o Options) indent() string {
 type Style struct {
 	ID   string // stable key, persisted in config once there is a choice ("standard")
 	Name string // menu and status label ("Standard")
-	fn   func(src string, o Options) (string, error)
+
+	// fn lays src out. A style that lexed src with the guard's own lexer
+	// also returns that lexing, so verify lexes only the output (SQL's
+	// lexSQL — the same function on the same input, so the guard stays
+	// independent of the layout); nil otherwise.
+	fn func(src string, o Options) (out string, in *sqlLexed, err error)
 
 	// ownIndent: fn applies Options.LineIndent itself, skipping the lines
 	// inside a multi-line token; otherwise run prefixes every non-empty line.
@@ -104,8 +109,16 @@ type Style struct {
 // absent here (LangText) has no Format Document.
 var styles = map[Language][]Style{
 	LangSQL:  {{ID: "standard", Name: "Standard", fn: formatSQL, ownIndent: true}},
-	LangXML:  {{ID: "standard", Name: "Standard", fn: formatXML}},
-	LangJSON: {{ID: "standard", Name: "Standard", fn: formatJSON}},
+	LangXML:  {{ID: "standard", Name: "Standard", fn: plain(formatXML)}},
+	LangJSON: {{ID: "standard", Name: "Standard", fn: plain(formatJSON)}},
+}
+
+// plain adapts a formatter that hands the guard no lexing.
+func plain(fn func(string, Options) (string, error)) func(string, Options) (string, *sqlLexed, error) {
+	return func(src string, o Options) (string, *sqlLexed, error) {
+		out, err := fn(src, o)
+		return out, nil, err
+	}
 }
 
 // Styles lists l's styles, the default first; empty when l has no formatter.
@@ -163,14 +176,14 @@ func Format(l Language, styleID, src string, o Options) (string, error) {
 // run is Format after style lookup, split out so tests can hand it a broken
 // style and watch the guard refuse its output.
 func run(l Language, st Style, src string, o Options) (string, error) {
-	out, err := st.fn(src, o)
+	out, lexed, err := st.fn(src, o)
 	if err != nil {
 		return "", err
 	}
 	if o.LineIndent != "" && !st.ownIndent {
 		out = indentLines(out, o.LineIndent)
 	}
-	if err := verify(l, src, out); err != nil {
+	if err := verifyLexed(l, src, lexed, out); err != nil {
 		return "", err
 	}
 	return out, nil

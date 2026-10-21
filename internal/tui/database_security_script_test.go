@@ -36,3 +36,18 @@ func TestScriptDatabaseSecurityOpensUnexecutedScript(t *testing.T) {
 		t.Error("script lost its final result set")
 	}
 }
+
+// A role created without AUTHORIZATION is owned by whoever runs the output
+// (a non-dbo db_owner, live), and a Windows user named as its account is
+// scripted as created, without FOR LOGIN.
+func TestDatabaseSecurityScriptOwnershipAndWindowsUsers(t *testing.T) {
+	body := databaseSecurityScriptBody
+	if !strings.Contains(body, "CREATE ROLE ' + QUOTENAME(dp.name) + N' AUTHORIZATION [dbo];'") {
+		t.Error("roles are not created owned by dbo")
+	}
+	windows := strings.Index(body, "WHEN dp.authentication_type = 3 AND dp.name = l.login_name THEN N''")
+	forLogin := strings.Index(body, "ELSE N' FOR LOGIN '")
+	if windows < 0 || forLogin < 0 || windows > forLogin {
+		t.Error("a Windows user named as its account is not scripted without FOR LOGIN ahead of the FOR LOGIN arm")
+	}
+}

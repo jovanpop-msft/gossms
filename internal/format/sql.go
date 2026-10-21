@@ -18,7 +18,7 @@ import (
 // parenthesis or invalid UTF-8 is a *SyntaxError: the layout would have to
 // guess where the code resumes. Leading blank lines and trailing whitespace
 // are dropped and one final newline kept iff src ended with one.
-func formatSQL(src string, o Options) (string, error) {
+func formatSQL(src string, o Options) (string, *sqlLexed, error) {
 	if !utf8.ValidString(src) {
 		// The lexer works on runes, which would turn a stray byte into U+FFFD
 		// unnoticed by a guard comparing runes.
@@ -31,21 +31,21 @@ func formatSQL(src string, o Options) (string, error) {
 			bad += n
 		}
 		line, col := position(src, bad)
-		return "", &SyntaxError{Lang: LangSQL, Line: line, Col: col, Msg: "invalid UTF-8"}
+		return "", nil, &SyntaxError{Lang: LangSQL, Line: line, Col: col, Msg: "invalid UTF-8"}
 	}
 	lx, err := lexSQL(src)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 	if err := checkParens(src, lx.toks); err != nil {
-		return "", err
+		return "", nil, err
 	}
 	l := newSQLLayout(lx, o)
 	out := l.run()
 	if strings.HasSuffix(src, "\n") && out != "" {
 		out += "\n"
 	}
-	return out, nil
+	return out, lx, nil
 }
 
 // sqlTok is one token of a script as the layout sees it. Whitespace is not a
@@ -219,11 +219,14 @@ func checkParens(src string, toks []sqlTok) error {
 // token but whitespace compared — a GO line by its trimmed spelling, a
 // keyword case-insensitively so a re-cased keyword passes while a re-cased
 // identifier does not, a "--" comment without its trailing blanks. It
-// reports how many tokens agreed before the first difference.
-func sqlSameTokens(in, out string) (int, bool, error) {
-	a, err := lexSQL(in)
-	if err != nil {
-		return 0, false, err
+// reports how many tokens agreed before the first difference. a is in
+// already lexed by lexSQL, or nil to lex it here.
+func sqlSameTokens(in string, a *sqlLexed, out string) (int, bool, error) {
+	if a == nil {
+		var err error
+		if a, err = lexSQL(in); err != nil {
+			return 0, false, err
+		}
 	}
 	b, err := lexSQL(out)
 	if err != nil {

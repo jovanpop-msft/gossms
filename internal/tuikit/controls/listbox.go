@@ -96,7 +96,7 @@ func (l *ListBox) Draw(s tcell.Screen) {
 	base := tcell.StyleDefault.Background(p.DialogBg).Foreground(p.Text)
 	core.FillRect(s, l.rect, ' ', base)
 
-	for row := 0; row < l.rect.H; row++ {
+	for row := range l.rect.H {
 		idx := l.scroll + row
 		if idx >= len(l.items) {
 			break

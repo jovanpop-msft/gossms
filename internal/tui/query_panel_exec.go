@@ -106,6 +106,7 @@ func (p *QueryPanel) Close() {
 	}
 	p.stopLiveStats()
 	p.textRun.Cancel()
+	p.formatRun.Abandon()
 	p.closeConnection()
 }
 

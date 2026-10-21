@@ -375,7 +375,7 @@ func FormatThousands(n int64) string {
 	var sb strings.Builder
 	sb.Grow(len(sign) + len(digits) + (len(digits)-1)/3)
 	sb.WriteString(sign)
-	for i := 0; i < len(digits); i++ {
+	for i := range len(digits) {
 		if i > 0 && (len(digits)-i)%3 == 0 {
 			sb.WriteByte(',')
 		}

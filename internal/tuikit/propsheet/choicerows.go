@@ -404,15 +404,22 @@ type RadioRow struct {
 	onChange func(int)
 
 	// drawReadOnly collapses the group to a single label/value line — see
-	// SetDrawReadOnly.
+	// SetDrawReadOnly. pageReadOnly is the page's own independent gate (see
+	// TextRow.SetReadOnly).
 	drawReadOnly bool
-	drawHeight   int // see flatHeight
-	x, y, w      int
+	pageReadOnly bool
+	// disabled is SetEnabled's state: see TextRow.SetEnabled.
+	disabled   bool
+	drawHeight int // see flatHeight
+	x, y, w    int
 }
+
+// flat reports whether the group collapses to one line (either gate).
+func (r *RadioRow) flat() bool { return r.drawReadOnly || r.pageReadOnly }
 
 // Browsable lets a flat row take focus for Ctrl+C to copy its value, as
 // TextRow.Browsable does; HandleKey and HandleMouse refuse while flat.
-func (r *RadioRow) Browsable() bool { return r.drawReadOnly }
+func (r *RadioRow) Browsable() bool { return r.flat() }
 
 // Radio returns an editable radio-group row.
 func Radio(label string, options []string, selected int) *RadioRow {
@@ -436,7 +443,7 @@ func (r *RadioRow) SetSelected(i int) {
 // OnChange fires. SetSelected's counterpart, for the reason TextRow.Edit
 // documents.
 func (r *RadioRow) Edit(i int) {
-	if !r.rb.OptionEnabled(i) {
+	if r.disabled || r.pageReadOnly || !r.rb.OptionEnabled(i) {
 		return
 	}
 	before := r.rb.Selected()
@@ -470,7 +477,7 @@ func (r *RadioRow) Options() []string { return r.options }
 func (r *RadioRow) Label() string     { return r.rb.Label() }
 
 func (r *RadioRow) Height(w int) int {
-	if r.drawReadOnly {
+	if r.flat() {
 		return flatHeight(r.CopyText(), w)
 	}
 	return r.rb.Height()
@@ -480,7 +487,7 @@ func (r *RadioRow) Height(w int) int {
 // flatHeight). The group itself can't draw in less than its full height, so it
 // asks for all of it.
 func (r *RadioRow) MinDrawHeight() int {
-	if r.drawReadOnly {
+	if r.flat() {
 		return 1
 	}
 	return r.rb.Height()
@@ -490,7 +497,26 @@ func (r *RadioRow) Layout(x, y, w int) {
 	r.x, r.y, r.w = x, y, w
 	r.rb.SetBounds(x, y)
 }
-func (r *RadioRow) Focusable() bool { return true }
+func (r *RadioRow) Focusable() bool { return (!r.disabled && !r.pageReadOnly) || r.Browsable() }
+
+// SetEnabled toggles whether the group can be focused or changed; a disabled
+// group still draws every option, greyed, as CheckRow.SetEnabled does — the
+// row-level switch beside SetOptionEnabled's per-option one, which it leaves
+// as it found it. SetReadOnly collapses the group instead, for a page that
+// cannot be written.
+func (r *RadioRow) SetEnabled(v bool) {
+	r.disabled = !v
+	r.rb.SetEnabled(v)
+}
+
+// Enabled reports SetEnabled's state.
+func (r *RadioRow) Enabled() bool { return !r.disabled }
+
+// SetReadOnly is the page's own gate on the row — see TextRow.SetReadOnly.
+func (r *RadioRow) SetReadOnly(v bool) { r.pageReadOnly = v }
+
+// ReadOnly reports the page's own gate, not the form's.
+func (r *RadioRow) ReadOnly() bool { return r.pageReadOnly }
 
 // SetDrawReadOnly implements ReadOnlyDrawer: the group collapses to one
 // label/value line naming the selected option, as SelectRow does; the other
@@ -498,15 +524,15 @@ func (r *RadioRow) Focusable() bool { return true }
 func (r *RadioRow) SetDrawReadOnly(v bool) { r.drawReadOnly = v }
 
 func (r *RadioRow) Draw(s tcell.Screen, focused bool) {
-	if r.drawReadOnly {
+	if r.flat() {
 		drawFlat(s, r.x, r.y, r.w, r.Label(), r.CopyText(), r.drawHeight, focused)
 		return
 	}
-	r.rb.Focus(focused)
+	r.rb.Focus(focused && !r.disabled)
 	r.rb.Draw(s)
 }
 func (r *RadioRow) HandleKey(ev *tcell.EventKey) bool {
-	if r.drawReadOnly {
+	if r.flat() {
 		return false
 	}
 	before := r.rb.Selected()
@@ -515,7 +541,7 @@ func (r *RadioRow) HandleKey(ev *tcell.EventKey) bool {
 	return handled
 }
 func (r *RadioRow) HandleMouse(ev *tcell.EventMouse) bool {
-	if r.drawReadOnly {
+	if r.flat() {
 		return false
 	}
 	before := r.rb.Selected()

@@ -91,7 +91,7 @@ func (h HistoryChart) drawColumns(s tcell.Screen, plot core.Rect, sc Scale) {
 	buckets := maxLen(h.Series)
 	order := make([]int, 0, len(h.Series))
 
-	for col := 0; col < plot.W; col++ {
+	for col := range plot.W {
 		idx := bucketAt(col, plot.W, buckets)
 		if idx < 0 {
 			continue

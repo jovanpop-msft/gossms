@@ -264,9 +264,9 @@ func TestSelectRowFitItems(t *testing.T) {
 	}
 }
 
-// TestDisabledSelectAndCheckRowsRefuseEdits is K10 at the row level: a disabled
-// row leaves the focus cycle and refuses Edit, as TextRow.SetEnabled does.
-func TestDisabledSelectAndCheckRowsRefuseEdits(t *testing.T) {
+// TestDisabledChoiceRowsRefuseEdits is K10 at the row level: a disabled row
+// leaves the focus cycle and refuses Edit, as TextRow.SetEnabled does.
+func TestDisabledChoiceRowsRefuseEdits(t *testing.T) {
 	sel := Select("Kind", []string{"a", "b"}, 0)
 	sel.SetEnabled(false)
 	sel.Edit(1)
@@ -279,12 +279,32 @@ func TestDisabledSelectAndCheckRowsRefuseEdits(t *testing.T) {
 	if chk.Focusable() || chk.Dirty() || chk.Enabled() {
 		t.Fatalf("disabled CheckRow: Focusable=%v Dirty=%v Enabled=%v", chk.Focusable(), chk.Dirty(), chk.Enabled())
 	}
+	rad := Radio("Mode", []string{"a", "b", "c"}, 0)
+	rad.SetOptionEnabled(2, false)
+	rad.SetEnabled(false)
+	rad.Edit(1)
+	// The group is focused by hand: it ignores keys it is not focused for, so a
+	// row whose gate is missing would still look inert here.
+	rad.rb.Focus(true)
+	rad.HandleKey(tcell.NewEventKey(tcell.KeyDown, "", tcell.ModNone))
+	if rad.Focusable() || rad.Dirty() || rad.Enabled() {
+		t.Fatalf("disabled RadioRow: Focusable=%v Dirty=%v Enabled=%v", rad.Focusable(), rad.Dirty(), rad.Enabled())
+	}
+	// Disabled, not flat: the group keeps a line per option.
+	if got := rad.Height(60); got == 1 {
+		t.Errorf("disabled RadioRow is %d line high: it collapsed its options", got)
+	}
 	sel.SetEnabled(true)
 	chk.SetEnabled(true)
+	rad.SetEnabled(true)
 	sel.Edit(1)
 	chk.Edit(true)
-	if !sel.Dirty() || !chk.Dirty() {
+	rad.Edit(1)
+	if !sel.Dirty() || !chk.Dirty() || !rad.Dirty() {
 		t.Fatal("re-enabled rows refuse Edit")
+	}
+	if rad.OptionEnabled(2) {
+		t.Error("re-enabling the group re-enabled an option greyed on its own")
 	}
 }
 

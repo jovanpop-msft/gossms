@@ -123,6 +123,10 @@ type QueryPanel struct {
 	textRun    latest
 	textRunKey textKey
 
+	// formatRun is a Format Document too large to run on the UI goroutine;
+	// see formatActiveDocument.
+	formatRun latest
+
 	// statusRect is the results area's bottom row, where drawResultsStatus paints the
 	// execution status for every tab the DataGrid isn't drawing (the grid renders the
 	// same line inside its own rect). Zero when the area is too short to spare a row.

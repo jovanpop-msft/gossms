@@ -390,7 +390,7 @@ func (a *App) closeSysCompletionPopups(key string) {
 // forServerQueryPanels calls fn for every query panel connected to key's
 // server+login.
 func (a *App) forServerQueryPanels(key string, fn func(qp *QueryPanel)) {
-	for i := 0; i < a.panels.Count(); i++ {
+	for i := range a.panels.Count() {
 		qp, ok := a.panels.PanelAt(i).(*QueryPanel)
 		if !ok || qp.conn == nil {
 			continue

@@ -35,7 +35,7 @@ func NewQueryListDialog(app *App) *QueryListDialog {
 func (d *QueryListDialog) Show() {
 	d.indices = d.indices[:0]
 	d.titles = d.titles[:0]
-	for i := 0; i < d.app.panels.Count(); i++ {
+	for i := range d.app.panels.Count() {
 		qp, ok := d.app.panels.PanelAt(i).(*QueryPanel)
 		if !ok {
 			continue

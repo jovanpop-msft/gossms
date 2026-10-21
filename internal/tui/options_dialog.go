@@ -317,7 +317,7 @@ func (d *OptionsDialog) apply() {
 	}
 	d.app.cfg.IndentWidth = n
 	controls.SetDefaultIndentWidth(n)
-	for i := 0; i < d.app.panels.Count(); i++ {
+	for i := range d.app.panels.Count() {
 		if qp, ok := d.app.panels.PanelAt(i).(*QueryPanel); ok {
 			qp.editor.SetIndentWidth(n)
 		}

@@ -238,3 +238,13 @@ func BenchmarkFormatXMLShowplan(b *testing.B) {
 		}
 	}
 }
+
+func TestFormatXMLRecoversCheckPanic(t *testing.T) {
+	saved := xmlCheck
+	t.Cleanup(func() { xmlCheck = saved })
+	xmlCheck = func(string) error { panic("boom") }
+	_, err := Format(LangXML, "", `<a><b/></a>`, Options{})
+	if err == nil || !strings.Contains(err.Error(), "XML check panicked: boom") {
+		t.Fatalf("err = %v, want the recovered panic", err)
+	}
+}

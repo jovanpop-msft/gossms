@@ -199,7 +199,7 @@ func (tv *TreeView) Draw(s tcell.Screen) {
 
 	inner := tv.rect.Inner(1)
 
-	for row := 0; row < inner.H; row++ {
+	for row := range inner.H {
 		idx := tv.scroll + row
 		if idx >= len(tv.nodes) {
 			break

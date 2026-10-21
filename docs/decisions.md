@@ -1636,8 +1636,13 @@ it from the string 'NULL'.
 - **A Launchpad PPA is rejected:** builders have no network, and Ubuntu's Go is
   1.22 (24.04) / 1.26 (26.04) vs `go.mod`'s 1.27. Measured: `go mod vendor`
   fully resolves `replace ../gosmo` (+23 MB, builds with `GOPROXY=off` and no
-  sibling), and **neither repo needs Go 1.27** — `go1.26.0` builds both with the
-  `go` directive lowered in both. 1.25 untested.
+  sibling).
+- **Both repos track the latest Go release** (decided 2026-10-21). The `go`
+  directive and `toolchain` in both `go.mod`s follow the current stable Go, and
+  new standard-library API is used freely (gosmo already relies on Go 1.27's
+  `strings.CutLast`). Lowering the directive so distro Go (Ubuntu 26.04 ships
+  1.26) can build from source was proposed and declined: it would freeze both
+  modules on older APIs for builders who can install a current Go anyway.
 - **The two search dialogs' key-routing skeleton stays duplicated**
   (`FindReplaceDialog.HandleKey`, `LogSearchDialog.HandleKey`). Only the
   Tab/Backtab half is identical; Escape, `F3` and field dispatch differ. A

@@ -223,7 +223,7 @@ func (c *Canvas) Row(y int) string {
 		return ""
 	}
 	out := make([]rune, 0, c.w)
-	for x := 0; x < c.w; x++ {
+	for x := range c.w {
 		cell := c.cells[y*c.w+x]
 		if cell.width == 0 {
 			continue

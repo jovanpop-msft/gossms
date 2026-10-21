@@ -161,7 +161,7 @@ func (p *QueryPanel) needsQuitPrompt() bool {
 // transaction or unsaved changes, in tab order.
 func (a *App) queryPanelsToAskBeforeQuit() []*QueryPanel {
 	var pending []*QueryPanel
-	for i := 0; i < a.panels.Count(); i++ {
+	for i := range a.panels.Count() {
 		if qp, ok := a.panels.PanelAt(i).(*QueryPanel); ok && qp.needsQuitPrompt() {
 			pending = append(pending, qp)
 		}

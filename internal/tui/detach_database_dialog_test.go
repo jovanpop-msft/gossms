@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"database/sql/driver"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -265,5 +266,28 @@ func TestDetachSaysWhyTheFilesAreMissingWhenNeitherCatalogAnswers(t *testing.T) 
 	joined := strings.Join(notes, "\n")
 	if !strings.Contains(joined, "OFFLINE") || !strings.Contains(joined, "VIEW ANY DEFINITION") {
 		t.Errorf("the page does not explain the missing file list:\n%s", joined)
+	}
+}
+
+// sortDatabaseFiles puts the data files first, each group by file ID: gosmo
+// lists by type_desc, so LOG arrives first, and the first row must be the
+// primary data file an attach starts from.
+func TestSortDatabaseFilesDataBeforeLog(t *testing.T) {
+	in := []*gosmo.DatabaseFileInfo{
+		{FileID: 2, Type: "LOG"},
+		{FileID: 5, Type: "LOG"},
+		{FileID: 3, Type: "ROWS"},
+		{FileID: 1, Type: "ROWS"},
+		{FileID: 4, Type: "FILESTREAM"},
+	}
+	var got []int
+	for _, f := range sortDatabaseFiles(in) {
+		got = append(got, f.FileID)
+	}
+	if want := []int{1, 3, 4, 2, 5}; !slices.Equal(got, want) {
+		t.Errorf("order = %v, want %v", got, want)
+	}
+	if in[0].FileID != 2 {
+		t.Error("sortDatabaseFiles reordered its argument")
 	}
 }

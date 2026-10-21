@@ -13,7 +13,11 @@ import (
 //
 // A language whose formatter has no case here fails closed — registering a
 // formatter without its guard can't ship output.
-func verify(l Language, in, out string) error {
+func verify(l Language, in, out string) error { return verifyLexed(l, in, nil, out) }
+
+// verifyLexed is verify with in's SQL lexing already done (inLex, from
+// lexSQL(in)); nil lexes in here.
+func verifyLexed(l Language, in string, inLex *sqlLexed, out string) error {
 	switch l {
 	case LangJSON:
 		a, b := jsonSignificant(in), jsonSignificant(out)
@@ -43,7 +47,7 @@ func verify(l Language, in, out string) error {
 		}
 		return fmt.Errorf("%w (XML differs at token %d)", ErrGuard, i+1)
 	case LangSQL:
-		n, same, err := sqlSameTokens(in, out)
+		n, same, err := sqlSameTokens(in, inLex, out)
 		if err != nil {
 			return fmt.Errorf("%w (SQL no longer tokenizes)", ErrGuard)
 		}
@@ -62,7 +66,7 @@ func verify(l Language, in, out string) error {
 func jsonSignificant(s string) string {
 	b := make([]byte, 0, len(s))
 	inStr, esc := false, false
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		c := s[i]
 		switch {
 		case inStr:

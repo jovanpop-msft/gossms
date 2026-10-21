@@ -2,7 +2,7 @@ module github.com/radix29/gossms
 
 go 1.27
 
-toolchain go1.27.2
+toolchain go1.27.3
 
 require (
 	github.com/clipperhouse/displaywidth v0.11.0

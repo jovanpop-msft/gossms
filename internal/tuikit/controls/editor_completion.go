@@ -551,7 +551,7 @@ func (e *Editor) DrawOverlay(s tcell.Screen) {
 
 	labelW, detailW := e.completionColumnWidths()
 
-	for row := 0; row < rect.H; row++ {
+	for row := range rect.H {
 		idx := e.completionScroll + row
 		if idx >= len(e.completionItems) {
 			break

@@ -84,7 +84,7 @@ func (h StackedHistoryChart) drawColumns(s tcell.Screen, plot core.Rect, sc Scal
 	buckets := maxLen(h.Series)
 	segs := make([]segment, 0, len(h.Series))
 
-	for col := 0; col < plot.W; col++ {
+	for col := range plot.W {
 		idx := bucketAt(col, plot.W, buckets)
 		if idx < 0 {
 			continue

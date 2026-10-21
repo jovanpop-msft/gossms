@@ -76,11 +76,12 @@ FROM   sys.databases d
 WHERE  d.database_id = DB_ID();
 
 -- Roles ---------------------------------------------------------------------
--- Created ownerless; a role owned by anyone but dbo is handed over in the
--- ownership section, once every possible owner exists.
+-- Created owned by dbo: without AUTHORIZATION the owner would be whoever runs
+-- the output, e.g. a db_owner member who isn't dbo. A role owned by anyone
+-- else is handed over in the ownership section, once every owner exists.
 INSERT #script (line) VALUES (N''), (N'-- Database roles');
 INSERT #script (line)
-SELECT N'IF DATABASE_PRINCIPAL_ID(N' + QUOTENAME(dp.name, '''') + N') IS NULL CREATE ROLE ' + QUOTENAME(dp.name) + N';'
+SELECT N'IF DATABASE_PRINCIPAL_ID(N' + QUOTENAME(dp.name, '''') + N') IS NULL CREATE ROLE ' + QUOTENAME(dp.name) + N' AUTHORIZATION [dbo];'
 FROM   sys.database_principals dp
 JOIN   #principals p ON p.principal_id = dp.principal_id
 WHERE  dp.type = 'R'
@@ -100,6 +101,11 @@ ORDER  BY dp.name;
 -- Users ---------------------------------------------------------------------
 -- authentication_type: 0 NONE (WITHOUT LOGIN), 1 INSTANCE (a login),
 -- 2 DATABASE (contained, password), 3 WINDOWS, 4 EXTERNAL (Entra).
+-- SUSER_SNAME resolves a Windows SID through the OS even with no server
+-- login, so a WINDOWS user named as its account gets the bare CREATE USER it
+-- was made with, not FOR LOGIN naming a login that may not exist. (SQL 2017
+-- accepts FOR LOGIN for a login-less Windows account too, so this restates
+-- the source rather than avoiding an error seen live.)
 INSERT #script (line) VALUES (N''), (N'-- Database users');
 INSERT #script (line)
 SELECT N'IF DATABASE_PRINCIPAL_ID(N' + QUOTENAME(dp.name, '''') + N') IS NULL CREATE USER ' + QUOTENAME(dp.name)
@@ -109,6 +115,7 @@ SELECT N'IF DATABASE_PRINCIPAL_ID(N' + QUOTENAME(dp.name, '''') + N') IS NULL CR
              WHEN dp.authentication_type = 2 THEN N' WITH PASSWORD = N' + QUOTENAME(@password, '''')
              WHEN dp.authentication_type = 0 THEN N' WITHOUT LOGIN'
              WHEN dp.type IN ('E', 'X') AND (@azure = 1 OR l.login_name IS NULL) THEN N' FROM EXTERNAL PROVIDER'
+             WHEN dp.authentication_type = 3 AND dp.name = l.login_name THEN N''
              ELSE N' FOR LOGIN ' + QUOTENAME(ISNULL(l.login_name, dp.name))
          END
        + CASE

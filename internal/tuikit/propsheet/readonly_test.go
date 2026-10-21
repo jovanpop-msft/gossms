@@ -365,19 +365,23 @@ func TestFlatValueStartsWhereAnEditableValueDoes(t *testing.T) {
 func TestAPageReadOnlyRowRefusesEveryEditPath(t *testing.T) {
 	text := Text("Step name", "Notify ops", 20)
 	sel := Select("Database", []string{"(unchanged)", "appdb", "salesdb"}, 0)
+	rad := Radio("Restrict access", []string{"MULTI_USER", "SINGLE_USER"}, 0)
 
 	text.SetReadOnly(true)
 	sel.SetReadOnly(true)
+	rad.SetReadOnly(true)
 
 	text.Edit("Renamed")
 	sel.Edit(2)
-	if text.Value() != "Notify ops" || sel.Selected() != 0 {
-		t.Errorf("Edit went through the page's gate: %q / %d", text.Value(), sel.Selected())
+	rad.Edit(1)
+	if text.Value() != "Notify ops" || sel.Selected() != 0 || rad.Selected() != 0 {
+		t.Errorf("Edit went through the page's gate: %q / %d / %d", text.Value(), sel.Selected(), rad.Selected())
 	}
 	// The field is focused by hand: it ignores keys it is not focused for, so
 	// a row whose gate is missing would still look inert here.
 	text.field.Focus(true)
 	sel.dd.Focus(true)
+	rad.rb.Focus(true)
 	if text.HandleKey(tcell.NewEventKey(tcell.KeyRune, "X", tcell.ModNone)) {
 		t.Error("a page-read-only text row claimed a keystroke")
 	}
@@ -386,25 +390,31 @@ func TestAPageReadOnlyRowRefusesEveryEditPath(t *testing.T) {
 	if sel.HandleKey(tcell.NewEventKey(tcell.KeyEnter, "", tcell.ModNone)) || sel.OverlayActive() {
 		t.Error("a page-read-only select row opened its list")
 	}
-	if text.Value() != "Notify ops" || sel.Selected() != 0 {
-		t.Errorf("a keystroke edited a page-read-only row: %q / %d", text.Value(), sel.Selected())
+	if rad.HandleKey(tcell.NewEventKey(tcell.KeyDown, "", tcell.ModNone)) {
+		t.Error("a page-read-only radio row claimed a keystroke")
+	}
+	if text.Value() != "Notify ops" || sel.Selected() != 0 || rad.Selected() != 0 {
+		t.Errorf("a keystroke edited a page-read-only row: %q / %d / %d", text.Value(), sel.Selected(), rad.Selected())
 	}
 	text.Paste("X")
 	if text.Value() != "Notify ops" {
 		t.Errorf("Paste edited a page-read-only row: %q", text.Value())
 	}
-	if !text.Focusable() || !sel.Focusable() {
+	if !text.Focusable() || !sel.Focusable() || !rad.Focusable() {
 		t.Error("a page-read-only row is not focusable, so its value can't be copied")
 	}
-	if text.Dirty() || sel.Dirty() {
+	if text.Dirty() || sel.Dirty() || rad.Dirty() {
 		t.Error("a page-read-only row went dirty")
+	}
+	if got := rad.Height(60); got != 1 {
+		t.Errorf("page-read-only radio row is %d lines high, want its one flat line", got)
 	}
 	// And it looks the part, on a form with no gate of its own: an input box
 	// the terminal refuses to type into reads as a broken terminal.
 	for _, c := range []struct {
 		name string
 		row  Row
-	}{{"text", text}, {"select", sel}} {
+	}{{"text", text}, {"select", sel}, {"radio", rad}} {
 		if got := drawRow(c.row, false); strings.Contains(got, "[") {
 			t.Errorf("page-read-only %s row = %q, still draws its control", c.name, got)
 		}
@@ -426,10 +436,12 @@ func TestAPageReadOnlyRowRefusesEveryEditPath(t *testing.T) {
 
 	text.SetReadOnly(false)
 	sel.SetReadOnly(false)
+	rad.SetReadOnly(false)
 	text.Edit("Renamed")
 	sel.Edit(2)
-	if text.Value() != "Renamed" || sel.Selected() != 2 {
-		t.Errorf("lifting the page's gate left the row uneditable: %q / %d", text.Value(), sel.Selected())
+	rad.Edit(1)
+	if text.Value() != "Renamed" || sel.Selected() != 2 || rad.Selected() != 1 {
+		t.Errorf("lifting the page's gate left the row uneditable: %q / %d / %d", text.Value(), sel.Selected(), rad.Selected())
 	}
 }
 

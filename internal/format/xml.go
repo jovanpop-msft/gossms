@@ -31,8 +31,19 @@ func formatXML(src string, o Options) (string, error) {
 	// The strict well-formedness pass is half the work on a big showplan and
 	// shares nothing with the layout, so the two run side by side. Its error,
 	// when there is one, wins: it is the more precise.
+	// This goroutine is outside every safego in internal/tui: a panic here
+	// would kill the process past main's recover, skipping screen.Fini and
+	// EmergencySave. Recover it into an error instead; checked is buffered,
+	// so neither send can block.
 	checked := make(chan error, 1)
-	go func() { checked <- checkXML(src) }()
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				checked <- fmt.Errorf("format: XML check panicked: %v", r)
+			}
+		}()
+		checked <- xmlCheck(src)
+	}()
 	out, err := layoutXML(src, o)
 	if cerr := <-checked; cerr != nil {
 		return "", cerr
@@ -71,6 +82,9 @@ func layoutXML(src string, o Options) (string, error) {
 }
 
 const bom = "\uFEFF"
+
+// xmlCheck is the check formatXML runs; a variable so a test can make it panic.
+var xmlCheck = checkXML
 
 // checkXML is the well-formedness pass: encoding/xml's strict tokenizer
 // checks names, attribute quoting, entities and characters. RawToken doesn't

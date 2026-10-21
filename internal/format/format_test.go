@@ -178,13 +178,13 @@ func TestGuardRefusesChangedOutput(t *testing.T) {
 		"rewrites a number":  func(string, Options) (string, error) { return `{"a":1.0,"b":"xy"}`, nil },
 		"unescapes a string": func(string, Options) (string, error) { return esc(`{"a":1,"b":"%u0078y"}`), nil },
 	} {
-		st := Style{ID: "broken", fn: fn}
+		st := Style{ID: "broken", fn: plain(fn)}
 		out, err := run(LangJSON, st, `{"a":1,"b":"xy"}`, Options{})
 		if !errors.Is(err, ErrGuard) || out != "" {
 			t.Errorf("%s: got %q, %v; want ErrGuard and no output", name, out, err)
 		}
 	}
-	ok := Style{ID: "spaces", fn: func(string, Options) (string, error) { return "{ \"a\" :\n\t1 , \"b\":\"xy\" }", nil }}
+	ok := Style{ID: "spaces", fn: plain(func(string, Options) (string, error) { return "{ \"a\" :\n\t1 , \"b\":\"xy\" }", nil })}
 	if _, err := run(LangJSON, ok, `{"a":1,"b":"xy"}`, Options{}); err != nil {
 		t.Errorf("whitespace-only change refused: %v", err)
 	}

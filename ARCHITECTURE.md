@@ -718,7 +718,8 @@ kind — database list, history, analysis, file list, target check, script — s
 one kind never supersedes another; all abandoned by `show` and `Hide`), the
 Attach and New Snapshot file reads, and Results to Text formatting of a large
 set (`QueryPanel.showResultsText` — CPU, not a read, but superseded the same
-way).
+way), and Format Document on large text (`formatActiveDocument`, likewise CPU;
+it also drops a result whose text changed meanwhile).
 
 **Both halves matter.** The token drops a superseded result, so a slow fetch
 can't overwrite a fresher one; the cancel stops its queries so they release

@@ -53,7 +53,7 @@ func (g *DataGrid) allRowsText(withHeaders bool) string {
 			b.WriteByte('\n')
 		}
 	}
-	for r := 0; r < g.rows.Len(); r++ {
+	for r := range g.rows.Len() {
 		if r > 0 {
 			b.WriteByte('\n')
 		}

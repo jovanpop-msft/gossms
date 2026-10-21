@@ -1,7 +1,9 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/gdamore/tcell/v3"
@@ -202,5 +204,104 @@ func TestFormatDocumentSQLSelectionKeepsLiteralLines(t *testing.T) {
 	a.formatActiveDocument()
 	if want := "Format failed: selection does not lex as SQL: line 2 col 8: unterminated string literal"; a.statusText != want {
 		t.Errorf("status = %q, want %q", a.statusText, want)
+	}
+}
+
+// slowFormat makes every Format Document run asynchronous and holds call n
+// (from 1) until gate[n] closes; entered reports each call as it starts. Its
+// output names the call, so a test can tell whose result landed.
+func slowFormat(t *testing.T) (entered chan int, gate [4]chan struct{}) {
+	t.Helper()
+	entered = make(chan int, len(gate))
+	for i := range gate {
+		gate[i] = make(chan struct{})
+	}
+	var n atomic.Int32
+	oldSync, oldText := formatSyncBytes, formatText
+	formatSyncBytes = -1
+	formatText = func(format.Language, string, string, format.Options) (string, error) {
+		k := int(n.Add(1))
+		entered <- k
+		<-gate[k]
+		return fmt.Sprintf("OUT%d", k), nil
+	}
+	t.Cleanup(func() { formatSyncBytes, formatText = oldSync, oldText })
+	return entered, gate
+}
+
+// A large format runs off the UI goroutine: the text stays as it was until the
+// result lands, which is then one undo step.
+func TestFormatDocumentAsyncAppliesAsOneUndoStep(t *testing.T) {
+	entered, gate := slowFormat(t)
+	const src = "select 1"
+	a, qp := newFormatTestPanel(t, format.LangSQL, src)
+	a.formatActiveDocument()
+	<-entered
+	if got := qp.editor.Text(); got != src || a.statusText != "Formatting as SQL..." {
+		t.Fatalf("while running: text = %q, status = %q", got, a.statusText)
+	}
+	close(gate[1])
+	waitAndDrain(t, a)
+	if got := qp.editor.Text(); got != "OUT1" || a.statusText != "Formatted as SQL (Standard)" {
+		t.Fatalf("text = %q, status = %q", got, a.statusText)
+	}
+	qp.editor.Undo()
+	if got := qp.editor.Text(); got != src {
+		t.Fatalf("after one undo text = %q, want %q", got, src)
+	}
+}
+
+// A result for text that changed while it was formatting — typed into, or the
+// selection moved — is dropped: applying it would undo the typing or rewrite
+// lines that were never formatted.
+func TestFormatDocumentAsyncDropsStaleResult(t *testing.T) {
+	entered, gate := slowFormat(t)
+	a, qp := newFormatTestPanel(t, format.LangSQL, "select 1")
+	a.formatActiveDocument()
+	<-entered
+	qp.editor.HandleKey(tcell.NewEventKey(tcell.KeyRune, "x", tcell.ModNone))
+	typed := qp.editor.Text()
+	close(gate[1])
+	waitAndDrain(t, a)
+	if got := qp.editor.Text(); got != typed || !strings.Contains(a.statusText, "changed while formatting") {
+		t.Fatalf("typed: text = %q, status = %q; want %q kept", got, a.statusText, typed)
+	}
+
+	// The selection moved down a line onto identical text: only its place
+	// tells the two apart.
+	const src = "select 1\nselect 1\nselect 1"
+	a, qp = newFormatTestPanel(t, format.LangSQL, src)
+	qp.editor.HandleKey(tcell.NewEventKey(tcell.KeyEnd, "", tcell.ModShift))
+	a.formatActiveDocument()
+	<-entered
+	qp.editor.HandleKey(tcell.NewEventKey(tcell.KeyDown, "", tcell.ModNone))
+	qp.editor.HandleKey(tcell.NewEventKey(tcell.KeyHome, "", tcell.ModNone))
+	qp.editor.HandleKey(tcell.NewEventKey(tcell.KeyEnd, "", tcell.ModShift))
+	close(gate[2])
+	waitAndDrain(t, a)
+	if got := qp.editor.Text(); got != src || !strings.Contains(a.statusText, "changed while formatting") {
+		t.Fatalf("moved selection: text = %q, status = %q", got, a.statusText)
+	}
+}
+
+// A second Format Document supersedes the first: the first's result, landing
+// while the text is still unchanged, is dropped, and the second's applies.
+func TestFormatDocumentAsyncRepeatSupersedes(t *testing.T) {
+	entered, gate := slowFormat(t)
+	const src = "select 1"
+	a, qp := newFormatTestPanel(t, format.LangSQL, src)
+	a.formatActiveDocument()
+	<-entered
+	a.formatActiveDocument()
+	<-entered
+	close(gate[1])
+	waitAndDrain(t, a)
+	if got := qp.editor.Text(); got != src || a.statusText != "Formatting as SQL..." {
+		t.Fatalf("superseded run applied: text = %q, status = %q", got, a.statusText)
+	}
+	close(gate[2])
+	waitAndDrain(t, a)
+	if got := qp.editor.Text(); got != "OUT2" {
+		t.Fatalf("text = %q, want the second run's OUT2", got)
 	}
 }

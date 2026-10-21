@@ -1,9 +1,10 @@
 package tui
 
 import (
+	"cmp"
 	"context"
 	"fmt"
-	"sort"
+	"slices"
 
 	gosmo "github.com/radix29/gosmo"
 	"github.com/radix29/gossms/internal/db"
@@ -104,11 +105,14 @@ func (d *DetachDatabaseDialog) fetchPrefetch(ctx context.Context, sc *db.ServerC
 // order is by type_desc, which sorts LOG first.
 func sortDatabaseFiles(files []*gosmo.DatabaseFileInfo) []*gosmo.DatabaseFileInfo {
 	out := append([]*gosmo.DatabaseFileInfo(nil), files...)
-	sort.SliceStable(out, func(i, j int) bool {
-		if a, b := out[i].Type == "LOG", out[j].Type == "LOG"; a != b {
-			return b
+	slices.SortStableFunc(out, func(a, b *gosmo.DatabaseFileInfo) int {
+		if aLog, bLog := a.Type == "LOG", b.Type == "LOG"; aLog != bLog {
+			if aLog {
+				return 1
+			}
+			return -1
 		}
-		return out[i].FileID < out[j].FileID
+		return cmp.Compare(a.FileID, b.FileID)
 	})
 	return out
 }

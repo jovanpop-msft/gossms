@@ -274,6 +274,14 @@ func TestGuardSQL(t *testing.T) {
 		if err := verify(LangSQL, src, out); !errors.Is(err, ErrGuard) {
 			t.Errorf("%s: verify = %v, want ErrGuard", name, err)
 		}
+		// The input's lexing, as formatSQL hands it over, guards the same.
+		in, err := lexSQL(src)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := verifyLexed(LangSQL, src, in, out); !errors.Is(err, ErrGuard) {
+			t.Errorf("%s: verifyLexed = %v, want ErrGuard", name, err)
+		}
 	}
 	if err := verify(LangSQL, src, "SELECT  Name\n FROM T -- c  \n go \n  SELECT\n'x'"); err == nil {
 		t.Error("verify accepted a re-cased table name T")

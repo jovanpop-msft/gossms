@@ -55,7 +55,7 @@ func (d *FileDialog) Draw(s tcell.Screen) {
 			core.DrawTextClipped(s, lr.X, lr.Y+i, lr.W, noteStyle, line)
 		}
 	} else {
-		for row := 0; row < lr.H; row++ {
+		for row := range lr.H {
 			idx := d.scroll + row
 			y := lr.Y + row
 			if idx >= len(d.entries) {

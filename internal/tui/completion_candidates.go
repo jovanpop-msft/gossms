@@ -310,7 +310,7 @@ func nameMatch(name, pl string) (ok, partial bool) {
 // index, for a name holding any other byte, whose lowering can change its
 // length.
 func indexLowerASCII(name, pl string) (i int, ascii bool) {
-	for k := 0; k < len(name); k++ {
+	for k := range len(name) {
 		if name[k] >= utf8.RuneSelf {
 			return -1, false
 		}

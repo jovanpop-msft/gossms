@@ -79,7 +79,7 @@ func drawDetails(s tcell.Screen, rect core.Rect, n *showplan.Node, st *showplan.
 		return
 	}
 	lines := detailLines(n, st, live)
-	for row := 0; row < rect.H; row++ {
+	for row := range rect.H {
 		idx := scroll + row
 		if idx >= len(lines) {
 			break
@@ -217,7 +217,7 @@ func drawProperties(s tcell.Screen, rect core.Rect, n *showplan.Node, scroll int
 		return
 	}
 	kvs := nodePropsForDisplay(n)
-	for row := 0; row < rect.H; row++ {
+	for row := range rect.H {
 		idx := scroll + row
 		if idx >= len(kvs) {
 			break

@@ -89,7 +89,7 @@ func (a *App) saveOnSignal(sig os.Signal, wait time.Duration, save func() ([]str
 // others theirs.
 func (a *App) emergencySaveTo(dir string, now time.Time) (paths []string, errs []error) {
 	stamp := now.Format("20060102-150405")
-	for i := 0; i < a.panels.Count(); i++ {
+	for i := range a.panels.Count() {
 		qp, ok := a.panels.PanelAt(i).(*QueryPanel)
 		if !ok {
 			continue

@@ -210,7 +210,7 @@ func (v *PlanView) drawTreePane(s tcell.Screen) {
 		}
 		textW = liveX - r.X - 1
 	}
-	for row := 0; row < r.H; row++ {
+	for row := range r.H {
 		idx := v.treeSt.scroll + row
 		if idx >= len(v.treeSt.rows) {
 			break
