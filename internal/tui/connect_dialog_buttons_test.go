@@ -68,7 +68,7 @@ func TestConnectResetClearsTheFormAndKeepsHistory(t *testing.T) {
 			RememberPassword: true, AuthMethod: config.AuthEntraPassword},
 	)
 	d.fExtraProps.SetText("Application Name=x")
-	d.cbTrust.SetChecked(false)
+	d.cbTrust.SetChecked(true)
 	d.setEncryptMode(config.EncryptOptional)
 
 	d.btnFocus = connectBtnReset
@@ -93,8 +93,8 @@ func TestConnectResetClearsTheFormAndKeepsHistory(t *testing.T) {
 	if d.cbRemember.Checked() {
 		t.Error("Remember Password stayed ticked after Reset")
 	}
-	if !d.cbTrust.Checked() {
-		t.Error("Trust Server Certificate is not back on after Reset")
+	if d.cbTrust.Checked() {
+		t.Error("Trust Server Certificate stayed on after Reset")
 	}
 	if got := d.authMethod(); got != config.AuthSQLServer {
 		t.Errorf("Authentication = %v after Reset, want SQL Server", got)

@@ -32,17 +32,15 @@ func selectAuth(t *testing.T, d *ConnectDialog, m config.AuthMethod) {
 	}
 }
 
-// SEC-1: a new connection encrypts the whole session. Trust Server
-// Certificate stays ticked by default so a self-signed dev instance still
-// connects.
+// A new connection encrypts the whole session and authenticates the server.
 func TestConnectDialogDefaultsToMandatoryEncryption(t *testing.T) {
 	d := NewConnectDialog(newTestApp())
 	opts := d.currentOptions()
 	if opts.Encrypt != config.EncryptMandatory {
 		t.Errorf("new dialog Encrypt = %q, want %q", opts.Encrypt, config.EncryptMandatory)
 	}
-	if !opts.TrustServerCertificate {
-		t.Error("new dialog has Trust Server Certificate unticked, want ticked")
+	if opts.TrustServerCertificate {
+		t.Error("new dialog bypasses server certificate validation")
 	}
 }
 

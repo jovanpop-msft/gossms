@@ -126,8 +126,11 @@ method does not use are greyed out.
   `[fe80::1]:1433`.
 - **Remember Password**: off by default; the password is saved to `config.json`
   only when ticked.
-- **Encryption**: Mandatory with **Trust Server Certificate** on by default.
-  Untick it to validate the certificate. **Strict** (TDS 8.0) needs SQL Server
+- **Encryption**: Mandatory with **Trust Server Certificate** off by default,
+  so the server must present a trusted certificate matching its hostname.
+  Enable it only for trusted development environments: it disables server
+  certificate validation. Existing saved connections keep their setting.
+  **Strict** (TDS 8.0) needs SQL Server
   2022+ or Azure SQL Managed Instance.
   On Windows and macOS, setting `SSL_CERT_FILE` or `SSL_CERT_DIR` (Python and
   some corporate images do) makes validation, including Entra sign-in, use
