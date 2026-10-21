@@ -976,6 +976,53 @@ func TestResultsStatusTextOnEveryTab(t *testing.T) {
 	}
 }
 
+// A set Max fetch rows cut short leads the status line with an upper-case
+// notice in the alert style, on its own tab and on Messages; a complete set's
+// tab stays as it was.
+func TestResultsStatusShoutsTruncatedSet(t *testing.T) {
+	a := newTestApp()
+	qp := NewQueryPanel(a, "Query 1")
+	qp.SetBounds(0, 0, 80, 24)
+	res := &query.Result{Sets: []query.ResultSet{
+		{Columns: []string{"n"}, Rows: [][]string{{"1"}, {"2"}}, Truncated: true},
+		{Columns: []string{"n"}, Rows: [][]string{{"1"}}},
+	}}
+	qp.setResult(res, false)
+	const shout = "MORE ROWS NOT FETCHED - MAX FETCH ROWS IS 2"
+
+	qp.setActiveTab(0)
+	if got := qp.resultsStatusText(); !strings.HasPrefix(got, shout) || !strings.Contains(got, "2 rows") {
+		t.Errorf("truncated set's status = %q, want it to lead with %q", got, shout)
+	}
+	if qp.resultsStatusStyle() == resultsStatusStyle {
+		t.Error("truncated set's status kept the routine style")
+	}
+	qp.setActiveTab(1)
+	if got := qp.resultsStatusText(); strings.Contains(got, "MORE ROWS") {
+		t.Errorf("complete set's status = %q, want no notice", got)
+	}
+	if qp.resultsStatusStyle() != resultsStatusStyle {
+		t.Error("complete set's status took the alert style")
+	}
+	qp.setActiveTab(qp.messagesTabIndex())
+	if got := qp.resultsStatusText(); !strings.HasPrefix(got, shout) {
+		t.Errorf("messages tab status = %q, want it to lead with %q", got, shout)
+	}
+}
+
+// A Results To File run has no sets to mark; the cut is counted on the Result.
+func TestResultsStatusShoutsTruncatedExport(t *testing.T) {
+	a := newTestApp()
+	qp := NewQueryPanel(a, "Query 1")
+	qp.SetBounds(0, 0, 80, 24)
+	res := &query.Result{SinkSetsTruncated: 1}
+	query.WithMaxRows(7)(res)
+	qp.setResult(res, false)
+	if got := qp.resultsStatusText(); !strings.HasPrefix(got, "MORE ROWS NOT FETCHED - MAX FETCH ROWS IS 7") {
+		t.Errorf("export status = %q, want the truncation notice", got)
+	}
+}
+
 // While a query runs the status is the live elapsed counter, whichever tab
 // is showing — that's the whole point of the elapsed-time ticker waking the loop.
 func TestResultsStatusTextWhileExecuting(t *testing.T) {

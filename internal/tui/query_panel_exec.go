@@ -279,7 +279,9 @@ func (p *QueryPanel) startRun(queryText string, firstLine int, exportPath string
 	capturePlan := p.app.actualPlanEnabled || p.app.liveStatsEnabled
 	live := p.app.liveStatsEnabled && exportPath == ""
 	prog := &query.Progress{}
-	opts := []query.Option{query.WithProgress(prog), query.WithLineOffset(firstLine)}
+	// The cap is read here, so an Options change takes effect on the next run.
+	opts := []query.Option{query.WithProgress(prog), query.WithLineOffset(firstLine),
+		query.WithMaxRows(p.app.cfg.MaxFetchRows)}
 
 	// Written by run on the background goroutine, read by the completion on the UI
 	// goroutine; launch's postAndWake orders the two.

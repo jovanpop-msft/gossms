@@ -172,6 +172,10 @@ Object Explorer filters, query execution. Each is a bug that shipped.
   consumes the message `retmsg.Message(ctx)` waits for: empty grid, no error,
   no Messages tab. Drain only after abandoning a set mid-scan (`scanNext`'s
   bool). Only a live query catches it.
+- **A set cut at Max fetch rows is cancelled, not drained** (`cancelBatch`):
+  `rows.Close()` sends an attention and waits for its confirmation, keeping the
+  session. Nothing after it runs: not the batch's later statements, nor later
+  GO batches (`runScript` stops on `res.cut`).
 - **A query window's SQL runs on its `query.Session`, never a pool.** A pooled
   `*sql.Conn` is reset on next checkout (temp tables, SET options, open
   transaction gone) and the pool reuses the latest-returned connection — the

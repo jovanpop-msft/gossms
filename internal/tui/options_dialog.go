@@ -24,6 +24,7 @@ type OptionsDialog struct {
 	fMaxTextLen    *widgets.InputField
 	fIndentWidth   *widgets.InputField
 	fXECapacity    *widgets.InputField
+	fMaxFetchRows  *widgets.InputField
 	cbIntelliSense *widgets.CheckBox
 
 	// drag owns the text-selection gesture a press in one of the input fields
@@ -43,7 +44,7 @@ type OptionsDialog struct {
 // NewOptionsDialog creates the Options dialog.
 func NewOptionsDialog(app *App) *OptionsDialog {
 	d := &OptionsDialog{app: app}
-	d.InitModal(app.screen, "Options", 60, 21)
+	d.InitModal(app.screen, "Options", 60, 23)
 
 	styles := config.AllIconStyles()
 	labels := make([]string, len(styles))
@@ -63,8 +64,9 @@ func NewOptionsDialog(app *App) *OptionsDialog {
 	d.fMaxTextLen = widgets.NewInputField("Max characters per column (text):", 5, false)
 	d.fIndentWidth = widgets.NewInputField("Indent size (spaces):", 5, false)
 	d.fXECapacity = widgets.NewInputField("Extended Events viewer holds (events):", 9, false)
+	d.fMaxFetchRows = widgets.NewInputField("Max fetch rows (0 = unlimited):", 9, false)
 	d.cbIntelliSense = widgets.NewCheckBox("Enable IntelliSense (autocomplete) in Query editor")
-	d.focusable = []focusable{d.rbIconStyle, d.rbTheme, d.fMaxCellLen, d.fMaxTextLen, d.fIndentWidth, d.fXECapacity, d.cbIntelliSense}
+	d.focusable = []focusable{d.rbIconStyle, d.rbTheme, d.fMaxCellLen, d.fMaxTextLen, d.fIndentWidth, d.fXECapacity, d.fMaxFetchRows, d.cbIntelliSense}
 	return d
 }
 
@@ -88,6 +90,7 @@ func (d *OptionsDialog) Show() {
 	d.fMaxTextLen.SetValue(strconv.Itoa(d.app.cfg.MaxTextColumnLength))
 	d.fIndentWidth.SetValue(strconv.Itoa(d.app.cfg.IndentWidth))
 	d.fXECapacity.SetValue(strconv.Itoa(config.ClampXEventStoreCapacity(d.app.cfg.XEventStoreCapacity)))
+	d.fMaxFetchRows.SetValue(strconv.Itoa(max(d.app.cfg.MaxFetchRows, 0)))
 	d.cbIntelliSense.SetChecked(!d.app.cfg.IntelliSenseDisabled)
 	d.setFocus(0)
 	d.ModalDialog.Show()
@@ -131,7 +134,10 @@ func (d *OptionsDialog) Draw(s tcell.Screen) {
 	d.fXECapacity.SetBounds(inner.X+1, inner.Y+12)
 	d.fXECapacity.Draw(s)
 
-	d.cbIntelliSense.SetBounds(inner.X+1, inner.Y+14)
+	d.fMaxFetchRows.SetBounds(inner.X+1, inner.Y+14)
+	d.fMaxFetchRows.Draw(s)
+
+	d.cbIntelliSense.SetBounds(inner.X+1, inner.Y+16)
 	d.cbIntelliSense.Draw(s)
 
 	d.DrawSeparator(s)
@@ -282,9 +288,9 @@ func (d *OptionsDialog) doButton() {
 // sheets host a writable EditorRow changes with the pages.
 type editorIndentHost interface{ SetEditorIndentWidth(n int) }
 
-// apply commits all seven settings (icon style, color theme, max cell length, max text column
-// length, indent size, the Extended Events viewer's event limit, IntelliSense
-// enabled) to the config, persists it, and rebuilds the Object Explorer so the
+// apply commits all eight settings (icon style, color theme, max cell length, max text column
+// length, indent size, the Extended Events viewer's event limit, max fetch rows,
+// IntelliSense enabled) to the config, persists it, and rebuilds the Object Explorer so the
 // icon change shows immediately. The theme needs only the palette swapped: every
 // style is read from it at draw time.
 //
@@ -334,6 +340,13 @@ func (d *OptionsDialog) apply() {
 	// A viewer takes the capacity when it opens; open ones keep theirs.
 	xeCap, _ := strconv.Atoi(d.fXECapacity.Value())
 	d.app.cfg.XEventStoreCapacity = config.ClampXEventStoreCapacity(xeCap)
+	// A run reads it when it starts; one in flight keeps its cap. Anything but a
+	// positive number (0, negative, not a number) is the default, unlimited.
+	if n, err := strconv.Atoi(d.fMaxFetchRows.Value()); err == nil && n > 0 {
+		d.app.cfg.MaxFetchRows = n
+	} else {
+		d.app.cfg.MaxFetchRows = 0
+	}
 	d.app.cfg.IntelliSenseDisabled = !d.cbIntelliSense.Checked()
 	d.app.saveConfig(func(err error) {
 		if err != nil {

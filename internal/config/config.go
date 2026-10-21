@@ -346,6 +346,11 @@ type Config struct {
 	// MinXEventStoreCapacity..MaxXEventStoreCapacity means
 	// DefaultXEventStoreCapacity.
 	XEventStoreCapacity int `json:"xevent_store_capacity"`
+	// MaxFetchRows is how many rows a query window keeps of each result set, in
+	// every results mode (grid, text, file). Reaching it cancels the rest of the
+	// script, later GO batches included (query.WithMaxRows). Zero, the default, means unlimited; Load
+	// turns a negative value into zero.
+	MaxFetchRows int `json:"max_fetch_rows"`
 	// XEventHiddenColumns is, per event session name, the columns the Extended
 	// Events viewer's Choose Columns has hidden ("name", "timestamp",
 	// "field:<name>", "action:<name>"). Hidden rather than shown, so a field the
@@ -597,6 +602,7 @@ func parseConfig(path string, data []byte) (*Config, error) {
 		cfg.IndentWidth = DefaultIndentWidth
 	}
 	cfg.XEventStoreCapacity = ClampXEventStoreCapacity(cfg.XEventStoreCapacity)
+	cfg.MaxFetchRows = max(cfg.MaxFetchRows, 0)
 	return cfg, keepErr
 }
 
