@@ -155,6 +155,19 @@ method does not use are greyed out.
 Sessions appear on the server as `goSSMS`, `goSSMS - Query` and
 `goSSMS - Activity Monitor`.
 
+Connections whose hostname ends in `datawarehouse.fabric.microsoft.com` use
+a Fabric Data Warehouse tree layout: only **Databases** and **Security** at the
+server root. Server **Security** contains only **Logins** and **Server Roles**.
+**Tables** lists user tables without System Tables, FileTables, External Tables,
+or Graph Tables folders; individual tables omit Triggers and Indexes.
+**External Data Sources** appears directly under each database instead of
+**External Resources**, without External File Formats or External Libraries.
+**Programmability** contains only Stored Procedures, Functions, and External
+Functions. **External Functions** lists `sys.objects` entries of type `XF`.
+Databases omit Query Store, Service Broker, and Storage; database **Security**
+contains only Users, Roles, and Schemas. This layout is per connection; other
+connected servers keep their usual folders.
+
 ## Supported SQL Server versions
 
 goSSMS supports **SQL Server 2016 SP1 (13.0.4001) and later** on Windows and

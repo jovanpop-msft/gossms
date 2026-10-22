@@ -318,6 +318,41 @@ func TestRoleSetsTheApplicationName(t *testing.T) {
 	}
 }
 
+func TestNewServerConnDetectsFabricDWFromHostname(t *testing.T) {
+	for _, tc := range []struct {
+		server string
+		want   bool
+	}{
+		{"warehouse.datawarehouse.fabric.microsoft.com", true},
+		{"WAREHOUSE.DATAWAREHOUSE.FABRIC.MICROSOFT.COM", true},
+		{" warehouse.datawarehouse.fabric.microsoft.com ", true},
+		{"warehouse.datawarehouse.fabric.microsoft.com,1433", true},
+		{"warehouse.datawarehouse.fabric.microsoft.com:1433", true},
+		{"tcp:warehouse.datawarehouse.fabric.microsoft.com,1433", true},
+		{"warehouse.datawarehouse.fabric.microsoft.com.", true},
+		{"datawarehouse.fabric.microsoft.com", true},
+		{"warehouse.msit-datawarehouse.fabric.microsoft.com", true},
+		{"WAREHOUSE.MSIT-DATAWAREHOUSE.FABRIC.MICROSOFT.COM", true},
+		{"tcp:warehouse.msit-datawarehouse.fabric.microsoft.com,1433", true},
+		{"warehouse.msit-datawarehouse.fabric.microsoft.com.", true},
+		{"msit-datawarehouse.fabric.microsoft.com", true},
+		{"warehouse.other-datawarehouse.fabric.microsoft.com", true},
+		{"sql.database.windows.net", false},
+		{"localhost", false},
+		{"", false},
+		{"warehouse.datawarehouse.fabric.microsoft.com.example.org", false},
+		{"warehouse.datawarehouse.fabric.microsoft.com:invalid", false},
+		{"warehouse.msit-datawarehouse.fabric.microsoft.com.example.org", false},
+	} {
+		t.Run(tc.server, func(t *testing.T) {
+			sc := newServerConn(context.Background(), config.Connection{Server: tc.server}, nil, RoleQuery)
+			if sc.IsFabricDW != tc.want {
+				t.Errorf("IsFabricDW = %v for %q, want %v", sc.IsFabricDW, tc.server, tc.want)
+			}
+		})
+	}
+}
+
 func TestParseExtraProperties(t *testing.T) {
 	cases := []struct {
 		in   string
