@@ -418,7 +418,7 @@ func systemDatabasesDetail(ctx context.Context, sc *dbconn.ServerConn, node *exp
 	rows := make([][]string, 0, 4)
 	for _, d := range dbs {
 		if inSystemDatabases(d) {
-			rows = append(rows, []string{d.Name, d.State, string(d.RecoveryModel)})
+			rows = append(rows, []string{d.Name, string(d.State), string(d.RecoveryModel)})
 		}
 	}
 	return []string{"Name", "State", "Recovery"}, rows, nil

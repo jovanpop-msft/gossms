@@ -388,13 +388,13 @@ func agComputeDatabaseMetrics(dbs []*gosmo.AvailabilityDatabase) []agDatabaseMet
 // explains the rest). Empty means healthy.
 func agReplicaIssues(r *gosmo.AvailabilityReplica, dbs []agDatabaseMetrics) string {
 	var issues []string
-	if r.ConnectedState != "" && !strings.EqualFold(r.ConnectedState, "CONNECTED") {
+	if r.ConnectedState != "" && r.ConnectedState != gosmo.ReplicaConnected {
 		issues = append(issues, titleWord(r.ConnectedState))
 	}
-	if r.RecoveryHealth != "" && !strings.EqualFold(r.RecoveryHealth, "ONLINE") {
+	if r.RecoveryHealth != "" && r.RecoveryHealth != gosmo.RecoveryOnline {
 		issues = append(issues, "Recovery "+strings.ToLower(titleWord(r.RecoveryHealth)))
 	}
-	if r.SynchronizationHealth != "" && !strings.EqualFold(r.SynchronizationHealth, "HEALTHY") {
+	if r.SynchronizationHealth != "" && r.SynchronizationHealth != gosmo.SyncHealthy {
 		issues = append(issues, titleWord(r.SynchronizationHealth))
 	}
 	suspended := 0

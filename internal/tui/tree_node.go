@@ -481,9 +481,9 @@ type nodeData struct {
 	IsPrimaryKey bool
 	IsOffline    bool
 	// DBState is a NodeDatabase's sys.databases state_desc (ONLINE, OFFLINE,
-	// RESTORING, …), read at load time; IsOffline is DBState != "ONLINE". The
+	// RESTORING, …), read at load time; IsOffline is DBState != gosmo.DatabaseOnline. The
 	// delete confirmation names what a drop in that state leaves on disk.
-	DBState string
+	DBState gosmo.DatabaseState
 	// DBReadOnly is a NodeDatabase's sys.databases is_read_only, read with
 	// DBState: Shrink is not offered on one, as every DBCC SHRINK* fails there.
 	DBReadOnly bool

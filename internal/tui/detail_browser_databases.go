@@ -64,7 +64,7 @@ func (db *DetailBrowser) loadDatabasesFolderDetails(fetchCtx context.Context, ap
 				continue
 			}
 			dbs = append(dbs, d)
-			rows = append(rows, []string{d.Name, d.State, string(d.RecoveryModel), "…", "…", "…", "…", "…"})
+			rows = append(rows, []string{d.Name, string(d.State), string(d.RecoveryModel), "…", "…", "…", "…", "…"})
 			objs = append(objs, nodeData{Type: NodeDatabase, DBName: d.Name, Name: d.Name})
 		}
 		db.postPartialObjects(app, seq, databasesFolderColumns, rows, objs)
@@ -133,7 +133,7 @@ func (db *DetailBrowser) loadDatabaseDetails(fetchCtx context.Context, app *App,
 		}
 		db.postFinalResult(app, node, seq, &detailResult{cols: []string{"Property", "Value"}, rows: [][]string{
 			{"Name", d.Name},
-			{"State", d.State},
+			{"State", string(d.State)},
 			{"Recovery Model", string(d.RecoveryModel)},
 			{"Compatibility Level", fmt.Sprintf("%d", d.CompatibilityLevel)},
 			{"Collation", d.Collation},

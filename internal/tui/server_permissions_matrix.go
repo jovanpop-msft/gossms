@@ -12,14 +12,15 @@ import (
 
 // permEntry is the common shape of gosmo.ServerPermissionEntry and
 // gosmo.DatabasePermissionEntry (Principal/PrincipalType/Grantor/Permission/
-// State, all strings), normalized at the call site so the permissions-grid
-// editor, identical for both scopes, is built once.
+// State), normalized at the call site so the permissions-grid editor,
+// identical for both scopes, is built once. Permission is a plain string
+// because each scope types it differently.
 type permEntry struct {
 	Principal     string
-	PrincipalType string
+	PrincipalType gosmo.PrincipalType
 	Grantor       string
 	Permission    string
-	State         string
+	State         gosmo.PermissionState
 }
 
 // permEdit tracks one grid row's pending state through nextPermState's cycle,
@@ -27,8 +28,8 @@ type permEntry struct {
 // current because the applying statement depends on both; see permTransition.
 type permEdit struct {
 	entry   permEntry
-	orig    string
-	current string
+	orig    gosmo.PermissionState
+	current gosmo.PermissionState
 }
 
 // permPrincipal is one row in the Permissions page's principal list —
@@ -36,7 +37,7 @@ type permEdit struct {
 // scope, not just the ones with an existing GRANT/DENY entry.
 type permPrincipal struct {
 	Name string
-	Type string
+	Type gosmo.PrincipalType
 }
 
 // databasePermPrincipals is the principal list every database-scope
@@ -49,20 +50,19 @@ func databasePermPrincipals(users []*gosmo.User, roles []*gosmo.DatabaseRole) []
 		principals = append(principals, permPrincipal{Name: u.Name, Type: u.UserType})
 	}
 	for _, r := range roles {
-		principals = append(principals, permPrincipal{Name: r.Name, Type: "DATABASE_ROLE"})
+		principals = append(principals, permPrincipal{Name: r.Name, Type: gosmo.PrincipalDatabaseRole})
 	}
 	return principals
 }
 
 // objectPermEntries normalizes the schema- and object-scope entries, whose
-// Permission and State are named string types rather than the plain strings
-// the server- and database-scope ones carry.
+// Permission is an ObjectPermission.
 func objectPermEntries(perms []*gosmo.PermissionEntry) []permEntry {
 	entries := make([]permEntry, len(perms))
 	for i, p := range perms {
 		entries[i] = permEntry{
 			Principal: p.Principal, PrincipalType: p.PrincipalType,
-			Grantor: p.Grantor, Permission: string(p.Permission), State: string(p.State),
+			Grantor: p.Grantor, Permission: string(p.Permission), State: p.State,
 		}
 	}
 	return entries
@@ -116,7 +116,7 @@ func buildPermissionsMatrix(
 	principalRowsFor := func() [][]string {
 		rows := make([][]string, len(visible))
 		for i, p := range visible {
-			rows[i] = []string{p.Name, p.Type}
+			rows[i] = []string{p.Name, string(p.Type)}
 		}
 		return rows
 	}
@@ -189,7 +189,7 @@ func buildPermissionsMatrix(
 	principalFilterRow.SetOnChange(func(term string) {
 		visible = visible[:0]
 		for _, p := range principals {
-			if matchesFilter(term, p.Name, p.Type) {
+			if matchesFilter(term, p.Name, string(p.Type)) {
 				visible = append(visible, p)
 			}
 		}
@@ -277,7 +277,7 @@ func pagePrincipalServerPermissions(sc *db.ServerConn, principalName string) pro
 			if err != nil {
 				return nil, nil, err
 			}
-			states := make(map[string]string, len(perms))
+			states := make(map[string]gosmo.PermissionState, len(perms))
 			for _, p := range perms {
 				if p.Principal == principalName {
 					states[string(p.Permission)] = p.State

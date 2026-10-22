@@ -35,8 +35,8 @@ type completionDirectory struct {
 
 // directoryEntry is one database as sys.databases lists it.
 type directoryEntry struct {
-	name  string // as the server spells it — the inventory key uses this
-	state string // state_desc; only ONLINE is ever loaded
+	name  string              // as the server spells it — the inventory key uses this
+	state gosmo.DatabaseState // only DatabaseOnline is ever loaded
 }
 
 // errNoDatabaseAccess is a cross-database inventory's error when HAS_DBACCESS
@@ -125,7 +125,7 @@ func (p *QueryPanel) databaseInventory(own *completionInventory, name string) (i
 		return nil, true
 	}
 	entry, ok := dir.byName.Get(name)
-	if !ok || entry.state != "ONLINE" {
+	if !ok || entry.state != gosmo.DatabaseOnline {
 		return nil, false
 	}
 	other := p.app.ensureCrossDatabaseInventory(p.conn, entry.name)
@@ -232,7 +232,7 @@ func (p *QueryPanel) databaseItems(pl string) []controls.CompletionItem {
 	dir := p.app.ensureCompletionDirectory(p.conn)
 	var items []controls.CompletionItem
 	for e := range dir.byName.Values() {
-		if e.state != "ONLINE" {
+		if e.state != gosmo.DatabaseOnline {
 			continue
 		}
 		if ok, partial := nameMatch(e.name, pl); ok {

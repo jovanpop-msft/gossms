@@ -99,7 +99,7 @@ func fetchNewUserPrefetch(ctx context.Context, sc *db.ServerConn, dbName string)
 	}
 	for _, l := range logins {
 		pf.logins = append(pf.logins, l.Name)
-		if strings.HasPrefix(l.LoginType, "WINDOWS") {
+		if l.LoginType == gosmo.PrincipalWindowsLogin || l.LoginType == gosmo.PrincipalWindowsGroup {
 			pf.windowsLogins = append(pf.windowsLogins, l.Name)
 		}
 	}

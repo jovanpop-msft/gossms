@@ -455,13 +455,13 @@ func buildNewLoginUserMappingPage(sc *db.ServerConn, pf *nloginPrefetch, loginNa
 
 // buildNewLoginSecurablesPage reuses Login Properties' Securables page idiom
 // (pageLoginSecurables, login_props.go): same single SERVER-scope securable
-// model and Grant/Deny/(none) cycling grid, seeded with no explicit permissions
+// model and permission-state cycling grid, seeded with no explicit permissions
 // since the login doesn't exist.
 func buildNewLoginSecurablesPage(sc *db.ServerConn, loginName func() string) (*propsheet.Form, propApply) {
 	catalog := gosmo.ServerPermissionNames()
 	type secEdit struct {
 		permission string
-		current    string
+		current    gosmo.PermissionState
 	}
 	edits := make([]*secEdit, len(catalog))
 	for i, perm := range catalog {
@@ -481,7 +481,7 @@ func buildNewLoginSecurablesPage(sc *db.ServerConn, loginName func() string) (*p
 	gridRow := propsheet.NewGridRow(grid, 12)
 	gridRow.DirtyFn = func() bool {
 		for _, e := range edits {
-			if e.current != "" {
+			if e.current != permStateNone {
 				return true
 			}
 		}
@@ -489,7 +489,7 @@ func buildNewLoginSecurablesPage(sc *db.ServerConn, loginName func() string) (*p
 	}
 	gridRow.RevertFn = func() {
 		for _, e := range edits {
-			e.current = ""
+			e.current = permStateNone
 		}
 		redrawGrid(grid, permissionStateColumns, rowsFor())
 	}
@@ -497,18 +497,15 @@ func buildNewLoginSecurablesPage(sc *db.ServerConn, loginName func() string) (*p
 	f := propsheet.NewForm(
 		propsheet.Section("Explicit server-level permissions"),
 		gridRow,
-		propsheet.Note("Space/Enter (or click) on State cycles Grant → Deny → (none). Database and endpoint securables aren't modeled here yet."),
+		propsheet.Note(permStateCycleNote+" Database and endpoint securables aren't modeled here yet."),
 	)
 
 	apply := func(ctx context.Context) error {
 		name := loginName()
 		for _, e := range edits {
-			if e.current == "" {
-				continue
-			}
-			// e.current is "GRANT" or "DENY", spelled as gosmo's verbs are.
-			err := serverPermApply(sc.Server)(ctx, gosmo.PermissionVerb(e.current), gosmo.PermissionOptions{}, e.permission, name)
-			if err != nil {
+			// From no entry, so Grant With Grant goes out as GRANT … WITH
+			// GRANT OPTION: the state is not a verb, and gosmo refuses it as one.
+			if err := applyPermChange(ctx, serverPermApply(sc.Server), permStateNone, e.current, e.permission, name); err != nil {
 				return err
 			}
 		}

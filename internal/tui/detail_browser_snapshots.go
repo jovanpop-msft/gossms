@@ -29,7 +29,7 @@ func databaseSnapshotsFolderDetail(ctx context.Context, sc *dbconn.ServerConn, n
 	})
 	rows := make([][]string, 0, len(snaps))
 	for _, s := range snaps {
-		rows = append(rows, []string{s.Name, s.SourceDatabase, s.State, formatSQLDate(s.CreateDate)})
+		rows = append(rows, []string{s.Name, s.SourceDatabase, string(s.State), formatSQLDate(s.CreateDate)})
 		// The mapping is what gives the pane its own Delete; without it the
 		// item is withheld with no explanation.
 		*objs = append(*objs, nodeData{
@@ -54,7 +54,7 @@ func databaseSnapshotDetail(ctx context.Context, sc *dbconn.ServerConn, node *ex
 	rows := [][]string{
 		{"Name", s.Name},
 		{"Source database", source},
-		{"State", s.State},
+		{"State", string(s.State)},
 		{"Created", formatSQLDate(s.CreateDate)},
 	}
 	// A file read that fails says so in its own row rather than failing the

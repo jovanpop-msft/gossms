@@ -510,7 +510,7 @@ func replicaEndpoint(ctx context.Context, sc *db.ServerConn) (*gosmo.DatabaseMir
 	if ep == nil {
 		return nil, fmt.Errorf("%s has no database mirroring endpoint — create one there first; a replica without one can never connect", sc.Server.Name())
 	}
-	if !strings.EqualFold(ep.State, "STARTED") {
+	if ep.State != gosmo.EndpointStarted {
 		return nil, fmt.Errorf("%s's database mirroring endpoint %q is %s, not STARTED", sc.Server.Name(), ep.Name, ep.State)
 	}
 	return ep, nil

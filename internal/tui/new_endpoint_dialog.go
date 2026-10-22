@@ -705,7 +705,7 @@ func (d *NewEndpointDialog) ensureEndpoint(ctx context.Context, p *endpointPeer,
 			return fmt.Errorf("%s: create endpoint: %w", p.inst.name, err)
 		}
 	}
-	if !strings.EqualFold(ep.State, "STARTED") {
+	if ep.State != gosmo.EndpointStarted {
 		if err := ep.Start(ctx); err != nil {
 			return fmt.Errorf("%s: start endpoint %s: %w", p.inst.name, ep.Name, err)
 		}

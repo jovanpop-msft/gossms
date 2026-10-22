@@ -90,9 +90,9 @@ func tableOf(sc *db.ServerConn, n nodeData) *gosmo.Table {
 // OFFLINE one's, an EMERGENCY one's log (probed on 17, 2026-10-15).
 func databaseDropLeftovers(n nodeData) string {
 	switch n.DBState {
-	case "OFFLINE":
+	case gosmo.DatabaseOffline:
 		return "It is OFFLINE, so its data and log files stay on disk."
-	case "EMERGENCY":
+	case gosmo.DatabaseEmergency:
 		return "It is in EMERGENCY mode, so its log file stays on disk."
 	}
 	return ""

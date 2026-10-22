@@ -433,9 +433,9 @@ func agTestSnapshot() agSnapshot {
 	var replicas []*gosmo.AvailabilityReplica
 	var dbs []*gosmo.AvailabilityDatabase
 	for i, n := range []string{"a", "b", "c", "d"} {
-		role := "SECONDARY"
+		role := gosmo.ReplicaSecondary
 		if i == 0 {
-			role = "PRIMARY"
+			role = gosmo.ReplicaPrimary
 		}
 		replicas = append(replicas, &gosmo.AvailabilityReplica{ReplicaServerName: n, Role: role})
 		dbs = append(dbs, &gosmo.AvailabilityDatabase{DatabaseName: "appdb", ReplicaServerName: n, IsPrimaryReplica: i == 0})

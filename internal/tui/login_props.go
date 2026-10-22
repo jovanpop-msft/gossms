@@ -68,20 +68,20 @@ const noneItem = "(None)"
 // loginAuthLabel renders a login's type_desc as SSMS's authentication wording.
 // Each type gets its own wording: the certificate-mapped ##MS_* logins the
 // Logins folder lists are not Windows logins.
-func loginAuthLabel(loginType string) string {
+func loginAuthLabel(loginType gosmo.PrincipalType) string {
 	switch loginType {
-	case "SQL_LOGIN":
+	case gosmo.PrincipalSQLLogin:
 		return "SQL Server Authentication"
-	case "WINDOWS_LOGIN", "WINDOWS_GROUP":
+	case gosmo.PrincipalWindowsLogin, gosmo.PrincipalWindowsGroup:
 		return "Windows Authentication"
-	case "EXTERNAL_LOGIN", "EXTERNAL_GROUP":
+	case gosmo.PrincipalExternalLogin, gosmo.PrincipalExternalGroup:
 		return "Microsoft Entra Authentication"
-	case "CERTIFICATE_MAPPED_LOGIN":
+	case gosmo.PrincipalCertificateMappedLogin:
 		return "Mapped to a certificate"
-	case "ASYMMETRIC_KEY_MAPPED_LOGIN":
+	case gosmo.PrincipalAsymmetricKeyMappedLogin:
 		return "Mapped to an asymmetric key"
 	}
-	return loginType
+	return string(loginType)
 }
 
 func pageLoginGeneral(sc *db.ServerConn, loginName *string) propPage {
@@ -195,7 +195,7 @@ func pageLoginGeneral(sc *db.ServerConn, loginName *string) propPage {
 				propsheet.Section("Credential"),
 				credentialRow,
 				propsheet.Section("Summary"),
-				propsheet.Static("Login type", l.LoginType),
+				propsheet.Static("Login type", string(l.LoginType)),
 				propsheet.Static("SID", fmt.Sprintf("0x%X", l.SID)),
 				propsheet.Static("Created", formatSQLDate(l.CreateDate)),
 				propsheet.Static("Modified", formatSQLDate(l.ModifyDate)),
@@ -646,7 +646,7 @@ var connectPermissionItems = []string{"Grant", "Deny", "Default"}
 // is that state unchanged and must not issue REVOKE GRANT OPTION FOR. Apply goes
 // through applyPermChange with the loaded state as orig: a DENY or REVOKE away
 // from WITH GRANT OPTION needs CASCADE (Msg 4611 without it).
-func connectPermissionState(orig string, selected int) string {
+func connectPermissionState(orig gosmo.PermissionState, selected int) gosmo.PermissionState {
 	switch selected {
 	case 0:
 		if orig == permStateGrantWith {

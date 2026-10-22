@@ -260,7 +260,7 @@ func (d *RestoreDialog) drawFiles(s tcell.Screen) {
 			break
 		}
 		kind := "DATA"
-		if f.Type == "L" {
+		if f.Type == gosmo.BackupFileLog {
 			kind = "LOG"
 		}
 		head := core.PadRight(f.LogicalName, 16) + " " + core.PadRight("("+kind+")", 7)

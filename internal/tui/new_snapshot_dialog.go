@@ -95,7 +95,7 @@ func (d *NewSnapshotDialog) fetchPrefetch(ctx context.Context, sc *db.ServerConn
 	pf := &snapshotPrefetch{existing: newNameSet(serverCollation(sc))}
 	for _, dbObj := range dbs {
 		pf.existing.Add(dbObj.Name)
-		if dbObj.IsSystem() || dbObj.IsSnapshot() || dbObj.State != "ONLINE" {
+		if dbObj.IsSystem() || dbObj.IsSnapshot() || dbObj.State != gosmo.DatabaseOnline {
 			continue
 		}
 		pf.sources = append(pf.sources, dbObj.Name)

@@ -464,7 +464,7 @@ func (a *App) setEndpointState(sc *db.ServerConn, node *explorerNode, state gosm
 				node.data.IsEnabled = state == gosmo.EndpointStarted
 				a.explorer.ReloadFolders(sc, sameNodeAs(node.parent))
 				a.detailBrowser.Invalidate(a, node)
-				a.setStatus(fmt.Sprintf("Endpoint %q is now %s", name, endpointStateLabel(string(state))))
+				a.setStatus(fmt.Sprintf("Endpoint %q is now %s", name, endpointStateLabel(state)))
 			}
 		})
 	}

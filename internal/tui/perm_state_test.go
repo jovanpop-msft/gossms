@@ -11,7 +11,7 @@ func TestNextPermStateCycles(t *testing.T) {
 	// Four states, and the cycle must close — a cycle that doesn't return to
 	// its start leaves a cell the user cannot put back.
 	got := permStateNone
-	want := []string{permStateGrant, permStateGrantWith, permStateDeny, permStateNone}
+	want := []gosmo.PermissionState{permStateGrant, permStateGrantWith, permStateDeny, permStateNone}
 	for i, w := range want {
 		got = nextPermState(got)
 		if got != w {
@@ -21,7 +21,7 @@ func TestNextPermStateCycles(t *testing.T) {
 }
 
 func TestDisplayPermState(t *testing.T) {
-	cases := map[string]string{
+	cases := map[gosmo.PermissionState]string{
 		permStateNone:      "(none)",
 		permStateGrant:     "Grant",
 		permStateGrantWith: "Grant With Grant",
@@ -39,7 +39,7 @@ func TestDisplayPermState(t *testing.T) {
 func TestPermTransitionModifiers(t *testing.T) {
 	cases := []struct {
 		name       string
-		orig, want string
+		orig, want gosmo.PermissionState
 		verb       gosmo.PermissionVerb
 		opts       gosmo.PermissionOptions
 	}{
@@ -86,7 +86,7 @@ func TestApplyPermChangeSkipsNoOps(t *testing.T) {
 		calls++
 		return nil
 	}
-	for _, s := range []string{permStateNone, permStateGrant, permStateGrantWith, permStateDeny} {
+	for _, s := range []gosmo.PermissionState{permStateNone, permStateGrant, permStateGrantWith, permStateDeny} {
 		if err := applyPermChange(context.Background(), apply, s, s, "SELECT", "app"); err != nil {
 			t.Fatalf("applyPermChange: %v", err)
 		}

@@ -72,7 +72,7 @@ type rebuildOptions struct {
 }
 
 func newRebuildOptions(idx *gosmo.Index) rebuildOptions {
-	layout, compression := dataCompressionRow(string(idx.DataCompression))
+	layout, compression := dataCompressionRow(string(idx.DataCompression()))
 	return rebuildOptions{
 		fillFactor:  propsheet.Int("Fill factor", int64(idx.FillFactor), 0, 100, "%"),
 		pad:         propsheet.Check("Pad index", idx.IsPadded),
@@ -151,7 +151,7 @@ func refusedOptionsForm(idx *gosmo.Index, section, refusal string, withIgnoreDup
 	}
 	return propsheet.NewForm(append(rows,
 		propsheet.Section("Compression"),
-		propsheet.Static("Data compression", orDefault(string(idx.DataCompression), "NONE")),
+		propsheet.Static("Data compression", orDefault(string(idx.DataCompression()), "NONE")),
 		propsheet.Note(why),
 	)...)
 }

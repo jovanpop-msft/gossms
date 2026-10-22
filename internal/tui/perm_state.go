@@ -12,16 +12,16 @@ import (
 // back needs no translation. The empty string is "no explicit entry", what a
 // REVOKE leaves behind.
 const (
-	permStateNone      = ""
-	permStateGrant     = "GRANT"
-	permStateGrantWith = "GRANT_WITH_GRANT_OPTION"
-	permStateDeny      = "DENY"
+	permStateNone      gosmo.PermissionState = ""
+	permStateGrant                           = gosmo.PermissionGrant
+	permStateGrantWith                       = gosmo.PermissionGrantWithGrantOption
+	permStateDeny                            = gosmo.PermissionDeny
 )
 
 // nextPermState advances a permission cell one step round the cycle (none) ->
 // Grant -> Grant With Grant -> Deny -> (none), the order SSMS's checkbox columns
 // read down the page.
-func nextPermState(s string) string {
+func nextPermState(s gosmo.PermissionState) gosmo.PermissionState {
 	switch s {
 	case permStateGrant:
 		return permStateGrantWith
@@ -35,7 +35,7 @@ func nextPermState(s string) string {
 }
 
 // displayPermState renders a state for the grid's State column.
-func displayPermState(s string) string {
+func displayPermState(s gosmo.PermissionState) string {
 	switch s {
 	case permStateGrant:
 		return "Grant"
@@ -68,7 +68,7 @@ type permApplyFn func(ctx context.Context, verb gosmo.PermissionVerb, opts gosmo
 // With Grant -> Grant step is not a plain re-grant: REVOKE GRANT OPTION FOR takes
 // away the right to re-grant and leaves the underlying GRANT standing, where a
 // bare GRANT would leave the grant option in place and change nothing.
-func permTransition(orig, current string) (gosmo.PermissionVerb, gosmo.PermissionOptions) {
+func permTransition(orig, current gosmo.PermissionState) (gosmo.PermissionVerb, gosmo.PermissionOptions) {
 	hadGrantOption := orig == permStateGrantWith
 	switch current {
 	case permStateGrant:
@@ -97,7 +97,7 @@ func permTransition(orig, current string) (gosmo.PermissionVerb, gosmo.Permissio
 // Grant, REVOKE GRANT OPTION FOR landed, a later cell failed, and the user then
 // putting X back to Grant With Grant (the state the page loaded with) must still
 // read as a change to send.
-func applyPermChange(ctx context.Context, apply permApplyFn, orig, current, permission, principal string) error {
+func applyPermChange(ctx context.Context, apply permApplyFn, orig, current gosmo.PermissionState, permission, principal string) error {
 	if orig == current {
 		return nil
 	}

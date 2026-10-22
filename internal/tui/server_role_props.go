@@ -145,7 +145,7 @@ func pageServerRoleMembers(sc *db.ServerConn, roleName *string) propPage {
 			}
 
 			existing := roleMemberSet(members)
-			principalType := make(map[string]string, len(logins)+len(roles))
+			principalType := make(map[string]gosmo.PrincipalType, len(logins)+len(roles))
 			var candidates []string
 			for _, l := range logins {
 				principalType[l.Name] = l.LoginType
@@ -154,7 +154,7 @@ func pageServerRoleMembers(sc *db.ServerConn, roleName *string) propPage {
 				}
 			}
 			for _, r := range roles {
-				principalType[r.Name] = "SERVER_ROLE"
+				principalType[r.Name] = gosmo.PrincipalServerRole
 				if r.Name != *roleName && !existing[r.Name] {
 					candidates = append(candidates, r.Name)
 				}

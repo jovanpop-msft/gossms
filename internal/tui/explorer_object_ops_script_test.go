@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/gdamore/tcell/v3"
+
+	gosmo "github.com/radix29/gosmo"
 )
 
 // The delete confirmation's Script button, driven the way a user drives it. What
@@ -163,7 +165,7 @@ func TestScriptingATypedDeleteNeedsNoTypedName(t *testing.T) {
 // deletes the files and says nothing more.
 func TestDeleteDatabaseSaysWhichFilesAnOfflineDropLeaves(t *testing.T) {
 	sc, inst := newFakeConn(t)
-	for state, want := range map[string]string{
+	for state, want := range map[gosmo.DatabaseState]string{
 		"OFFLINE":   "It is OFFLINE, so its data and log files stay on disk.",
 		"EMERGENCY": "It is in EMERGENCY mode, so its log file stays on disk.",
 		"ONLINE":    "",

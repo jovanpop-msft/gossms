@@ -135,7 +135,7 @@ func (d *NewFullTextIndexDialog) fetchPrefetch(ctx context.Context, sc *db.Serve
 	}
 	pf.fileGroups = []string{fullTextDefaultFileGroup}
 	for _, g := range fgs {
-		if g.Type == "ROWS_FILEGROUP" {
+		if g.Type == gosmo.RowsFileGroup {
 			pf.fileGroups = append(pf.fileGroups, g.Name)
 		}
 	}

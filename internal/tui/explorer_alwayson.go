@@ -178,7 +178,7 @@ func loadAvailabilityReplicasChildren(l loaderCtx, node *explorerNode) ([]*explo
 	for _, r := range replicas {
 		n := l.node(replicaLabel(r), NodeAvailabilityReplica, "", r.ReplicaServerName, "")
 		n.data.AGName = node.data.AGName
-		n.data.AGIsPrimary = strings.EqualFold(r.Role, "PRIMARY")
+		n.data.AGIsPrimary = r.Role == gosmo.ReplicaPrimary
 		out = append(out, n)
 	}
 	return view.appendNote(l, out), nil
@@ -216,9 +216,10 @@ func commitModeName(mode string) string {
 }
 
 // titleWord renders an all-caps SQL Server enum ("SECONDARY", "NOT
-// SYNCHRONIZING") as "Secondary" / "Not synchronizing".
-func titleWord(s string) string {
-	s = strings.ReplaceAll(strings.ToLower(s), "_", " ")
+// SYNCHRONIZING") as "Secondary" / "Not synchronizing". It takes gosmo's
+// typed state enums as they are.
+func titleWord[S ~string](v S) string {
+	s := strings.ReplaceAll(strings.ToLower(string(v)), "_", " ")
 	if s == "" {
 		return ""
 	}
@@ -334,11 +335,11 @@ func summarizeAGDatabases(dbs []*gosmo.AvailabilityDatabase) []agDatabaseSummary
 		if d.IsSuspended {
 			s.Suspended = true
 		}
-		if d.SynchronizationHealth != "" && !strings.EqualFold(d.SynchronizationHealth, "HEALTHY") {
+		if d.SynchronizationHealth != "" && d.SynchronizationHealth != gosmo.SyncHealthy {
 			s.Unhealthy = true
 		}
-		if d.SynchronizationState != "" && !slicesContains(s.States, d.SynchronizationState) {
-			s.States = append(s.States, d.SynchronizationState)
+		if st := string(d.SynchronizationState); st != "" && !slicesContains(s.States, st) {
+			s.States = append(s.States, st)
 		}
 	}
 	return out

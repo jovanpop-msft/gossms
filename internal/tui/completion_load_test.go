@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	gosmo "github.com/radix29/gosmo"
 	"github.com/radix29/gossms/internal/db"
 )
 
@@ -139,7 +140,7 @@ func TestCompletionDirectoryFollowsServerCollation(t *testing.T) {
 	d := a.ensureCompletionDirectory(sc)
 	drainUntil(t, a, func() bool { return !d.loading }, "the directory load")
 
-	for name, want := range map[string]string{"Sales": "ONLINE", "sales": "OFFLINE"} {
+	for name, want := range map[string]gosmo.DatabaseState{"Sales": gosmo.DatabaseOnline, "sales": gosmo.DatabaseOffline} {
 		if e, ok := d.byName.Get(name); !ok || e.name != name || e.state != want {
 			t.Errorf("directory[%q] = %+v, %v; want %s under its own name", name, e, ok, want)
 		}

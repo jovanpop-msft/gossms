@@ -36,7 +36,7 @@ type agAddDBPrefetch struct {
 type agDBCandidate struct {
 	Name          string
 	RecoveryModel string
-	State         string
+	State         gosmo.DatabaseState
 	IsSystem      bool
 	IsReadOnly    bool
 	IsSnapshot    bool
@@ -90,8 +90,8 @@ func agEligibleDatabases(dbs []agDBCandidate, inGroup *nameSet) (eligible, exclu
 			excluded = append(excluded, d.Name+" — already in an availability group")
 		case !strings.EqualFold(d.RecoveryModel, string(gosmo.RecoveryModelFull)):
 			excluded = append(excluded, fmt.Sprintf("%s — recovery model is %s, must be FULL", d.Name, d.RecoveryModel))
-		case d.State != "" && !strings.EqualFold(d.State, "ONLINE"):
-			excluded = append(excluded, fmt.Sprintf("%s — database is %s", d.Name, strings.ToLower(d.State)))
+		case d.State != "" && d.State != gosmo.DatabaseOnline:
+			excluded = append(excluded, fmt.Sprintf("%s — database is %s", d.Name, strings.ToLower(string(d.State))))
 		case d.IsReadOnly:
 			excluded = append(excluded, d.Name+" — database is read-only; set it READ_WRITE")
 		case strings.EqualFold(d.UserAccess, "SINGLE_USER"):

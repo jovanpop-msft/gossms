@@ -56,7 +56,7 @@ func pageDatabaseSnapshotGeneral(sc *db.ServerConn, name string) propPage {
 				propsheet.Static("Name", s.Name),
 				propsheet.Static("Source database", source),
 				propsheet.Static("Created", formatSQLDate(s.CreateDate)),
-				propsheet.Static("State", s.State),
+				propsheet.Static("State", string(s.State)),
 				propsheet.Static("Database ID", core.FormatThousands(int64(s.DatabaseID))),
 			)
 			f.Add(propsheet.Note("A database snapshot is read-only and cannot be altered. Reverting its source database to it, and dropping it, are on its context menu."))
@@ -77,7 +77,7 @@ func pageDatabaseSnapshotFiles(sc *db.ServerConn, name string) propPage {
 			rows := make([][]string, 0, len(files))
 			for _, fl := range files {
 				rows = append(rows, []string{
-					fl.Name, fl.Type, snapshotFileSizeOnDisk(fl), formatBytes(fl.SizeKB * 1024), fl.PhysicalName,
+					fl.Name, string(fl.Type), snapshotFileSizeOnDisk(fl), formatBytes(fl.SizeKB * 1024), fl.PhysicalName,
 				})
 			}
 			grid := controls.NewDataGrid()

@@ -128,12 +128,12 @@ func (g agGroupRollup) issues() string {
 		return "Partial — primary " + g.unreachable + " unreachable"
 	}
 	var out []string
-	if h := g.group.SynchronizationHealth; h != "" && !strings.EqualFold(h, "HEALTHY") {
+	if h := g.group.SynchronizationHealth; h != "" && h != gosmo.SyncHealthy {
 		out = append(out, titleWord(h))
 	}
 	disconnected := 0
 	for _, r := range g.replicas {
-		if r.ConnectedState != "" && !strings.EqualFold(r.ConnectedState, "CONNECTED") {
+		if r.ConnectedState != "" && r.ConnectedState != gosmo.ReplicaConnected {
 			disconnected++
 		}
 	}

@@ -166,7 +166,7 @@ func serverRoleRatings(roles []*gosmo.ServerRole, perms []*gosmo.ServerPermissio
 	}
 	grants := map[string][]gosmo.ServerPermission{}
 	for _, p := range perms {
-		if p.PrincipalType == "SERVER_ROLE" && p.State != "DENY" {
+		if p.PrincipalType == gosmo.PrincipalServerRole && p.State != gosmo.PermissionDeny {
 			grants[p.Principal] = append(grants[p.Principal], p.Permission)
 		}
 	}

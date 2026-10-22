@@ -213,13 +213,13 @@ func pageUserGeneral(sc *db.ServerConn, dbName string, userName *string) propPag
 // the SQL ones only by authentication_type_desc.
 func userTypeLabel(u *gosmo.User) string {
 	switch u.UserType {
-	case "CERTIFICATE_MAPPED_USER":
+	case gosmo.PrincipalCertificateMappedUser:
 		return "User mapped to a certificate"
-	case "ASYMMETRIC_KEY_MAPPED_USER":
+	case gosmo.PrincipalAsymmetricKeyMappedUser:
 		return "User mapped to an asymmetric key"
-	case "WINDOWS_USER":
+	case gosmo.PrincipalWindowsUser:
 		return "Windows user"
-	case "WINDOWS_GROUP":
+	case gosmo.PrincipalWindowsGroup:
 		return "Windows group"
 	}
 	switch u.AuthType {
