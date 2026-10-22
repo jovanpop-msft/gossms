@@ -13,7 +13,7 @@ import (
 // unapplied until the page's apply runs, so Cancel discards it.
 type memberEdit struct {
 	name          string
-	principalType string
+	principalType gosmo.PrincipalType
 	pendingState
 }
 
@@ -27,7 +27,7 @@ type membershipConfig struct {
 	// exclude current members and the role itself; principalType maps a candidate
 	// name to the type shown in the grid.
 	candidates    []string
-	principalType map[string]string
+	principalType map[string]gosmo.PrincipalType
 
 	// note is the page's explanatory footer.
 	note string
@@ -72,7 +72,7 @@ func buildMembershipForm(cfg membershipConfig) (*propsheet.Form, propApply) {
 		vis := visible()
 		rows := make([][]string, len(vis))
 		for i, e := range vis {
-			rows[i] = []string{e.name, e.principalType}
+			rows[i] = []string{e.name, string(e.principalType)}
 		}
 		return rows
 	}

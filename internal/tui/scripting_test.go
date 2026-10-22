@@ -206,7 +206,7 @@ func TestFabricDWExternalFunctionScriptMenuUsesStoredDefinition(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			sc, inst := newFakeConn(t, treeFamilyDatabaseRow(),
 				fakeResponse{match: "WHERE  o.type = 'XF'", cols: 6, rows: [][]driver.Value{
-					{int64(42), "analytics", "Predict", "XF", treeFamilyCreated, treeFamilyCreated},
+					{int64(42), "analytics", "Predict", treeFamilyCreated, treeFamilyCreated, "XF"},
 				}},
 				fakeResponse{match: "o.type IN ('FN','TF','IF','FS','FT','XF')", cols: 6, rows: [][]driver.Value{
 					{tc.definition, true, true, false, int64(42), "XF"},

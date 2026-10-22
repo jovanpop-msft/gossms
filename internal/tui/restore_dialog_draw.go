@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/gdamore/tcell/v3"
+	"github.com/radix29/gosmo"
 	"github.com/radix29/gossms/internal/tuikit/core"
 	"github.com/radix29/gossms/internal/tuikit/theme"
 )
@@ -169,7 +170,7 @@ func (d *RestoreDialog) drawInspect(s tcell.Screen) {
 			break
 		}
 		group := f.FileGroupName
-		if f.Type == "L" {
+		if f.Type == gosmo.BackupFileLog {
 			group = "LOG"
 		}
 		core.DrawTextClipped(s, lx, row, w, labelStyle,

@@ -104,7 +104,7 @@ func (d *AGDashboard) drawHeader(s tcell.Screen) {
 	primary, cluster, backups := "—", "—", "—"
 	if d.snap.ok() {
 		g := d.snap.group
-		state = orDefault(g.SynchronizationHealth, "(unknown)")
+		state = orDefault(string(g.SynchronizationHealth), "(unknown)")
 		primary = orDefault(g.PrimaryReplicaServerName, "(none visible)")
 		cluster = orDefault(string(g.ClusterType), "WSFC (implied)")
 		backups = orDefault(string(g.AutomatedBackupPreference), "—")

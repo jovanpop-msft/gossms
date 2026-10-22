@@ -16,7 +16,7 @@ func testMembershipConfig(added, removed *[]string) membershipConfig {
 			{Name: "bob", Type: "SQL_USER"},
 		},
 		candidates:    []string{"carol", "dave"},
-		principalType: map[string]string{"carol": "SQL_USER", "dave": "DATABASE_ROLE"},
+		principalType: map[string]gosmo.PrincipalType{"carol": "SQL_USER", "dave": "DATABASE_ROLE"},
 		note:          "note",
 		add: func(_ context.Context, name string) error {
 			*added = append(*added, name)

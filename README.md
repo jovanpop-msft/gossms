@@ -168,11 +168,24 @@ Databases omit Query Store, Service Broker, and Storage; database **Security**
 contains only Users, Roles, and Schemas. This layout is per connection; other
 connected servers keep their usual folders.
 
+Always On peer discovery uses each replica's registered connection: one you
+have connected to through **File > Connect** or the prompt below. A unique
+short-name alias still uses the original saved address; ambiguous aliases are
+refused. Where a dialog or action needs a replica with no saved connection
+(Add Replica, New Availability Group, New Endpoint, the availability group and
+listener Properties pages, Add Database, Add Listener, failover and the other
+group actions, a group's Dashboard, or **Enter** on Object Explorer's "(partial — Enter to connect
+to …)" note), goSSMS opens the Connect dialog for it, pre-filled from the connection
+you started from; nothing is sent to that instance until you press Connect. A
+failed peer connection never retries with another server's credentials.
+
 ## Supported SQL Server versions
 
 goSSMS supports **SQL Server 2016 SP1 (13.0.4001) and later** on Windows and
 Linux, and **Azure SQL Managed Instance**. Features that are unavailable on the
-connected SQL Server version or engine edition are hidden or disabled.
+connected SQL Server version or engine edition are hidden or disabled. An
+older instance still connects, with a warning that some folders and dialogs
+will fail.
 
 ## Required rights
 
@@ -194,7 +207,10 @@ Settings and the 30 most recent connections are saved automatically in:
 - Windows: `%APPDATA%\gossms\config.json`
 
 Tools > Options sets icon style, color theme (Dark, the default, or Light),
-grid and text column widths, indent size and IntelliSense. Unsaved query tabs are recovered to the `recovered` folder beside
+grid and text column widths, indent size, Max fetch rows (rows kept per result
+set in grid, text and file mode, 0 = unlimited; reaching it cancels the rest
+of the script, later GO batches included, and the results status line says so) and
+IntelliSense. Unsaved query tabs are recovered to the `recovered` folder beside
 `config.json` after a crash.
 
 Saved passwords are encrypted with AES-256-GCM using `gossms.key` in the same

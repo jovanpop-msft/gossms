@@ -33,6 +33,10 @@ var nstatSamplingItems = []string{"Server default", "Full scan", "Sample percent
 type nstatPrefetch struct {
 	columns       []*gosmo.Column
 	existingNames *nameSet
+	// unindexedView is set for a view without its unique clustered index:
+	// SQL Server creates statistics only on an indexed view (Msg 1940, or
+	// 1939 for one that is not even schema-bound).
+	unindexedView bool
 }
 
 // NewStatisticsDialog is the New Statistics creation dialog.
@@ -43,6 +47,8 @@ type NewStatisticsDialog struct {
 	schema string
 	table  string
 	node   *explorerNode
+	// onView is whether table names a view (nodeData.OnView).
+	onView bool
 
 	name     *propsheet.TextRow
 	sampling *propsheet.SelectRow
@@ -69,20 +75,21 @@ func NewNewStatisticsDialog(app *App) *NewStatisticsDialog {
 	return d
 }
 
-// show opens the dialog for one table's Statistics folder.
+// show opens the dialog for one table's or view's Statistics folder.
 func (d *NewStatisticsDialog) show(sc *db.ServerConn, node *explorerNode) {
 	d.node = node
+	d.onView = node.data.OnView
 	d.dbName, d.schema, d.table = node.data.DBName, node.data.Schema, node.data.Name
 	// Script Changes opens its query window in the database the statement runs in,
 	// not the connection's default.
 	d.scriptDatabase = d.dbName
 	d.columns = nil
 	d.newObjectDialog.show(sc)
-	d.SetHeader("Database: "+d.dbName, "Table: "+fqn(d.schema, d.table))
+	d.SetHeader("Database: "+d.dbName, ownerHeader(d.onView)+fqn(d.schema, d.table))
 }
 
 func (d *NewStatisticsDialog) fetchPrefetch(ctx context.Context, sc *db.ServerConn) (*nstatPrefetch, error) {
-	t, err := findTable(ctx, sc, d.dbName, d.schema, d.table)
+	t, err := findIndexed(ctx, sc, d.dbName, d.schema, d.table)
 	if err != nil {
 		return nil, err
 	}
@@ -98,7 +105,15 @@ func (d *NewStatisticsDialog) fetchPrefetch(ctx context.Context, sc *db.ServerCo
 	for _, st := range stats {
 		existing.Add(st.Name)
 	}
-	return &nstatPrefetch{columns: cols, existingNames: existing}, nil
+	pf := &nstatPrefetch{columns: cols, existingNames: existing}
+	if _, ok := t.(*gosmo.View); ok {
+		indexes, err := t.Indexes(ctx)
+		if err != nil {
+			return nil, err
+		}
+		pf.unindexedView = !slices.ContainsFunc(indexes, func(i *gosmo.Index) bool { return i.IsClustered })
+	}
+	return pf, nil
 }
 
 func (d *NewStatisticsDialog) buildPages(pf *nstatPrefetch) {
@@ -112,7 +127,7 @@ func (d *NewStatisticsDialog) buildPages(pf *nstatPrefetch) {
 	rows := []propsheet.Row{
 		propsheet.Section("Statistics"),
 		d.name,
-		propsheet.Static("Table", fqn(d.schema, d.table)),
+		propsheet.Static(ownerNoun(d.onView), fqn(d.schema, d.table)),
 	}
 	rows = append(rows, orderedColumnRows(&d.columns, nidxColumnNames(pf.columns),
 		"Columns", "This table has no columns.")...)
@@ -145,12 +160,15 @@ func (d *NewStatisticsDialog) buildPages(pf *nstatPrefetch) {
 		if len(d.columns) == 0 {
 			return fmt.Errorf("add at least one column")
 		}
+		if pf.unindexedView {
+			return fmt.Errorf("%s has no unique clustered index — statistics can be created only on an indexed view", fqn(d.schema, d.table))
+		}
 		return nil
 	}
 }
 
 func (d *NewStatisticsDialog) createStatistic(ctx context.Context, req gosmo.CreateStatisticRequest) error {
-	t, err := findTable(ctx, d.sc, d.dbName, d.schema, d.table)
+	t, err := findIndexed(ctx, d.sc, d.dbName, d.schema, d.table)
 	if err != nil {
 		return err
 	}

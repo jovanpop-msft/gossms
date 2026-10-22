@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/radix29/gosmo"
 )
 
 // loginResponses scripts an enabled SQL login with no CONNECT SQL permission
@@ -312,7 +314,10 @@ func TestServerRolesWritesNothingWhenUntouched(t *testing.T) {
 // General page. The Logins folder now lists certificate- and asymmetric-key-
 // mapped logins, which are neither.
 func TestLoginAuthLabelNamesEachLoginType(t *testing.T) {
-	for _, tc := range []struct{ typ, want string }{
+	for _, tc := range []struct {
+		typ  gosmo.PrincipalType
+		want string
+	}{
 		{"SQL_LOGIN", "SQL Server Authentication"},
 		{"WINDOWS_LOGIN", "Windows Authentication"},
 		{"WINDOWS_GROUP", "Windows Authentication"},

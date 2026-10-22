@@ -332,27 +332,62 @@ func (d *PropDialog) runPipeline(runCtx context.Context, noChanges func(), onSuc
 		fns, pages = []propApply{plannedApply(fns, d.planned)}, pages[:1]
 	}
 
-	d.StartApplying(pipelineLabel(runCtx))
-	d.SetMessage("", false)
+	d.app.runApplyPipeline(applyHost{
+		sheet:    d.PropertySheet,
+		sc:       d.sc,
+		run:      &d.run,
+		spinner:  "animating the properties spinner",
+		work:     "applying property changes",
+		panicked: d.applyPanicked,
+	}, runCtx, fns, func(runCtx context.Context, progress applyProgress, runErr error, notes string) {
+		if runErr != nil {
+			d.applyFailed(runCtx, runErr, progress, pages)
+			return
+		}
+		onSuccess(notes)
+	})
+}
+
+// applyHost is what runApplyPipeline needs of the dialog running it: the sheet
+// whose spinner and message it drives, the connection watchBlocking asks, the
+// dialog's Cancel switch, the log labels for the spinner and the goroutine, and
+// the panic handler that releases the applying latch.
+type applyHost struct {
+	sheet    *propsheet.PropertySheet
+	sc       *db.ServerConn
+	run      *applyRun
+	spinner  string
+	work     string
+	panicked func()
+}
+
+// runApplyPipeline is the tail PropDialog.runPipeline and
+// newObjectDialog.runPipeline share once they have validated and chosen fns:
+// start the spinner, run fns in order under runCtx on a background goroutine
+// (runApplySteps), and report back on the UI goroutine. onDone gets the run's
+// own context (for gosmo.Scripting and the created handoff), how far it got,
+// its error, and what its steps noted (noteApply) — a collector is attached for
+// both dialogs, so a note from a New dialog's step is not silently dropped. The
+// spinner is already cleared when onDone runs.
+func (a *App) runApplyPipeline(h applyHost, runCtx context.Context, fns []propApply,
+	onDone func(runCtx context.Context, progress applyProgress, err error, notes string)) {
+	label := pipelineLabel(runCtx)
+	h.sheet.StartApplying(label)
+	h.sheet.SetMessage("", false)
 	notes := &applyNotes{}
-	runCtx = context.WithValue(runCtx, applyNotesKey{}, notes)
-	runCtx = d.run.start(runCtx)
-	stop := d.run.stop
+	runCtx = h.run.start(context.WithValue(runCtx, applyNotesKey{}, notes))
+	stop := h.run.stop
 
 	done := make(chan struct{})
-	d.app.animateUntil("animating the properties spinner", propsheet.ApplyingSpinner.Period, done)
-	d.app.watchBlocking(d.sc, pipelineLabel(runCtx), done, d.SetApplyingLabel)
-	d.app.safegoRepair("applying property changes", d.applyPanicked, func() {
+	a.animateUntil(h.spinner, propsheet.ApplyingSpinner.Period, done)
+	a.watchBlocking(h.sc, label, done, h.sheet.SetApplyingLabel)
+	a.safegoRepair(h.work, h.panicked, func() {
 		defer close(done)
 		defer stop()
 		progress, runErr := runApplySteps(runCtx, fns)
-		d.post(func() {
-			d.SetApplying(false)
-			if runErr != nil {
-				d.applyFailed(runCtx, runErr, progress, pages)
-				return
-			}
-			onSuccess(notes.text())
+		a.postAndWake(func() {
+			h.sheet.SetApplying(false)
+			onDone(runCtx, progress, runErr, notes.text())
 		})
 	})
 }

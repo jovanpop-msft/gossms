@@ -146,23 +146,23 @@ func loadEndpointsChildren(l loaderCtx, node *explorerNode) ([]*explorerNode, er
 			// the same either way — the same reason a disabled server trigger
 			// says so in its label.
 			label := e.Name
-			if e.State != "" && e.State != "STARTED" {
+			if e.State != "" && e.State != gosmo.EndpointStarted {
 				label += " (" + endpointStateLabel(e.State) + ")"
 			}
 			n := l.node(label, NodeEndpoint, "", e.Name, "")
 			n.data.IsSystem = e.IsSystem
-			n.data.IsEnabled = e.State == "STARTED"
+			n.data.IsEnabled = e.State == gosmo.EndpointStarted
 			return n
 		})
 }
 
 // endpointStateLabel renders a state_desc the way the tree and the Details
 // pane name it — STARTED/STOPPED/DISABLED as Started/Stopped/Disabled.
-func endpointStateLabel(state string) string {
+func endpointStateLabel(state gosmo.EndpointState) string {
 	if state == "" {
 		return ""
 	}
-	return strings.ToUpper(state[:1]) + strings.ToLower(state[1:])
+	return strings.ToUpper(string(state[:1])) + strings.ToLower(string(state[1:]))
 }
 
 // The context menus for this family's nodes, looked up through nodeMenus

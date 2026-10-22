@@ -39,6 +39,10 @@ type ResultSet struct {
 	// order (row*len(Columns)+col). A NULL's text is "NULL", so the text alone
 	// cannot tell it from the string 'NULL'. Grown only to the last NULL.
 	nulls []uint64
+
+	// Truncated reports that the set had more rows than WithMaxRows allowed: Rows
+	// holds the first max, and the rest were read off the wire and discarded.
+	Truncated bool
 }
 
 // MarkNull records that cell (row, col) holds a SQL NULL.
@@ -93,6 +97,10 @@ type Result struct {
 	// RowsWritten totals rows handed to a RowSink. Zero for Execute.
 	RowsWritten int
 
+	// SinkSetsTruncated counts the sets streamed to a RowSink that WithMaxRows cut
+	// short; the grid path marks ResultSet.Truncated instead.
+	SinkSetsTruncated int
+
 	// sinkSets counts result sets streamed to a RowSink, empty ones included;
 	// neither len(Sets) nor RowsWritten says whether a set happened on that path.
 	// See shouldReportSuccess.
@@ -105,6 +113,14 @@ type Result struct {
 	// lineOffset is the 0-based editor line the script starts on (see
 	// WithLineOffset), run-scoped like progress.
 	lineOffset int
+
+	// maxRows caps the rows kept per result set (see WithMaxRows); 0 is no cap.
+	maxRows int
+
+	// cut is set by scanNext when it stopped a set at maxRows, for runBatch to
+	// cancel the batch instead of draining it; it then stays set, so runScript
+	// runs no further batch.
+	cut bool
 
 	// PlanXML holds one <ShowPlanXML> document per captured statement/batch, in
 	// execution order. Execute never fills it.
@@ -120,6 +136,9 @@ type Result struct {
 	// and transactions; later runs fail at once. Always false outside a Session.
 	SessionLost bool
 }
+
+// MaxRows is the WithMaxRows cap the run used, 0 for none.
+func (r *Result) MaxRows() int { return r.maxRows }
 
 // TotalRows sums the row counts of all result sets.
 func (r *Result) TotalRows() int {
@@ -245,11 +264,22 @@ func WithLineOffset(n int) Option {
 	return func(res *Result) { res.lineOffset = n }
 }
 
+// WithMaxRows keeps at most n rows of each result set, retained in Result.Sets
+// (marking a set that had more ResultSet.Truncated) or streamed to a RowSink
+// (counted in Result.SinkSetsTruncated). n <= 0 means no cap.
+//
+// Reaching the cap cancels the rest of the script: the current batch with a TDS
+// attention (a result set cannot be skipped without reading it, so its
+// remaining statements cannot run), and every later GO batch by not sending it.
+func WithMaxRows(n int) Option {
+	return func(res *Result) { res.maxRows = max(n, 0) }
+}
+
 // Execute runs script against db, SSMS-style. A non-empty database is switched
 // to first (USE). The script is split on GO; a failing batch is reported in
 // Messages and execution continues. Cancelling ctx stops between and inside
 // batches, returning the partial Result. Every row is retained in Result.Sets,
-// uncapped; see cellArena.
+// uncapped unless WithMaxRows says otherwise; see cellArena.
 func Execute(ctx context.Context, db *sql.DB, database, script string, opts ...Option) *Result {
 	start := time.Now()
 	res := newResult(opts)
@@ -332,7 +362,7 @@ func runScript(ctx context.Context, conn *sql.Conn, script string, capture planC
 
 	for _, b := range sqltext.SplitBatches(script) {
 		for range b.Count {
-			if ctx.Err() != nil {
+			if ctx.Err() != nil || res.cut {
 				return true, nil
 			}
 			runBatch(ctx, conn, b.Text, res.lineOffset+b.StartLine, res, sink)
@@ -379,6 +409,10 @@ func runBatch(ctx context.Context, conn *sql.Conn, sqlText string, firstLine int
 			}
 		case sqlexp.MsgNext:
 			if scanNext(rows, res, sink) {
+				if res.cut {
+					cancelBatch(rows, res)
+					return
+				}
 				// scanNext abandoned the set with rows pending, and the message loop
 				// can't advance past it. Drain only here: an extra Next() on an
 				// exhausted set makes the driver swallow the message retmsg awaits.
@@ -403,6 +437,20 @@ func runBatch(ctx context.Context, conn *sql.Conn, sqlText string, firstLine int
 	if err := rows.Err(); err != nil && ctx.Err() == nil {
 		res.addBatchError(err, firstLine)
 	}
+}
+
+// cancelBatch ends a batch whose current set reached the WithMaxRows cap, and
+// with it the script (runScript stops on res.cut). Closing
+// rows cancels the driver's request context, which sends the server an attention
+// and reads up to its confirmation, so the connection (and with it the session)
+// stays usable. The batch's trailing rows.Err() is skipped: the cancellation is
+// not a failure. A Close error means the confirmation never came and the
+// connection is likely gone.
+func cancelBatch(rows *sql.Rows, res *Result) {
+	if err := rows.Close(); err != nil {
+		res.addError(err)
+	}
+	res.addNotice("The rest of the script was cancelled at Max fetch rows; its remaining statements and batches did not run.")
 }
 
 // rowScanner holds one result set's per-column scan targets and formatting
@@ -524,8 +572,11 @@ func (sc *rowScanner) scan(rows *sql.Rows, row []string, a *cellArena) error {
 	return nil
 }
 
-// scanResultSet reads the whole current result set into string cells, packed
-// into a cellArena since there's no row cap.
+// scanResultSet reads the current result set into string cells, packed into a
+// cellArena. A positive maxRows stops at that many rows; a further row marks the
+// set Truncated and leaves it pending, for runBatch to cancel. The test
+// is the loop's own Next(), never an extra call on an exhausted set (see
+// runBatch).
 //
 // No trailing rows.Err(), deliberately, and likewise in streamResultSet:
 // runBatch ends the message loop with one, so a truncated set is still reported
@@ -534,7 +585,7 @@ func (sc *rowScanner) scan(rows *sql.Rows, row []string, a *cellArena) error {
 // discards its partial result instead: half a showplan is not a plan. Both are
 // reached only through scanNext, itself reached only from runBatch; a caller
 // outside runBatch must bring its own check.
-func scanResultSet(rows *sql.Rows, prog *Progress) (ResultSet, error) {
+func scanResultSet(rows *sql.Rows, prog *Progress, maxRows int) (ResultSet, error) {
 	sc, err := newRowScanner(rows)
 	if err != nil {
 		return ResultSet{}, err
@@ -542,6 +593,10 @@ func scanResultSet(rows *sql.Rows, prog *Progress) (ResultSet, error) {
 	rs := ResultSet{Columns: sc.cols, ColumnTypes: sc.types}
 	a := &cellArena{}
 	for rows.Next() {
+		if maxRows > 0 && len(rs.Rows) == maxRows {
+			rs.Truncated = true
+			return rs, nil
+		}
 		row := a.row(len(sc.cols))
 		if err := sc.scan(rows, row, a); err != nil {
 			return rs, err
@@ -564,10 +619,13 @@ func scanResultSet(rows *sql.Rows, prog *Progress) (ResultSet, error) {
 // err, since the deferred EndSet can fail on a fully read set, and draining that
 // costs a message (see scanNext).
 //
+// A positive maxRows stops after that many rows, as scanResultSet: a further row
+// leaves the set pending, reported as exhausted false with a nil err.
+//
 // Like scanResultSet, it ends without rows.Err(): runBatch's trailing one
 // reports a set the server truncated, and rows already handed to the sink stay
 // written.
-func streamResultSet(rows *sql.Rows, sink RowSink, prog *Progress) (n int, exhausted bool, err error) {
+func streamResultSet(rows *sql.Rows, sink RowSink, prog *Progress, maxRows int) (n int, exhausted bool, err error) {
 	sc, err := newRowScanner(rows)
 	if err != nil {
 		return 0, false, err
@@ -587,6 +645,9 @@ func streamResultSet(rows *sql.Rows, sink RowSink, prog *Progress) (n int, exhau
 	// One row buffer for the set: sink.Row must consume it before returning.
 	row := make([]string, len(sc.cols))
 	for rows.Next() {
+		if maxRows > 0 && n == maxRows {
+			return n, false, nil
+		}
 		if err = sc.scan(rows, row, nil); err != nil {
 			return n, false, err
 		}
@@ -612,7 +673,8 @@ func isShowplanResultSet(cols []string) bool {
 // It returns whether the set was abandoned with rows pending, the only case the
 // caller may drain. Not "did it fail": streamResultSet's deferred EndSet and
 // scanPlanXML's trailing rows.Err() can fail on a fully read set, and draining
-// that swallows the message retmsg awaits.
+// that swallows the message retmsg awaits. A set stopped at the WithMaxRows cap
+// is abandoned too, with res.cut set: the caller cancels the batch instead.
 func scanNext(rows *sql.Rows, res *Result, sink RowSink) (abandoned bool) {
 	cols, err := rows.Columns()
 	if err != nil {
@@ -629,7 +691,7 @@ func scanNext(rows *sql.Rows, res *Result, sink RowSink) (abandoned bool) {
 		return false
 	}
 	if sink != nil {
-		n, exhausted, err := streamResultSet(rows, sink, res.progress)
+		n, exhausted, err := streamResultSet(rows, sink, res.progress, res.maxRows)
 		res.RowsWritten += n
 		res.sinkSets++
 		if err != nil {
@@ -637,9 +699,14 @@ func scanNext(rows *sql.Rows, res *Result, sink RowSink) (abandoned bool) {
 			return !exhausted
 		}
 		res.addNotice(fmt.Sprintf("(%d row(s) written)", n))
-		return false
+		if !exhausted {
+			res.SinkSetsTruncated++
+			res.addNotice(truncatedNotice(res.sinkSets, res.maxRows))
+			res.cut = true
+		}
+		return !exhausted
 	}
-	rs, err := scanResultSet(rows, res.progress)
+	rs, err := scanResultSet(rows, res.progress, res.maxRows)
 	if rs.Columns != nil {
 		// Kept on a scan error too (a conversion failure on row 900): the
 		// grid *and* the error, like a Next() that fails part-way.
@@ -649,7 +716,16 @@ func scanNext(rows *sql.Rows, res *Result, sink RowSink) (abandoned bool) {
 		res.addError(err)
 		return true
 	}
-	return false
+	if rs.Truncated {
+		res.addNotice(truncatedNotice(len(res.Sets), res.maxRows))
+		res.cut = true
+	}
+	return rs.Truncated
+}
+
+// truncatedNotice is the Messages line for the 1-based nth set cut at limit rows.
+func truncatedNotice(nth, limit int) string {
+	return fmt.Sprintf("Result set %d: only the first %d rows were fetched (Max fetch rows).", nth, limit)
 }
 
 // scanPlanXML reads the current showplan set into one XML document per row.

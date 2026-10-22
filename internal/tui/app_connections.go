@@ -7,6 +7,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/radix29/gosmo"
+
 	"github.com/radix29/gossms/internal/config"
 	"github.com/radix29/gossms/internal/db"
 	"github.com/radix29/gossms/internal/query"
@@ -45,20 +47,7 @@ func (a *App) connectServer(ctx context.Context, opts config.Connection, phase f
 				return
 			}
 			if err != nil {
-				server, cause := opts.Server, err.Error()
-				if dbErr, ok := errors.AsType[*db.ConnectionError](err); ok {
-					server, cause = dbErr.Server, dbErr.Cause
-				}
-				a.setStatus(fmt.Sprintf("Connection error [%s]: %s", server, firstErrorLine(cause)))
-				if strings.Contains(cause, "\n") {
-					// The status bar has one line; the log and status history
-					// keep the rest.
-					a.logStatus("connect to %s: %s", server, cause)
-				}
-				if wanted {
-					a.alertDialog.ShowAlert("Connection Error",
-						fmt.Sprintf("Could not connect to %s: %s", server, tidyErrorText(cause)))
-				}
+				a.reportConnectError(opts, err, wanted)
 				return
 			}
 			if !wanted {
@@ -76,9 +65,79 @@ func (a *App) connectServer(ctx context.Context, opts config.Connection, phase f
 			a.explorer.ExpandNode(a.explorer.AddRoot(sc.Label(), sc))
 			info := sc.Server.Info()
 			a.setStatus(fmt.Sprintf("Connected to %s  |  %s %s", opts.Server, info.Edition, info.ProductVersion))
+			a.warnIfUnsupported(info)
 			a.ensureSysCompletionInventory(sc)
 			a.ensureCompletionDirectory(sc)
 			a.rememberConnection(opts)
+		})
+	})
+}
+
+// warnIfUnsupported tells the user, once per connect, that the instance is
+// older than gosmo's floor (2016 SP1). The connection is kept: most reads
+// still work, but those naming a newer column fail one by one with "Invalid
+// column name", which without this reads as a goSSMS bug.
+func (a *App) warnIfUnsupported(info *gosmo.ServerInfo) {
+	if info.Supported() {
+		return
+	}
+	a.alertDialog.ShowAlert("Unsupported Version",
+		fmt.Sprintf("SQL Server %s is older than 2016 SP1, the oldest version goSSMS supports; some folders and dialogs will fail.", info.ProductVersion))
+}
+
+// reportConnectError puts a failed dial on the status bar and, when the attempt
+// is still wanted, in an alert.
+func (a *App) reportConnectError(opts config.Connection, err error, wanted bool) {
+	server, cause := opts.Server, err.Error()
+	if dbErr, ok := errors.AsType[*db.ConnectionError](err); ok {
+		server, cause = dbErr.Server, dbErr.Cause
+	}
+	a.setStatus(fmt.Sprintf("Connection error [%s]: %s", server, firstErrorLine(cause)))
+	if strings.Contains(cause, "\n") {
+		// The status bar has one line; the log and status history keep the
+		// rest.
+		a.logStatus("connect to %s: %s", server, cause)
+	}
+	if wanted {
+		a.alertDialog.ShowAlert("Connection Error",
+			fmt.Sprintf("Could not connect to %s: %s", server, tidyErrorText(cause)))
+	}
+}
+
+// registerPeer is connectServer for the Connect dialog's peer mode
+// (ShowForPeer): it proves opts connects, then saves and registers it for peer
+// reads instead of adding a tree, and runs then (may be nil).
+//
+// The proving connection is closed, and the Peer call then repeats makes its
+// own: Peer caches what it dials per parent connection, and this one has no
+// parent to cache it on. One extra login per instance, once.
+func (a *App) registerPeer(ctx context.Context, opts config.Connection, phase func(label string), done func(err error) bool, then func()) {
+	// No draw here, unlike connectServer: only the dialog starts this, and its
+	// spinner (animateUntil) is already redrawing.
+	a.setStatus(fmt.Sprintf("Connecting to %s...", opts.Server))
+
+	a.safego("connecting to a peer instance", func() {
+		err := a.signInPhase(ctx, opts, phase)
+		if err == nil {
+			var sc *db.ServerConn
+			if sc, err = db.ConnectContext(ctx, opts, db.RoleExplorer); err == nil {
+				sc.Close()
+			}
+		}
+		a.postAndWake(func() {
+			wanted := done(err)
+			switch {
+			case !wanted:
+				a.setStatus(fmt.Sprintf("Cancelled connecting to %s", opts.Server))
+			case err != nil:
+				a.reportConnectError(opts, err, true)
+			default:
+				a.rememberConnection(opts)
+				a.setStatus(fmt.Sprintf("Connected to %s — saved for reads from other instances", opts.Server))
+				if then != nil {
+					then()
+				}
+			}
 		})
 	})
 }

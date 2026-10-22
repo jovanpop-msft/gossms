@@ -53,7 +53,7 @@ func backupDatabases(ctx context.Context, sc *db.ServerConn) ([]*gosmo.Database,
 	}
 	out := make([]*gosmo.Database, 0, len(dbs))
 	for _, d := range dbs {
-		if d.ID == tempdbID || d.State != "ONLINE" || d.IsSnapshot() {
+		if d.ID == tempdbID || d.State != gosmo.DatabaseOnline || d.IsSnapshot() {
 			continue
 		}
 		out = append(out, d)
@@ -73,7 +73,7 @@ func onlineDatabaseNames(ctx context.Context, sc *db.ServerConn) ([]string, erro
 	}
 	out := make([]string, 0, len(dbs))
 	for _, d := range dbs {
-		if d.State == "ONLINE" {
+		if d.State == gosmo.DatabaseOnline {
 			out = append(out, d.Name)
 		}
 	}

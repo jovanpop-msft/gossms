@@ -323,7 +323,7 @@ func TestLiveEndpointExchangeNamesNamedInstances(t *testing.T) {
 	if ep == nil {
 		t.Fatalf("%s still has no endpoint after the run", names[1])
 	}
-	if !strings.EqualFold(ep.State, "STARTED") {
+	if ep.State != gosmo.EndpointStarted {
 		t.Errorf("%s's endpoint is %s, not STARTED", names[1], ep.State)
 	}
 	if ep.Port != *liveEPPort {

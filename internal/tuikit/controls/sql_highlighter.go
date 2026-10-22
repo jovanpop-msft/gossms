@@ -142,9 +142,6 @@ var sqlKeywords = map[string]bool{
 // literal, identifier or comment left open at the end of a line carries onto the
 // next, as it does for the server.
 //
-// The returned Highlighter is stateful and belongs to exactly one Editor (see the
-// cache below). Build a fresh one per Editor, as every call site does.
-//
 // Editor.Draw calls it once per visible row, and Draw runs on every event the app
 // processes (keystroke, mouse-move tick, timer tick). Deciding what state a line
 // starts in means replaying every prior line (sqltext.LineEnd): O(N) per line,
@@ -152,19 +149,19 @@ var sqlKeywords = map[string]bool{
 // bottom that is ~4.6ms per pass at 1,000 lines and ~48ms at 10,000, so typing in
 // a large script would be bounded by the highlighter.
 //
-// The starts cache below replays the document once and keeps the answer for every
-// line, so each call is an array index. It is rebuilt only when the document
+// The Document's sqlStarts cache replays the document once and keeps the answer
+// for every line, so each call is an array index. It is rebuilt only when the document
 // changes, which the version counter reports exactly (see Document): a pass that
 // only scrolled, or redrew for an unrelated event, costs nothing, and an edit
-// costs one replay rather than one per pass.
+// costs one replay rather than one per pass. The cache lives on the Document, not
+// in this closure, so Editor.SQLLineState reads the same states instead of
+// lexing the script a second time, and the returned Highlighter holds no state.
 //
 // Not a one-line memo of the previous call's end-of-line state: a pass starts at
 // scrollRow where the previous pass ended at scrollRow+H-1, so the sequence breaks
 // at every pass boundary and row 1 is never helped. Same treatment, for the same
 // reason, as XMLHighlighter (xml_highlighter.go).
 func SQLHighlighter(p *theme.Palette) Highlighter {
-	var starts prefixStates[sqltext.State]
-
 	return func(doc *Document, idx int) []ColorRun {
 		// Built per call, not once: p is the live palette, so a theme switch
 		// recolours an open editor.
@@ -174,7 +171,7 @@ func SQLHighlighter(p *theme.Palette) Highlighter {
 		numStyle := tcell.StyleDefault.Background(p.EditorBg).Foreground(p.EditorNumber)
 		line := doc.Line(idx)
 		runs := make([]ColorRun, 0, 8)
-		st := starts.at(doc, idx, sqltext.State{}, sqltext.LineEnd)
+		st := doc.sqlLineState(idx)
 		for i := 0; ; {
 			var t sqltext.Token
 			t, st = sqltext.Next(line, i, len(line), st)

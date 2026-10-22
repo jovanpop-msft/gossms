@@ -110,7 +110,7 @@ func TestLiveFilestreamFilesPage(t *testing.T) {
 	}
 	var fsFile *gosmo.DatabaseFileInfo
 	for _, f := range files {
-		if f.Type == filestreamFileType {
+		if f.Type == gosmo.FileStream {
 			fsFile = f
 		}
 	}
@@ -177,8 +177,8 @@ func TestLiveFilestreamFilesPage(t *testing.T) {
 	// It has to *be* a FILESTREAM file, not merely have been accepted: the same
 	// ADD FILE aimed at a ROWS filegroup produces an ordinary data file, so
 	// "no error" says nothing on its own.
-	if added.Type != filestreamFileType {
-		t.Errorf("the added file reports type %q, want %q", added.Type, filestreamFileType)
+	if added.Type != gosmo.FileStream {
+		t.Errorf("the added file reports type %q, want %q", added.Type, gosmo.FileStream)
 	}
 	if added.FileGroup != "fsdata" {
 		t.Errorf("the added file landed in filegroup %q, want fsdata", added.FileGroup)

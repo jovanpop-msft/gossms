@@ -371,7 +371,7 @@ func (d *NewAGDialog) replicaRows() ([]propsheet.Row, func()) {
 		propsheet.Section("Add a replica"),
 		addNameRow,
 		propsheet.Buttons(addBtn, removeBtn),
-		propsheet.Note("A replica is reached with its own saved connection if you have one, otherwise with this connection's credentials. It must already have a started database mirroring endpoint that this instance can connect to."),
+		propsheet.Note("A replica is reached with its own saved connection; one without is offered a Connect prompt pre-filled from this connection. It must already have a started database mirroring endpoint that this instance can connect to."),
 		propsheet.Note("AUTOMATIC seeding copies the databases over the endpoint; the secondary is granted CREATE ANY DATABASE for it. MANUAL means restoring each database there WITH NORECOVERY and joining it afterwards."),
 	}, commit
 }
@@ -510,7 +510,7 @@ func replicaEndpoint(ctx context.Context, sc *db.ServerConn) (*gosmo.DatabaseMir
 	if ep == nil {
 		return nil, fmt.Errorf("%s has no database mirroring endpoint — create one there first; a replica without one can never connect", sc.Server.Name())
 	}
-	if !strings.EqualFold(ep.State, "STARTED") {
+	if ep.State != gosmo.EndpointStarted {
 		return nil, fmt.Errorf("%s's database mirroring endpoint %q is %s, not STARTED", sc.Server.Name(), ep.Name, ep.State)
 	}
 	return ep, nil

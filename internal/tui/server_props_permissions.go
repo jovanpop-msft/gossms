@@ -37,7 +37,7 @@ func pageServerPermissions(sc *db.ServerConn) propPage {
 				principals = append(principals, permPrincipal{Name: l.Name, Type: l.LoginType})
 			}
 			for _, r := range roles {
-				principals = append(principals, permPrincipal{Name: r.Name, Type: "SERVER_ROLE"})
+				principals = append(principals, permPrincipal{Name: r.Name, Type: gosmo.PrincipalServerRole})
 			}
 
 			f, apply := buildPermissionsMatrix(principals, gosmo.ServerPermissionNames(), entries, 8, 12,

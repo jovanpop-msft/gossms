@@ -1,10 +1,15 @@
 package tui
 
 import (
+	"errors"
+	"fmt"
 	"strings"
 	"sync"
 
+	gosmo "github.com/radix29/gosmo"
 	"github.com/radix29/gossms/internal/config"
+	"github.com/radix29/gossms/internal/db"
+	"github.com/radix29/gossms/internal/tuikit/propsheet"
 )
 
 // app_peer_creds.go holds App's answer to db.PeerCredentials: which saved
@@ -12,22 +17,20 @@ import (
 //
 // Always On is why it matters. Everything the Object Explorer, the AG dialogs and
 // the endpoint wizard read off a second instance goes through
-// db.ServerConn.Peer, which without this uses the login the tree was registered
-// with. A topology whose replicas want different credentials or ports would
-// surface as a connect error naming the instance, and on the follow-the-primary
-// path as a silent "(partial - primary X unreachable)".
+// db.ServerConn.Peer, which refuses an instance without a registered connection.
 //
 // The answer is the connections the user has already made: connect to a replica
-// once through File > Connect and every later peer read reaches it the same way.
+// once (File > Connect, or the prompt offerPeerConnect opens where a refusal
+// lands) and every later peer read reaches it the same way.
 
 // peerCredStore is how to reach each instance the user has connected to.
-// byInstance is keyed by config.InstanceKey; byShortHost by short host name,
-// consulted only when byInstance misses (see shortHostKey). mu guards both, as
-// App.filterMu guards savedFilters: background loaders read them through Peer.
+// byInstance is keyed by config.InstanceKey; byShortHost maps a short name to
+// its unique instance key, or "" when ambiguous. Consulted only when byInstance
+// misses. mu guards both: background loaders read them through Peer.
 type peerCredStore struct {
 	mu          sync.Mutex
 	byInstance  map[string]config.Connection
-	byShortHost map[string]config.Connection
+	byShortHost map[string]string
 }
 
 // peerCredentialsFor resolves an instance name to its own saved connection; the
@@ -42,7 +45,11 @@ func (a *App) peerCredentialsFor(server string) (config.Connection, bool) {
 	if c, ok := a.peerCreds.byInstance[key]; ok {
 		return c, true
 	}
-	c, ok := a.peerCreds.byShortHost[key]
+	instance := a.peerCreds.byShortHost[key]
+	if instance == "" {
+		return config.Connection{}, false
+	}
+	c, ok := a.peerCreds.byInstance[instance]
 	return c, ok
 }
 
@@ -51,7 +58,7 @@ func (a *App) peerCredentialsFor(server string) (config.Connection, bool) {
 // every successful connect, so the most recent way the user reached an instance
 // is the one a peer read uses.
 func (a *App) rememberPeerCredentials(conn config.Connection) {
-	if conn.Server == "" {
+	if strings.TrimSpace(conn.Server) == "" {
 		return
 	}
 	// ConnectionAddress, not conn.Server: the Connect dialog saves a port in the
@@ -66,9 +73,13 @@ func (a *App) rememberPeerCredentials(conn config.Connection) {
 	a.peerCreds.byInstance[key] = conn
 	if alias := shortHostKey(key); alias != "" {
 		if a.peerCreds.byShortHost == nil {
-			a.peerCreds.byShortHost = map[string]config.Connection{}
+			a.peerCreds.byShortHost = map[string]string{}
 		}
-		a.peerCreds.byShortHost[alias] = conn
+		if previous, exists := a.peerCreds.byShortHost[alias]; exists && previous != key {
+			a.peerCreds.byShortHost[alias] = ""
+		} else {
+			a.peerCreds.byShortHost[alias] = key
+		}
 	}
 }
 
@@ -80,10 +91,9 @@ func (a *App) rememberPeerCredentials(conn config.Connection) {
 // FQDN into Connect. Keyed only by exact host, a saved "ubusql2.fritz.box" would
 // never answer a peer read for the "ubusql2" sys.availability_replicas reports.
 //
-// A separate, lower-priority tier rather than a collapsed key: two instances
-// really can be "sql.a.example" and "sql.b.example", and folding them onto one key
-// would hand one the other's login. Consulted only when the exact host misses, the
-// worst case is the connect error a miss gives anyway.
+// A separate, lower-priority tier: aliases shared by distinct instance keys are
+// refused, and a unique alias still dials the original registered destination,
+// never the metadata-provided short name.
 //
 // The "\instance" or ",port" InstanceKey appended is kept: the alias drops the
 // domain, not what tells two instances on one host apart.
@@ -103,24 +113,36 @@ func shortHostKey(key string) string {
 // (oldest first, so the most recently used entry for an instance is the one left).
 // Same precedence config.MatchByServer offers the Connect dialog.
 //
-// An entry whose password could not be decrypted is not seeded. Nothing on disk
-// has been proven to work for it, and preferring one certain to fail over the
-// parent connection's own credentials makes a reachable instance unreachable. A
-// replaced config key blanks every saved password at once (config.Load), so this
-// is a whole-file state, not a rare entry.
+// An entry whose password could not be decrypted is not seeded. A replaced
+// config key blanks every saved password at once (config.Load), so this is a
+// whole-file state, not a rare entry. Nor is one whose method takes a password
+// and that saved none (Remember Password unticked, the default): it is certain
+// to fail at login, and unseeded it is refused instead, which offers the
+// Connect prompt (offerPeerConnect). A connection made this session is
+// registered with its password in memory by rememberConnection.
 //
-// Nothing else is judged here: an entry that passes and still fails is Peer's
-// fallback to deal with.
+// An entry that still fails reports its own error; Peer never retries with
+// another server's credentials.
 func (a *App) loadPeerCredentials() {
 	if a.cfg == nil {
 		return
 	}
 	for _, c := range a.cfg.Connections {
-		if c.PasswordUnreadable() {
+		if c.PasswordUnreadable() || missingPassword(c) {
 			continue
 		}
 		a.rememberPeerCredentials(c)
 	}
+}
+
+// missingPassword reports whether c's method signs in with a password it does
+// not carry. Windows Authentication with no user is integrated sign-in, which
+// needs none.
+func missingPassword(c config.Connection) bool {
+	if c.Password != "" || !config.FieldsFor(c.AuthMethod).Password {
+		return false
+	}
+	return c.AuthMethod != config.AuthWindows || c.User != ""
 }
 
 // forgetPeerFailure tells every open connection that server is reachable
@@ -130,4 +152,89 @@ func (a *App) forgetPeerFailure(server string) {
 	for _, sc := range a.connections {
 		sc.ForgetPeerFailure(server)
 	}
+}
+
+// offerPeerConnect opens the Connect dialog for the instance err names when err
+// is Peer refusing one with no registered connection, and reports whether it
+// did. then (nil for nothing) runs once that connection succeeds and is
+// registered — the operation the refusal stopped.
+//
+// The SSMS shape: another instance is reached only through a connection the
+// user approved, prompted for where it is needed. The dialog is pre-filled
+// from parent, the connection the read started from, so a topology sharing one
+// login (or Windows authentication) costs one Enter per replica; the name it
+// shows is the one that will be dialled.
+//
+// Declined while the Connect dialog is already open: it is one instance, and a
+// second refusal (two probes in flight) must not replace the first prompt.
+func (a *App) offerPeerConnect(parent *db.ServerConn, err error, then func()) bool {
+	refused, ok := errors.AsType[*db.PeerNotRegisteredError](err)
+	if !ok || parent == nil || a.connectDialog.Visible() {
+		return false
+	}
+	a.connectDialog.ShowForPeer(peerConnectTemplate(parent.Opts, refused.Server), then)
+	a.setStatus(fmt.Sprintf("%s has no saved connection — connect to it to continue", refused.Server))
+	return true
+}
+
+// peerConnectTemplate is the Connect prompt's pre-fill for server, reached from
+// a connection made with parent: parent's sign-in and transport settings,
+// pointed at server with no database.
+//
+// Only a pre-fill — nothing reaches server until the user presses Connect.
+// Port is kept only for parent's own instance spelled without it (the catalog
+// reports names portless); on any other instance it is another listener's
+// port, and "HOSTA\SQL2017,50110" opening "HOSTB\PROD" would dial HOSTB:50110
+// and bypass SQL Browser. Host Name In Certificate names parent's certificate,
+// so it is cleared rather than validating server's against it.
+func peerConnectTemplate(parent config.Connection, server string) config.Connection {
+	opts := parent
+	if _, _, port := gosmo.ParseServerAddress(opts.Server); port != 0 {
+		opts.Port = port
+	}
+	if !sameInstanceApartFromPort(parent.Server, server) {
+		opts.Port = 0
+	}
+	opts.Server = server
+	opts.Database = ""
+	opts.HostNameInCertificate = ""
+	opts.Name = ""
+	return opts
+}
+
+// sameInstanceApartFromPort reports whether a and b name one host and one
+// instance name (case-insensitive), ignoring any port either carries.
+func sameInstanceApartFromPort(a, b string) bool {
+	hostA, instA, _ := gosmo.ParseServerAddress(strings.TrimSpace(a))
+	hostB, instB, _ := gosmo.ParseServerAddress(strings.TrimSpace(b))
+	return strings.EqualFold(hostA, hostB) && strings.EqualFold(instA, instB)
+}
+
+// pageSheet is what offerPeerConnectForSheet needs of a property sheet.
+type pageSheet interface {
+	PageState(i int) propsheet.PageState
+	InvalidatePages(pages []int)
+}
+
+// offerPeerConnectForSheet is offerPeerConnect for a property sheet whose page
+// load was refused: connecting reloads every page of it showing an error,
+// provided live still reports the same showing. pageCount is the sheet's page
+// count.
+//
+// Every errored page, not only the one that asked: a page visited while the
+// prompt was up was refused too, and offerPeerConnect declined to prompt for
+// it. Another error reloading as well is a harmless F5.
+func (a *App) offerPeerConnectForSheet(parent *db.ServerConn, err error, sheet pageSheet, pageCount int, live func() bool) {
+	a.offerPeerConnect(parent, err, func() {
+		if !live() {
+			return
+		}
+		var errored []int
+		for i := range pageCount {
+			if sheet.PageState(i) == propsheet.PageError {
+				errored = append(errored, i)
+			}
+		}
+		sheet.InvalidatePages(errored)
+	})
 }

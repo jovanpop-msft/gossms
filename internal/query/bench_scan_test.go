@@ -25,7 +25,7 @@ func BenchmarkScanResultSetArena(b *testing.B) {
 	for b.Loop() {
 		db := openFakeRowsDB(streamTestCols, rows)
 		r, _ := db.Query("SELECT 1")
-		rs, err := scanResultSet(r, nil)
+		rs, err := scanResultSet(r, nil, 0)
 		if err != nil || len(rs.Rows) != 50000 {
 			b.Fatal(err)
 		}

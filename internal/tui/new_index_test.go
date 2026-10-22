@@ -41,7 +41,7 @@ func nidxDialog(t *testing.T, typ gosmo.IndexType, pf *nidxPrefetch) *NewIndexDi
 		t.Fatalf("no cascade entry creates a %s index", typ)
 	}
 	d := &NewIndexDialog{kind: newIndexKinds[i], dbName: "AppDB", schema: "dbo", table: "Orders"}
-	d.pages = nidxPagesFor(typ)
+	d.pages = nidxPagesFor(typ, pf.onView)
 	d.forms = make([]*propsheet.Form, len(d.pages))
 	d.applyFns = make([]propApply, len(d.pages))
 	d.buildPages(pf)
@@ -440,5 +440,75 @@ func assertPreflight(t *testing.T, err error, want string) {
 	}
 	if !strings.Contains(err.Error(), want) {
 		t.Errorf("preflight = %v, want it to mention %q", err, want)
+	}
+}
+
+// A view's Indexes folder offers only the rowstore kinds — columnstore, XML
+// and spatial indexes are table-only — and a table's offers all six.
+func TestNewIndexCascadeOnAViewIsRowstoreOnly(t *testing.T) {
+	a := newTestApp()
+	sc := addTestConn(a, "server-one")
+	labels := func(onView bool) []string {
+		node := &explorerNode{data: nodeData{Type: NodeIndexes, DBName: "AppDB", Schema: "dbo", Name: "v", OnView: onView, conn: sc}}
+		var out []string
+		for _, it := range a.newIndexMenuItems(sc, node) {
+			out = append(out, it.Label)
+		}
+		return out
+	}
+	if got, want := labels(true), []string{"Clustered Index...", "Non-Clustered Index..."}; !slices.Equal(got, want) {
+		t.Errorf("view cascade = %q, want %q", got, want)
+	}
+	if got := labels(false); len(got) != len(newIndexKinds) {
+		t.Errorf("table cascade = %q, want all %d kinds", got, len(newIndexKinds))
+	}
+	if slices.Contains(nidxPagesFor(gosmo.IndexTypeNonClustered, true), "Filter") {
+		t.Error("a view's nonclustered index offers a Filter page; SQL Server refuses a filtered index on a view")
+	}
+}
+
+// The indexed-view rules refuse before the statement goes: no SCHEMABINDING,
+// a clustered index left non-unique, a nonclustered index before the
+// clustered one. A view's clustered index starts with Unique ticked.
+func TestNewIndexOnAViewChecksTheIndexedViewRules(t *testing.T) {
+	viewPf := func(schemaBound, hasClustered bool) *nidxPrefetch {
+		pf := nidxTestPrefetch()
+		pf.onView, pf.schemaBound, pf.hasClustered = true, schemaBound, hasClustered
+		return pf
+	}
+	pick := func(t *testing.T, d *NewIndexDialog) {
+		t.Helper()
+		chooseSelect(t, d.forms[0], "Column to add", "OrderID")
+		clickButton(t, d.forms[0], "Add")
+	}
+	cases := []struct {
+		name    string
+		typ     gosmo.IndexType
+		pf      *nidxPrefetch
+		unique  *bool
+		wantErr string
+	}{
+		{"not schema-bound", gosmo.IndexTypeClustered, viewPf(false, false), nil, "not schema-bound"},
+		{"clustered, unique by default", gosmo.IndexTypeClustered, viewPf(true, false), nil, ""},
+		{"clustered, unticked", gosmo.IndexTypeClustered, viewPf(true, false), new(false), "must be unique"},
+		{"nonclustered first", gosmo.IndexTypeNonClustered, viewPf(true, false), nil, "no unique clustered index yet"},
+		{"nonclustered after the clustered", gosmo.IndexTypeNonClustered, viewPf(true, true), nil, ""},
+		{"a table's non-unique clustered", gosmo.IndexTypeClustered, nidxTestPrefetch(), nil, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			d := nidxDialog(t, tc.typ, tc.pf)
+			pick(t, d)
+			if tc.unique != nil {
+				editCheck(t, d.forms[0], "Unique", *tc.unique)
+			}
+			err := d.checkRequest(tc.pf)
+			switch {
+			case tc.wantErr == "" && err != nil:
+				t.Errorf("checkRequest = %v, want none", err)
+			case tc.wantErr != "" && (err == nil || !strings.Contains(err.Error(), tc.wantErr)):
+				t.Errorf("checkRequest = %v, want one saying %q", err, tc.wantErr)
+			}
+		})
 	}
 }

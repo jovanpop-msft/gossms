@@ -11,6 +11,9 @@
 		},
 		{
 			"path": "../apt"
+		},
+		{
+			"path": "../gossms.wiki"
 		}
 	],
 	"settings": {}

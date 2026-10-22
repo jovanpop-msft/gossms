@@ -83,7 +83,7 @@ func loadDatabasesChildren(l loaderCtx, node *explorerNode) ([]*explorerNode, er
 			continue
 		}
 		n := l.node(agLabelForDatabase(d.Name, agStates), NodeDatabase, "", d.Name, d.Name)
-		n.data.IsOffline = d.State != "ONLINE"
+		n.data.IsOffline = d.State != gosmo.DatabaseOnline
 		n.data.DBState = d.State
 		n.data.DBReadOnly = d.IsReadOnly
 		n.data.CreateDate = d.CreateDate
@@ -116,7 +116,7 @@ func loadDatabaseSnapshotsChildren(l loaderCtx, node *explorerNode) ([]*explorer
 		func(s *gosmo.DatabaseSnapshot) *explorerNode {
 			n := l.node(s.Name, NodeDatabaseSnapshot, "", s.Name, s.Name)
 			n.data.CreateDate = s.CreateDate
-			n.data.IsOffline = s.State != "ONLINE"
+			n.data.IsOffline = s.State != gosmo.DatabaseOnline
 			n.data.SourceDatabase = s.SourceDatabase
 			return n
 		})
@@ -141,7 +141,7 @@ func loadSystemDatabasesChildren(l loaderCtx, node *explorerNode) ([]*explorerNo
 	for _, d := range dbs {
 		if inSystemDatabases(d) {
 			n := l.node(d.Name, NodeDatabase, "", d.Name, d.Name)
-			n.data.IsOffline = d.State != "ONLINE"
+			n.data.IsOffline = d.State != gosmo.DatabaseOnline
 			n.data.DBState = d.State
 			n.data.DBReadOnly = d.IsReadOnly
 			n.data.CreateDate = d.CreateDate
@@ -596,13 +596,13 @@ func databaseMenuItems(a *App, sc *db.ServerConn, node *explorerNode, newQuery, 
 func databaseStateToggle(a *App, sc *db.ServerConn, node *explorerNode) (controls.MenuItem, bool) {
 	dbName := node.data.DBName
 	switch node.data.DBState {
-	case "ONLINE":
+	case gosmo.DatabaseOnline:
 		return gate.Item(controls.MenuItem{Label: "Take Database Offline", Action: func() { a.toggleDatabaseOffline(sc, node) }},
 			sc, dbName, gate.AlterDatabase, gate.AlterAnyDatabase), true
-	case "OFFLINE", "EMERGENCY", "RECOVERY_PENDING", "SUSPECT":
+	case gosmo.DatabaseOffline, gosmo.DatabaseEmergency, gosmo.DatabaseRecoveryPending, gosmo.DatabaseSuspect:
 		return gate.Item(controls.MenuItem{Label: "Bring Database Online", Action: func() { a.toggleDatabaseOffline(sc, node) }},
 			sc, dbName, gate.AlterDatabase, gate.AlterAnyDatabase), true
-	case "RESTORING":
+	case gosmo.DatabaseRestoring:
 		// The rights a restore over an existing database takes, as the
 		// Restore Database item above.
 		return gate.Item(controls.MenuItem{Label: "Restore With Recovery", Action: func() { a.recoverDatabase(sc, node) }},

@@ -75,7 +75,7 @@ type TempDBSample struct {
 func (s TempDBSample) DataFiles() []TempDBFile {
 	out := make([]TempDBFile, 0, len(s.Files))
 	for _, f := range s.Files {
-		if f.Type == "ROWS" {
+		if f.Type == gosmo.FileRows {
 			out = append(out, f)
 		}
 	}

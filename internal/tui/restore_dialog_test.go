@@ -98,7 +98,7 @@ func TestSelectedHeaderOnNoHeaders(t *testing.T) {
 }
 
 // bfile builds a backup file-list entry.
-func bfile(logical, physical, typ string) *gosmo.BackupFile {
+func bfile(logical, physical string, typ gosmo.BackupFileType) *gosmo.BackupFile {
 	return &gosmo.BackupFile{LogicalName: logical, PhysicalName: physical, Type: typ}
 }
 

@@ -16,7 +16,7 @@ import (
 
 // newTestConn builds a ServerConn over a fake pool with no server behind it,
 // so Close cancels Server.Context() as a real connection's does.
-func newTestConn(server string) *ServerConn {
+func newTestConn(server string, registeredPeers ...string) *ServerConn {
 	pool, err := sql.Open("captestdb", "")
 	if err != nil {
 		panic(err)
@@ -25,7 +25,126 @@ func newTestConn(server string) *ServerConn {
 	if err != nil {
 		panic(err)
 	}
-	return &ServerConn{Opts: config.Connection{Server: server}, Server: srv}
+	sc := &ServerConn{Opts: config.Connection{Server: server}, Server: srv}
+	if len(registeredPeers) > 0 {
+		sc.SetPeerCredentials(func(server string) (config.Connection, bool) {
+			for _, peer := range registeredPeers {
+				if config.InstanceKey(server) == config.InstanceKey(peer) {
+					return config.Connection{Server: peer}, true
+				}
+			}
+			return config.Connection{}, false
+		})
+	}
+	return sc
+}
+
+func TestPeerDialsOnlyTheSavedDestinationAndCredentials(t *testing.T) {
+	parent := newTestConn("primary.example.com")
+	defer parent.Close()
+	parent.Opts.User, parent.Opts.Password = "parent_login", "parent-password"
+	saved := config.Connection{
+		Server: "sql.production.example", Port: 1500,
+		User: "replica_login", Password: "replica-password",
+		Database: "SalesDB", Encrypt: config.EncryptMandatory,
+		HostNameInCertificate: "sql.production.example",
+	}
+	parent.SetPeerCredentials(func(string) (config.Connection, bool) { return saved, true })
+	orig := connectPeer
+	t.Cleanup(func() { connectPeer = orig })
+	var dialled []config.Connection
+	wantErr := errors.New("saved peer login rejected")
+	connectPeer = func(_ context.Context, opts config.Connection, _ Role) (*ServerConn, error) {
+		dialled = append(dialled, opts)
+		return nil, wantErr
+	}
+
+	peer, err := parent.Peer(context.Background(), "sql")
+	if peer != nil || !errors.Is(err, wantErr) {
+		t.Fatalf("Peer = %v, %v; want the saved connection's failure", peer, err)
+	}
+	want := saved
+	want.Database = ""
+	if len(dialled) != 1 {
+		t.Fatalf("dialled %d times; want exactly one attempt with the saved credentials", len(dialled))
+	}
+	if dialled[0] != want {
+		t.Error("peer did not preserve the saved destination, credentials, and transport settings")
+	}
+}
+
+func TestPeerRefusesUnregisteredDestinationsWithoutDialling(t *testing.T) {
+	for _, resolver := range []string{"none", "miss", "empty destination"} {
+		t.Run(resolver, func(t *testing.T) {
+			parent := newTestConn("primary")
+			defer parent.Close()
+			parent.Opts.User, parent.Opts.Password = "parent_login", "parent-password"
+			switch resolver {
+			case "miss":
+				parent.SetPeerCredentials(func(string) (config.Connection, bool) { return config.Connection{}, false })
+			case "empty destination":
+				parent.SetPeerCredentials(func(string) (config.Connection, bool) { return config.Connection{}, true })
+			}
+			orig := connectPeer
+			t.Cleanup(func() { connectPeer = orig })
+			dials := 0
+			connectPeer = func(context.Context, config.Connection, Role) (*ServerConn, error) {
+				dials++
+				return nil, errors.New("unexpected dial")
+			}
+			peer, err := parent.Peer(context.Background(), "unregistered")
+			if peer != nil || err == nil || !strings.Contains(err.Error(), "File > Connect") {
+				t.Errorf("Peer = %v, %v; want an explicit registration instruction", peer, err)
+			}
+			if refused, ok := errors.AsType[*PeerNotRegisteredError](err); !ok || refused.Server != "unregistered" {
+				t.Errorf("Peer error = %#v, want a *PeerNotRegisteredError naming the instance — the UI offers its Connect prompt on that type", err)
+			}
+			if dials != 0 {
+				t.Errorf("dialled an unregistered destination %d times", dials)
+			}
+		})
+	}
+}
+
+func TestPeerRegistrationIsCheckedBeforeCacheAndCanBeRepaired(t *testing.T) {
+	parent := newTestConn("primary")
+	defer parent.Close()
+	registered := false
+	saved := config.Connection{Server: "sql.production.example", Port: 1500}
+	parent.SetPeerCredentials(func(string) (config.Connection, bool) { return saved, registered })
+	orig := connectPeer
+	t.Cleanup(func() { connectPeer = orig })
+	dials := 0
+	fail := true
+	wantErr := errors.New("registered peer unavailable")
+	connectPeer = func(_ context.Context, opts config.Connection, _ Role) (*ServerConn, error) {
+		dials++
+		if fail {
+			return nil, wantErr
+		}
+		return newTestConn(opts.Server), nil
+	}
+
+	if _, err := parent.Peer(context.Background(), "sql"); err == nil || dials != 0 {
+		t.Fatal("an unregistered alias was dialled")
+	}
+	registered = true
+	if _, err := parent.Peer(context.Background(), "sql"); !errors.Is(err, wantErr) || dials != 1 {
+		t.Fatal("registration was blocked by a cached refusal")
+	}
+	parent.ForgetPeerFailure(config.ConnectionAddress(saved))
+	fail = false
+	peer, err := parent.Peer(context.Background(), "sql")
+	if err != nil || peer == nil || dials != 2 {
+		t.Fatalf("retry after a direct connection = %v, %v; dials = %d", peer, err, dials)
+	}
+	if again, err := parent.Peer(context.Background(), saved.Server); err != nil || again != peer || dials != 2 {
+		t.Fatal("aliases of the same registered destination did not share the cached peer")
+	}
+	registered = false
+	if cached, err := parent.Peer(context.Background(), "sql"); err == nil || cached != nil || dials != 2 {
+		t.Fatal("a cached peer bypassed a missing or ambiguous registration")
+	}
 }
 
 // recordPeerFailure is recordPeerFailureLocked taking peerMu itself, for tests
@@ -43,7 +162,7 @@ func (sc *ServerConn) recordPeerFailure(key string, err error) error {
 // Meaningful only under -race.
 func TestPeerLookupRacesDisconnect(t *testing.T) {
 	for range 50 {
-		sc := newTestConn("primary")
+		sc := newTestConn("primary", "secondary")
 		peer := newTestConn("secondary")
 		sc.peers = map[string]*ServerConn{"secondary": peer}
 
@@ -66,12 +185,17 @@ func TestPeerLookupRacesDisconnect(t *testing.T) {
 // may not open the user's database, so Peer must not carry it. Peer's connect
 // needs a real instance, so this tests the options it builds.
 func TestPeerOptionsDropTheDatabase(t *testing.T) {
-	sc := &ServerConn{Opts: config.Connection{
-		Server: "primary", Port: 1433, User: "sa", Password: "pw",
+	sc := &ServerConn{}
+	saved := config.Connection{
+		Server: "secondary", Port: 1500, User: "sa", Password: "pw",
 		Database: "SalesDB", TrustServerCertificate: true,
-	}}
+	}
+	sc.SetPeerCredentials(func(string) (config.Connection, bool) { return saved, true })
 
-	opts := sc.peerOptions("secondary")
+	opts, err := sc.peerOptions("secondary")
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	if opts.Database != "" {
 		t.Errorf("peer options carry Database %q — a secondary that cannot open "+
@@ -80,51 +204,12 @@ func TestPeerOptionsDropTheDatabase(t *testing.T) {
 	if opts.Server != "secondary" {
 		t.Errorf("peer options name server %q, want %q", opts.Server, "secondary")
 	}
-	// Everything else must survive, or the peer authenticates differently from
-	// its parent.
+	// Everything else must survive from the registered peer.
 	if opts.User != "sa" || opts.Password != "pw" || !opts.TrustServerCertificate {
 		t.Errorf("peer options lost credentials or transport settings: %+v", opts)
 	}
-	// Another host is another instance: the parent's port is not its port.
-	if opts.Port != 0 {
-		t.Errorf("peer options carry the parent's port %d to another host", opts.Port)
-	}
-}
-
-// P6: the parent's port belongs to the parent's instance. Carried to another
-// one, "HOSTA\SQL2017,50110" opening "HOSTB\PROD" dialled HOSTB:50110 and
-// bypassed SQL Browser. Kept only for the parent's own instance spelled
-// without its port, which is what the catalog reports.
-func TestParentPeerOptionsKeepThePortOnlyForTheSameInstance(t *testing.T) {
-	cases := []struct {
-		name, parent string
-		parentPort   int
-		peer         string
-		wantPort     int
-	}{
-		{"named instance on another host", `hosta\SQL2017,50110`, 0, `HOSTB\PROD`, 0},
-		{"Port field, named instance on another host", `hosta\SQL2017`, 50110, `HOSTB\PROD`, 0},
-		{"another named instance on the same host", `hosta\SQL2017,50110`, 0, `HOSTA\SQL2016`, 0},
-		{"default instance on the same host as a named parent", `hosta\SQL2017,50110`, 0, `HOSTA`, 0},
-		// Pinned: a default instance on another host dials 1433 (or its own
-		// saved connection), not the parent's port, even when that is 1433.
-		{"default instance on another host", "ubusql1,1433", 0, "ubusql2", 0},
-		{"default instance on another host, custom port", "ubusql1,14330", 0, "ubusql2", 0},
-		{"same default instance without its port", "ubusql1,14330", 0, "UBUSQL1", 14330},
-		{"same named instance without its port", `win10cli\SQL2017,55253`, 0, `WIN10CLI\sql2017`, 55253},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			sc := &ServerConn{Opts: config.Connection{Server: tc.parent, Port: tc.parentPort, User: "sa", Password: "pw"}}
-			opts := sc.parentPeerOptions(tc.peer)
-			if opts.Server != tc.peer || opts.Port != tc.wantPort {
-				t.Errorf("parent %q port %d → peer %q: got %q port %d, want port %d",
-					tc.parent, tc.parentPort, tc.peer, opts.Server, opts.Port, tc.wantPort)
-			}
-			if opts.User != "sa" || opts.Password != "pw" {
-				t.Errorf("peer options lost the parent's credentials: %+v", opts)
-			}
-		})
+	if opts.Port != 1500 {
+		t.Errorf("peer options use port %d, want the registered peer's 1500", opts.Port)
 	}
 }
 
@@ -147,7 +232,10 @@ func TestPeerOptionsUseTheInstancesOwnCredentials(t *testing.T) {
 		return config.Connection{}, false
 	})
 
-	opts := parent.peerOptions("UBUSQL2\\PROD")
+	opts, err := parent.peerOptions("UBUSQL2\\PROD")
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	if opts.User != "replica_login" || opts.Password != "replica-pw" {
 		t.Errorf("peer options authenticate as %q/%q, want the instance's own saved login",
@@ -159,9 +247,8 @@ func TestPeerOptionsUseTheInstancesOwnCredentials(t *testing.T) {
 	if opts.Encrypt != config.EncryptStrict {
 		t.Error("peer options dropped the saved connection's Encrypt setting")
 	}
-	// Server is the catalog's name, not the saved spelling.
-	if opts.Server != "UBUSQL2\\PROD" {
-		t.Errorf("peer options name server %q, want the catalog's %q", opts.Server, "UBUSQL2\\PROD")
+	if opts.Server != "ubusql2.fritz.box\\prod" {
+		t.Errorf("peer options name server %q, want the registered address", opts.Server)
 	}
 	// The database is blanked here too; the saved one is just as unopenable on
 	// a secondary.
@@ -170,10 +257,7 @@ func TestPeerOptionsUseTheInstancesOwnCredentials(t *testing.T) {
 	}
 }
 
-// T14: a saved connection that writes its port into Server ("host\inst,port",
-// an older save or a hand edit) keeps it when retargeted at the catalog's
-// portless name. Dropped, the dial needed SQL Browser, which win10cli\SQL2017
-// doesn't run.
+// A port embedded in the registered destination survives an alias lookup.
 func TestPeerOptionsKeepAPortWrittenInTheSavedServer(t *testing.T) {
 	parent := &ServerConn{Opts: config.Connection{Server: "ubusql1", User: "sa", Password: "p"}}
 	parent.SetPeerCredentials(func(server string) (config.Connection, bool) {
@@ -183,21 +267,23 @@ func TestPeerOptionsKeepAPortWrittenInTheSavedServer(t *testing.T) {
 		return config.Connection{}, false
 	})
 
-	opts := parent.peerOptions(`WIN10CLI\SQL2017`)
-	if opts.Server != `WIN10CLI\SQL2017` || opts.Port != 55253 {
-		t.Fatalf("peer options = %q port %d, want the catalog's name on the saved port 55253", opts.Server, opts.Port)
+	opts, err := parent.peerOptions(`WIN10CLI\SQL2017`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if opts.Server != `win10cli\SQL2017,55253` {
+		t.Fatalf("peer server = %q, want the registered address including its port", opts.Server)
 	}
 	dsn, err := BuildConnectionString(opts)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(dsn, "@WIN10CLI:55253/SQL2017?") {
-		t.Errorf("peer dials %s, want WIN10CLI:55253/SQL2017 (no SQL Browser lookup)", dsn)
+	if !strings.Contains(dsn, "@win10cli:55253/SQL2017?") {
+		t.Errorf("peer dials %s, want win10cli:55253/SQL2017 (no SQL Browser lookup)", dsn)
 	}
 }
 
-// An instance with no saved connection uses the parent's settings.
-func TestPeerOptionsFallBackToTheParent(t *testing.T) {
+func TestPeerOptionsRefuseAResolverMiss(t *testing.T) {
 	parent := &ServerConn{Opts: config.Connection{
 		Server: "ubusql1", Port: 1433, User: "sa", Password: "parent-pw",
 		Database: "SalesDB", TrustServerCertificate: true,
@@ -206,22 +292,16 @@ func TestPeerOptionsFallBackToTheParent(t *testing.T) {
 		return config.Connection{}, false
 	})
 
-	opts := parent.peerOptions("ubusql3")
-
-	if opts.User != "sa" || opts.Password != "parent-pw" || !opts.TrustServerCertificate {
-		t.Errorf("a resolver miss did not fall back to the parent's settings: %+v", opts)
-	}
-	if opts.Server != "ubusql3" || opts.Database != "" {
-		t.Errorf("peer options = server %q database %q, want %q and no database", opts.Server, opts.Database, "ubusql3")
+	opts, err := parent.peerOptions("ubusql3")
+	if err == nil || opts != (config.Connection{}) {
+		t.Fatal("a resolver miss exposed the parent's connection options")
 	}
 }
 
-// With no resolver installed, peers use sc's own settings rather than
-// panicking.
-func TestPeerCredentialsSurviveANilResolver(t *testing.T) {
+func TestPeerCredentialsRefuseANilResolver(t *testing.T) {
 	parent := &ServerConn{Opts: config.Connection{Server: "ubusql1", User: "sa", Password: "pw"}}
-	if opts := parent.peerOptions("ubusql2"); opts.User != "sa" || opts.Password != "pw" {
-		t.Errorf("peer options without a resolver = %+v, want the parent's credentials", opts)
+	if opts, err := parent.peerOptions("ubusql2"); err == nil || opts != (config.Connection{}) {
+		t.Fatal("a missing resolver exposed the parent's connection options")
 	}
 }
 
@@ -242,61 +322,20 @@ func TestPeerCredentialsAreInheritedByAPeer(t *testing.T) {
 	peer := &ServerConn{Opts: config.Connection{Server: "ubusql2", User: "sa", Password: "parent-pw"}}
 	peer.SetPeerCredentials(parent.peerCredentials())
 
-	if got := peer.peerOptions("ubusql3"); got.User != "third_login" {
+	got, err := peer.peerOptions("ubusql3")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.User != "third_login" {
 		t.Errorf("a peer resolved ubusql3 as %q, want the resolver's %q — the table did not reach the second hop",
 			got.User, "third_login")
-	}
-}
-
-// The fallback is the pre-resolver derivation, unchanged: a resolver must never
-// leave an instance less reachable than the parent's working credentials.
-func TestParentPeerOptionsIgnoreTheResolver(t *testing.T) {
-	parent := &ServerConn{Opts: config.Connection{
-		Server: "ubusql1", Port: 1433, User: "sa", Password: "parent-pw",
-		Database: "SalesDB", TrustServerCertificate: true,
-	}}
-	parent.SetPeerCredentials(func(string) (config.Connection, bool) {
-		return config.Connection{Server: "ubusql2", User: "replica_login", Password: ""}, true
-	})
-
-	opts := parent.peerOptions("ubusql2")
-	if opts.User != "replica_login" {
-		t.Fatalf("peerOptions returned %q, want the resolver's answer as the preferred set", opts.User)
-	}
-
-	fallback := parent.parentPeerOptions("ubusql2")
-	if fallback.User != "sa" || fallback.Password != "parent-pw" || !fallback.TrustServerCertificate {
-		t.Errorf("fallback = %+v, want the parent's own credentials and transport settings", fallback)
-	}
-	if fallback.Server != "ubusql2" || fallback.Database != "" {
-		t.Errorf("fallback = server %q database %q, want %q and no database", fallback.Server, fallback.Database, "ubusql2")
-	}
-	// Peer compares the two to decide on a second attempt, so they must differ
-	// here — and config.Connection must stay comparable.
-	if fallback == opts {
-		t.Error("the fallback is identical to the resolver's answer; the retry would be skipped")
-	}
-}
-
-// A resolver answer equal to the parent derivation costs no second attempt.
-// The parent carries no port: one would be its own instance's, which the
-// derivation clears for another host.
-func TestParentPeerOptionsEqualTheResolverWhenItAgrees(t *testing.T) {
-	opts := config.Connection{Server: "ubusql1", User: "sa", Password: "pw"}
-	parent := &ServerConn{Opts: opts}
-	parent.SetPeerCredentials(func(string) (config.Connection, bool) {
-		return opts, true
-	})
-
-	if parent.peerOptions("ubusql2") != parent.parentPeerOptions("ubusql2") {
-		t.Error("an agreeing resolver produced a different option set, so Peer would retry for nothing")
 	}
 }
 
 // A blackholed instance costs the whole connect timeout, so a cached failure
 // must be returned without dialling.
 func TestPeerReturnsACachedFailureWithoutDialling(t *testing.T) {
-	sc := newTestConn("ubusql1")
+	sc := newTestConn("ubusql1", "ubusql2")
 	defer sc.Close()
 
 	want := errors.New("dial tcp 192.168.178.98:1433: i/o timeout")
@@ -317,7 +356,7 @@ func TestPeerReturnsACachedFailureWithoutDialling(t *testing.T) {
 // a real dial, whose failure is the dial's own.
 func TestPeerRetriesOnceACachedFailureHasExpired(t *testing.T) {
 	// Loopback port 1 refuses immediately.
-	sc := newTestConn("ubusql1")
+	sc := newTestConn("ubusql1", "127.0.0.1:1")
 	defer sc.Close()
 
 	key := config.InstanceKey("127.0.0.1:1")
@@ -349,7 +388,7 @@ func TestPeerRetriesOnceACachedFailureHasExpired(t *testing.T) {
 // the TTL.
 func TestForgetPeerFailureDropsTheEntry(t *testing.T) {
 	// Loopback port 1 refuses immediately.
-	sc := newTestConn("ubusql1")
+	sc := newTestConn("ubusql1", "127.0.0.1:1")
 	defer sc.Close()
 
 	cached := errors.New("dial tcp 192.168.178.98:1433: i/o timeout")
@@ -371,7 +410,7 @@ func TestForgetPeerFailureDropsTheEntry(t *testing.T) {
 // Forgetting one instance must not clear others; a connect to one replica says
 // nothing about another.
 func TestForgetPeerFailureLeavesOtherInstances(t *testing.T) {
-	sc := newTestConn("ubusql1")
+	sc := newTestConn("ubusql1", "ubusql2")
 	defer sc.Close()
 
 	want := errors.New("dial tcp 192.168.178.98:1433: i/o timeout")
@@ -463,7 +502,7 @@ func waitForPeerWaiters(t *testing.T, sc *ServerConn, key string, n int) {
 // and share the connection.
 func TestConcurrentPeerCallersShareOneDial(t *testing.T) {
 	dials, release := holdPeerDials(t)
-	sc := newTestConn("ubusql1")
+	sc := newTestConn("ubusql1", "ubusql2")
 	defer sc.Close()
 
 	const callers = 3
@@ -496,7 +535,7 @@ func TestConcurrentPeerCallersShareOneDial(t *testing.T) {
 // returns at once rather than waiting out someone else's connect.
 func TestPeerWaiterReturnsWhenItsOwnContextEnds(t *testing.T) {
 	_, release := holdPeerDials(t)
-	sc := newTestConn("ubusql1")
+	sc := newTestConn("ubusql1", "ubusql2")
 	defer sc.Close()
 
 	var dialler sync.WaitGroup
@@ -533,7 +572,7 @@ func TestPeerWaiterReturnsWhenItsOwnContextEnds(t *testing.T) {
 // again, and succeeds.
 func TestAbandonedPeerDialIsRetriedByAWaiter(t *testing.T) {
 	dials, release := holdPeerDials(t)
-	sc := newTestConn("ubusql1")
+	sc := newTestConn("ubusql1", "ubusql2")
 	defer sc.Close()
 
 	ctx, cancel := context.WithCancel(context.Background())

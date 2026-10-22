@@ -4,6 +4,8 @@ import (
 	"context"
 	"slices"
 	"testing"
+
+	gosmo "github.com/radix29/gosmo"
 )
 
 // A Distributor's distribution database (sys.databases.is_distributor) is
@@ -45,7 +47,7 @@ func TestDistributionDatabaseAloneListsSystemDatabases(t *testing.T) {
 func TestDistributionDatabaseMenuMatchesSSMS(t *testing.T) {
 	a := newTestApp()
 	sc := addTestConn(a, "server-one")
-	for _, state := range []string{"ONLINE", "OFFLINE", "RESTORING"} {
+	for _, state := range []gosmo.DatabaseState{gosmo.DatabaseOnline, gosmo.DatabaseOffline, gosmo.DatabaseRestoring} {
 		node := &explorerNode{label: "distribution", data: nodeData{
 			Type: NodeDatabase, DBName: "distribution", Name: "distribution",
 			IsSystem: true, IsDistributor: true, IsOffline: state != "ONLINE", DBState: state, conn: sc}}

@@ -20,7 +20,7 @@ import (
 // Server has no ALTER STATISTICS to flip them in isolation, only UPDATE
 // STATISTICS ... WITH NORECOMPUTE, so changing them is folded into the
 // Details page's Update Statistics action instead of the Apply pipeline.
-func statisticPropPages(d *PropDialog, sc *db.ServerConn, dbName, schema, table, name string) []propPage {
+func statisticPropPages(d *PropDialog, sc *db.ServerConn, dbName, schema, table, name string, onView bool) []propPage {
 	return []propPage{
 		pageStatisticGeneral(sc, dbName, schema, table, name),
 		pageStatisticColumns(sc, dbName, schema, table, name),
@@ -31,17 +31,17 @@ func statisticPropPages(d *PropDialog, sc *db.ServerConn, dbName, schema, table,
 		withRequiresOn(pageExtendedProperties(sc, dbName, func() gosmo.ExtendedPropertyLevel {
 			return gosmo.ExtendedPropertyLevel{
 				Level0Type: "SCHEMA", Level0Name: schema,
-				Level1Type: "TABLE", Level1Name: table,
+				Level1Type: extPropObjectLevel(onView), Level1Name: table,
 				Level2Type: "STATISTICS", Level2Name: name,
 			}
 		}), dbName, schema, table, gate.ObjectWriteRights()...),
 	}
 }
 
-// findStatistic resolves dbName/schema/table/name to the owning *gosmo.Table
-// and its *gosmo.Statistic, mirroring findIndex.
-func findStatistic(ctx context.Context, sc *db.ServerConn, dbName, schema, table, name string) (*gosmo.Table, *gosmo.Statistic, error) {
-	t, err := findTable(ctx, sc, dbName, schema, table)
+// findStatistic resolves dbName/schema/table/name to the table or view it is
+// on and its *gosmo.Statistic, mirroring findIndex.
+func findStatistic(ctx context.Context, sc *db.ServerConn, dbName, schema, table, name string) (indexedObject, *gosmo.Statistic, error) {
+	t, err := findIndexed(ctx, sc, dbName, schema, table)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -61,6 +61,7 @@ func pageStatisticGeneral(sc *db.ServerConn, dbName, schema, table, name string)
 				return nil, nil, err
 			}
 
+			ownerSchema, ownerName, ownerKind := indexedIdentity(t)
 			createdBy := "System"
 			if st.IsUserCreated {
 				createdBy = "User"
@@ -79,9 +80,9 @@ func pageStatisticGeneral(sc *db.ServerConn, dbName, schema, table, name string)
 				propsheet.Static("No recompute", boolStr(st.NoRecompute)),
 				propsheet.Static("Incremental", boolStr(st.IsIncremental)),
 				propsheet.Section("Parent object"),
-				propsheet.Static("Schema", t.Schema),
-				propsheet.Static("Object", t.Name),
-				propsheet.Static("Object type", "Table"),
+				propsheet.Static("Schema", ownerSchema),
+				propsheet.Static("Object", ownerName),
+				propsheet.Static("Object type", ownerKind),
 				propsheet.Section("Current statistics metadata"),
 				propsheet.Static("Last updated", formatSQLDate(st.LastUpdated)),
 				propsheet.Static("Rows", strconv.FormatInt(st.TotalRows, 10)),
@@ -172,11 +173,11 @@ func pageStatisticFilter(d *PropDialog, sc *db.ServerConn, dbName, schema, table
 	return propPage{
 		title: "Filter",
 		load: func(ctx context.Context) (*propsheet.Form, propApply, error) {
-			t, st, err := findStatistic(ctx, sc, dbName, schema, table, name)
+			_, st, err := findStatistic(ctx, sc, dbName, schema, table, name)
 			if err != nil {
 				return nil, nil, err
 			}
-			f := buildFilterInfoForm(d, t, st.HasFilter, st.FilterDef)
+			f := buildFilterInfoForm(d, whereTargetOf(st.Table()), st.HasFilter, st.FilterDef)
 			return f, nil, nil
 		},
 	}

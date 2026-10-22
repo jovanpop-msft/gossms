@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -71,7 +72,7 @@ type rebuildOptions struct {
 }
 
 func newRebuildOptions(idx *gosmo.Index) rebuildOptions {
-	layout, compression := dataCompressionRow(string(idx.DataCompression))
+	layout, compression := dataCompressionRow(string(idx.DataCompression()))
 	return rebuildOptions{
 		fillFactor:  propsheet.Int("Fill factor", int64(idx.FillFactor), 0, 100, "%"),
 		pad:         propsheet.Check("Pad index", idx.IsPadded),
@@ -150,7 +151,7 @@ func refusedOptionsForm(idx *gosmo.Index, section, refusal string, withIgnoreDup
 	}
 	return propsheet.NewForm(append(rows,
 		propsheet.Section("Compression"),
-		propsheet.Static("Data compression", orDefault(string(idx.DataCompression), "NONE")),
+		propsheet.Static("Data compression", orDefault(string(idx.DataCompression()), "NONE")),
 		propsheet.Note(why),
 	)...)
 }
@@ -179,7 +180,7 @@ func applySetOptions(ctx context.Context, idx *gosmo.Index, ignoreDup, rowLocks,
 // valid T-SQL. Sort in tempdb, Online index operation, Resumable and Max
 // duration are left out too: REBUILD-time-only clauses with no persisted state
 // to show, unlike fill factor, pad index and the SET-able options here.
-func indexPropPages(d *PropDialog, sc *db.ServerConn, dbName, schema, table, name string) []propPage {
+func indexPropPages(d *PropDialog, sc *db.ServerConn, dbName, schema, table, name string, onView bool) []propPage {
 	w := gate.ObjectWriteRights()
 	return []propPage{
 		pageIndexGeneral(sc, dbName, schema, table, name),
@@ -191,22 +192,95 @@ func indexPropPages(d *PropDialog, sc *db.ServerConn, dbName, schema, table, nam
 		withRequiresOn(pageExtendedProperties(sc, dbName, func() gosmo.ExtendedPropertyLevel {
 			return gosmo.ExtendedPropertyLevel{
 				Level0Type: "SCHEMA", Level0Name: schema,
-				Level1Type: "TABLE", Level1Name: table,
+				Level1Type: extPropObjectLevel(onView), Level1Name: table,
 				Level2Type: "INDEX", Level2Name: name,
 			}
 		}), dbName, schema, table, w...),
 	}
 }
 
-// findIndex resolves dbName/schema/table/name to the *gosmo.Index, read in
-// full. The index carries its table (Index.Table), which every write and
-// read on it names itself.
-func findIndex(ctx context.Context, sc *db.ServerConn, dbName, schema, table, name string) (*gosmo.Index, error) {
-	t, err := findTable(ctx, sc, dbName, schema, table)
+// indexedObject is what an index or a statistic is on: a *gosmo.Table, or an
+// indexed *gosmo.View. Both answer every read and write the index and
+// statistics pages and dialogs make; the rest (XML indexes, a filter
+// predicate's checks) is a table's alone.
+type indexedObject interface {
+	Database() *gosmo.Database
+	FullName() string
+	Columns(context.Context) ([]*gosmo.Column, error)
+	Indexes(context.Context) ([]*gosmo.Index, error)
+	IndexByName(context.Context, string) (*gosmo.Index, error)
+	CreateIndex(context.Context, gosmo.CreateIndexRequest) (*gosmo.Index, error)
+	Statistics(context.Context) ([]*gosmo.Statistic, error)
+	StatisticByName(context.Context, string) (*gosmo.Statistic, error)
+	CreateStatistic(context.Context, gosmo.CreateStatisticRequest) (*gosmo.Statistic, error)
+}
+
+// findIndexed resolves dbName/schema/name to the table or view an index or a
+// statistic is on. Tables and views share one namespace, so a name that is
+// no table is read as a view: one read for a table, two for a view. The
+// pages and dialogs are handed names, not a node, which is why they resolve
+// this way rather than by nodeData.OnView; the tree's loaders, which have the
+// node, use indexedFor.
+func findIndexed(ctx context.Context, sc *db.ServerConn, dbName, schema, name string) (indexedObject, error) {
+	d, err := sc.Server.DatabaseByName(ctx, dbName)
 	if err != nil {
 		return nil, err
 	}
-	return t.IndexByName(ctx, name)
+	t, err := d.TableByName(ctx, schema, name)
+	if err == nil {
+		return t, nil
+	}
+	if !errors.Is(err, gosmo.ErrNotFound) {
+		return nil, err
+	}
+	v, err := d.ViewByName(ctx, schema, name)
+	if errors.Is(err, gosmo.ErrNotFound) {
+		return nil, fmt.Errorf("no table or view %s in %q: %w", fqn(schema, name), dbName, err)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+// indexedOwner is what idx or st is on, as an indexedObject: its view, or its
+// table.
+func indexedOwner(view *gosmo.View, table *gosmo.Table) indexedObject {
+	if view != nil {
+		return view
+	}
+	return table
+}
+
+// indexedIdentity is the schema, name and kind ("Table" or "View") of o, for
+// the "Table or view" rows of Index and Statistics Properties.
+func indexedIdentity(o indexedObject) (schema, name, kind string) {
+	if v, ok := o.(*gosmo.View); ok {
+		return v.Schema, v.Name, "View"
+	}
+	t := o.(*gosmo.Table)
+	return t.Schema, t.Name, "Table"
+}
+
+// extPropObjectLevel is the level-1 type an index's or statistic's extended
+// properties are addressed under: the object it is on.
+func extPropObjectLevel(onView bool) string {
+	if onView {
+		return "VIEW"
+	}
+	return "TABLE"
+}
+
+// findIndex resolves dbName/schema/table/name to the *gosmo.Index, read in
+// full; table may name a view (findIndexed). The index carries its object
+// (Index.Table or Index.View), which every write and read on it names
+// itself.
+func findIndex(ctx context.Context, sc *db.ServerConn, dbName, schema, table, name string) (*gosmo.Index, error) {
+	o, err := findIndexed(ctx, sc, dbName, schema, table)
+	if err != nil {
+		return nil, err
+	}
+	return o.IndexByName(ctx, name)
 }
 
 func pageIndexGeneral(sc *db.ServerConn, dbName, schema, table, name string) propPage {
@@ -219,6 +293,7 @@ func pageIndexGeneral(sc *db.ServerConn, dbName, schema, table, name string) pro
 			}
 
 			grid := indexKeyColumnGrid(idx)
+			ownerSchema, ownerName, ownerKind := indexedIdentity(indexedOwner(idx.View(), idx.Table()))
 
 			included := "(none)"
 			if len(idx.IncludedColumns) > 0 {
@@ -237,9 +312,9 @@ func pageIndexGeneral(sc *db.ServerConn, dbName, schema, table, name string) pro
 				propsheet.Static("Disabled", boolStr(idx.IsDisabled)),
 				propsheet.Static("Hypothetical", boolStr(idx.IsHypothetical)),
 				propsheet.Section("Table or view"),
-				propsheet.Static("Schema", idx.Table().Schema),
-				propsheet.Static("Object", idx.Table().Name),
-				propsheet.Static("Object type", "Table"),
+				propsheet.Static("Schema", ownerSchema),
+				propsheet.Static("Object", ownerName),
+				propsheet.Static("Object type", ownerKind),
 				propsheet.Section("Key columns"),
 				propsheet.NewGridRow(grid, 8),
 				propsheet.Section("Included columns"),
@@ -368,7 +443,7 @@ func pageIndexIncludedColumns(sc *db.ServerConn, dbName, schema, table, name str
 					propsheet.Note("Included columns can't be changed on this index: "+err.Error()+"."),
 				), nil, nil
 			}
-			cols, err := idx.Table().Columns(ctx)
+			cols, err := indexedOwner(idx.View(), idx.Table()).Columns(ctx)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -438,7 +513,7 @@ func pageIndexFilter(d *PropDialog, sc *db.ServerConn, dbName, schema, table, na
 			if err != nil {
 				return nil, nil, err
 			}
-			f := buildFilterInfoForm(d, idx.Table(), idx.FilterDefinition != "", idx.FilterDefinition)
+			f := buildFilterInfoForm(d, whereTargetOf(idx.Table()), idx.FilterDefinition != "", idx.FilterDefinition)
 			return f, nil, nil
 		},
 	}

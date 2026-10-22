@@ -248,11 +248,11 @@ func TestFabricDWExternalDataSourcesAreDirectDatabaseChildren(t *testing.T) {
 func TestFabricDWExternalFunctionsUseTheFunctionListing(t *testing.T) {
 	sc, inst := newFakeConn(t, treeFamilyDatabaseRow(),
 		fakeResponse{match: "WHERE  o.type IN ('FN','TF','IF','FS','FT')", cols: 6, rows: [][]driver.Value{
-			{int64(1), "dbo", "Regular", "FN", treeFamilyCreated, treeFamilyCreated},
+			{int64(1), "dbo", "Regular", treeFamilyCreated, treeFamilyCreated, "FN"},
 		}},
 		fakeResponse{match: "WHERE  o.type = 'XF'", cols: 6, rows: [][]driver.Value{
-			{int64(2), "analytics", "Predict", "XF", treeFamilyCreated, treeFamilyCreated},
-			{int64(3), "dbo", "Normalize", "XF", treeFamilyCreated, treeFamilyCreated},
+			{int64(2), "analytics", "Predict", treeFamilyCreated, treeFamilyCreated, "XF"},
+			{int64(3), "dbo", "Normalize", treeFamilyCreated, treeFamilyCreated, "XF"},
 		}})
 	sc.IsFabricDW = true
 	folders := loadFamily(t, sc, NodeProgrammability)

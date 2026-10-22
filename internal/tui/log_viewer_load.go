@@ -165,7 +165,7 @@ func readLogFiles(app *App, ctx context.Context, sc *db.ServerConn, refs []logFi
 	app.fanOut(len(refs), "reading an error log", func(i int) {
 		readCtx, cancel := context.WithTimeout(ctx, logReadTimeout)
 		defer cancel()
-		entries, err := sc.Server.ReadLogFiltered(readCtx, refs[i].Type, refs[i].Num, search)
+		entries, err := sc.Server.ReadLog(readCtx, refs[i].Type, refs[i].Num, search)
 		if err != nil {
 			errs[i] = err
 			return

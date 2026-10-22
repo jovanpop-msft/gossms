@@ -2,11 +2,13 @@ package tui
 
 import (
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/gdamore/tcell/v3"
 	"github.com/gdamore/tcell/v3/color"
 	"github.com/radix29/gossms/internal/config"
+	"github.com/radix29/gossms/internal/query"
 	"github.com/radix29/gossms/internal/tuikit/core"
 	"github.com/radix29/gossms/internal/tuikit/theme"
 )
@@ -104,6 +106,43 @@ func (p *QueryPanel) notConnectedMessage() string {
 // three tabs get the same line from drawResultsStatus.
 func (p *QueryPanel) updateResultsStatus() {
 	p.results.SetStatus(p.resultsStatusText())
+	p.results.SetStatusStyle(p.resultsStatusStyle())
+}
+
+// resultsStatusStyle is the status line's style: the usual one, or a bold alert
+// while the line carries truncatedNotice, which must not read as a routine count.
+func (p *QueryPanel) resultsStatusStyle() tcell.Style {
+	if p.truncatedNotice() == "" {
+		return resultsStatusStyle
+	}
+	pal := theme.Active()
+	return tcell.StyleDefault.Background(pal.Error).Foreground(color.White).Bold(true)
+}
+
+// truncatedNotice is the status line's shout that Max fetch rows cut a result
+// short: for the active set on a grid or text tab, for any set on the others. ""
+// when nothing was cut, or the line shows something else (resultsNotice, a run
+// in flight).
+func (p *QueryPanel) truncatedNotice() string {
+	if p.resultsNotice != "" || p.executing || p.result == nil {
+		return ""
+	}
+	// The cap is a cut set's own length, not cfg's: Options may have changed it
+	// since the run.
+	cut := -1
+	if set, ok := p.activeResultSet(); ok {
+		if set.Truncated {
+			cut = len(set.Rows)
+		}
+	} else if i := slices.IndexFunc(p.result.Sets, func(rs query.ResultSet) bool { return rs.Truncated }); i >= 0 {
+		cut = len(p.result.Sets[i].Rows)
+	} else if p.result.SinkSetsTruncated > 0 { // Results To File
+		cut = p.result.MaxRows()
+	}
+	if cut < 0 {
+		return ""
+	}
+	return fmt.Sprintf("MORE ROWS NOT FETCHED - MAX FETCH ROWS IS %d", cut)
 }
 
 // drawResultsStatus paints the status line for a tab the results grid isn't
@@ -115,14 +154,25 @@ func (p *QueryPanel) drawResultsStatus(s tcell.Screen) {
 	if p.statusRect.H != 1 {
 		return
 	}
-	core.FillRect(s, p.statusRect, ' ', resultsStatusStyle)
+	style := p.resultsStatusStyle()
+	core.FillRect(s, p.statusRect, ' ', style)
 	core.DrawTextRight(s, p.statusRect.X+1, p.statusRect.Y, p.statusRect.W-2,
-		resultsStatusStyle, p.resultsStatusText())
+		style, p.resultsStatusText())
 }
 
-// resultsStatusText builds the results area's status line for the active tab.
-// resultsNotice, when set, takes priority (see its field doc).
+// resultsStatusText builds the results area's status line for the active tab,
+// led by truncatedNotice when a result was cut short. resultsNotice, when set,
+// takes priority (see its field doc).
 func (p *QueryPanel) resultsStatusText() string {
+	text := p.statusDetailText()
+	if n := p.truncatedNotice(); n != "" {
+		return n + " | " + text
+	}
+	return text
+}
+
+// statusDetailText is resultsStatusText without truncatedNotice.
+func (p *QueryPanel) statusDetailText() string {
 	if p.resultsNotice != "" {
 		return p.resultsNotice
 	}

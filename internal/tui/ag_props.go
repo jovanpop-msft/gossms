@@ -211,7 +211,7 @@ func pageAGGeneral(sc *db.ServerConn, agName string) propPage {
 				"Connections in primary role", "Readable secondary", "Seeding mode", "Session timeout (s)"}
 			roleByName := map[string]string{}
 			for _, r := range replicas {
-				roleByName[strings.ToLower(r.ReplicaServerName)] = r.Role
+				roleByName[strings.ToLower(r.ReplicaServerName)] = string(r.Role)
 			}
 			replicaRows := func() [][]string {
 				rows := make([][]string, len(edits))
@@ -301,7 +301,7 @@ func pageAGGeneral(sc *db.ServerConn, agName string) propPage {
 				propsheet.Static("Name", ag.Name),
 				propsheet.Static("Cluster type", orDefault(string(ag.ClusterType), "WSFC (not reported before SQL Server 2017)")),
 				propsheet.Static("Primary replica", orDefault(ag.PrimaryReplicaServerName, "(not visible from here)")),
-				propsheet.Static("Synchronization health", orDefault(ag.SynchronizationHealth, "(unknown)")),
+				propsheet.Static("Synchronization health", orDefault(string(ag.SynchronizationHealth), "(unknown)")),
 				propsheet.Static("Basic availability group", boolStr(ag.BasicFeatures)),
 				propsheet.Static("Contained", boolStr(ag.IsContained)),
 			}

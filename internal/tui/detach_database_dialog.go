@@ -24,7 +24,7 @@ import (
 
 // detachPrefetch is what the page needs to describe a detach before it runs.
 type detachPrefetch struct {
-	state string
+	state gosmo.DatabaseState
 
 	// files are the database's files, primary data file first. Empty only
 	// when neither catalog would answer — see fetchPrefetch.
@@ -75,7 +75,7 @@ func (d *DetachDatabaseDialog) fetchPrefetch(ctx context.Context, sc *db.ServerC
 		return nil, err
 	}
 	pf := &detachPrefetch{state: dbase.State, sessions: -1}
-	if pf.state == "ONLINE" {
+	if pf.state == gosmo.DatabaseOnline {
 		if files, err := dbase.Files(ctx); err == nil {
 			pf.files = sortDatabaseFiles(files)
 		}
@@ -106,7 +106,7 @@ func (d *DetachDatabaseDialog) fetchPrefetch(ctx context.Context, sc *db.ServerC
 func sortDatabaseFiles(files []*gosmo.DatabaseFileInfo) []*gosmo.DatabaseFileInfo {
 	out := append([]*gosmo.DatabaseFileInfo(nil), files...)
 	slices.SortStableFunc(out, func(a, b *gosmo.DatabaseFileInfo) int {
-		if aLog, bLog := a.Type == "LOG", b.Type == "LOG"; aLog != bLog {
+		if aLog, bLog := a.Type == gosmo.FileLog, b.Type == gosmo.FileLog; aLog != bLog {
 			if aLog {
 				return 1
 			}
@@ -142,7 +142,7 @@ func (d *DetachDatabaseDialog) buildPages(pf *detachPrefetch) {
 	rows := []propsheet.Row{
 		propsheet.Section("Database to detach"),
 		propsheet.Static("Database", dbName),
-		propsheet.Static("State", pf.state),
+		propsheet.Static("State", string(pf.state)),
 		propsheet.Static("Sessions", detachSessionsText(pf.sessions)),
 		propsheet.Section("Options"),
 		dropConns,
@@ -191,7 +191,7 @@ func (d *DetachDatabaseDialog) buildPages(pf *detachPrefetch) {
 func detachFileRows(files []*gosmo.DatabaseFileInfo) [][]string {
 	rows := make([][]string, len(files))
 	for i, f := range files {
-		rows[i] = []string{f.Name, f.Type, f.PhysicalName}
+		rows[i] = []string{f.Name, string(f.Type), f.PhysicalName}
 	}
 	return rows
 }

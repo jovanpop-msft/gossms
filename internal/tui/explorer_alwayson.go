@@ -1,11 +1,13 @@
 package tui
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
 
 	gosmo "github.com/radix29/gosmo"
+	"github.com/radix29/gossms/internal/db"
 )
 
 // explorer_alwayson.go holds the loaders for the "Always On High Availability"
@@ -103,6 +105,11 @@ type agView struct {
 	// unreachable names the primary that could not be connected to, if following
 	// was attempted and failed.
 	unreachable string
+
+	// unregistered is set with unreachable when the cause was Peer refusing a
+	// primary with no registered connection, which the user can fix from the
+	// note (ObjectExplorer.handleActivate) rather than a fault to wait out.
+	unregistered bool
 }
 
 // resolveAGView looks up a group by name and, when the local instance is not its
@@ -123,7 +130,8 @@ func resolveAGView(l loaderCtx, name string) (agView, error) {
 	primary := ag.PrimaryReplicaServerName
 	peer, err := l.sc.Peer(l.ctx, primary)
 	if err != nil {
-		return agView{ag: ag, unreachable: primary}, nil
+		_, unregistered := errors.AsType[*db.PeerNotRegisteredError](err)
+		return agView{ag: ag, unreachable: primary, unregistered: unregistered}, nil
 	}
 	primaryAG, err := peer.Server.AvailabilityGroupByName(l.ctx, name)
 	if err != nil {
@@ -137,6 +145,10 @@ func resolveAGView(l loaderCtx, name string) (agView, error) {
 // half-empty replica list from a secondary looks like a fault.
 func (v agView) followNote(l loaderCtx) *explorerNode {
 	switch {
+	case v.unregistered:
+		n := l.node(fmt.Sprintf("(partial — Enter to connect to %s)", v.unreachable), NodeError, "", "", "")
+		n.data.UnregisteredPeer = v.unreachable
+		return n
 	case v.unreachable != "":
 		return l.node(fmt.Sprintf("(partial — primary %s unreachable)", v.unreachable), NodeError, "", "", "")
 	case v.followed:
@@ -166,7 +178,7 @@ func loadAvailabilityReplicasChildren(l loaderCtx, node *explorerNode) ([]*explo
 	for _, r := range replicas {
 		n := l.node(replicaLabel(r), NodeAvailabilityReplica, "", r.ReplicaServerName, "")
 		n.data.AGName = node.data.AGName
-		n.data.AGIsPrimary = strings.EqualFold(r.Role, "PRIMARY")
+		n.data.AGIsPrimary = r.Role == gosmo.ReplicaPrimary
 		out = append(out, n)
 	}
 	return view.appendNote(l, out), nil
@@ -204,9 +216,10 @@ func commitModeName(mode string) string {
 }
 
 // titleWord renders an all-caps SQL Server enum ("SECONDARY", "NOT
-// SYNCHRONIZING") as "Secondary" / "Not synchronizing".
-func titleWord(s string) string {
-	s = strings.ReplaceAll(strings.ToLower(s), "_", " ")
+// SYNCHRONIZING") as "Secondary" / "Not synchronizing". It takes gosmo's
+// typed state enums as they are.
+func titleWord[S ~string](v S) string {
+	s := strings.ReplaceAll(strings.ToLower(string(v)), "_", " ")
 	if s == "" {
 		return ""
 	}
@@ -322,11 +335,11 @@ func summarizeAGDatabases(dbs []*gosmo.AvailabilityDatabase) []agDatabaseSummary
 		if d.IsSuspended {
 			s.Suspended = true
 		}
-		if d.SynchronizationHealth != "" && !strings.EqualFold(d.SynchronizationHealth, "HEALTHY") {
+		if d.SynchronizationHealth != "" && d.SynchronizationHealth != gosmo.SyncHealthy {
 			s.Unhealthy = true
 		}
-		if d.SynchronizationState != "" && !slicesContains(s.States, d.SynchronizationState) {
-			s.States = append(s.States, d.SynchronizationState)
+		if st := string(d.SynchronizationState); st != "" && !slicesContains(s.States, st) {
+			s.States = append(s.States, st)
 		}
 	}
 	return out

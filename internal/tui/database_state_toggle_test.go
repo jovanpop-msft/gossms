@@ -6,6 +6,7 @@ import (
 
 	"github.com/gdamore/tcell/v3"
 
+	gosmo "github.com/radix29/gosmo"
 	"github.com/radix29/gossms/internal/db"
 )
 
@@ -19,7 +20,7 @@ var stateToggleLabels = []string{"Take Database Offline", "Bring Database Online
 func TestDatabaseMenuStateToggleFollowsTheState(t *testing.T) {
 	a := newTestApp()
 	sc := addTestConn(a, "server-one")
-	for state, want := range map[string]string{
+	for state, want := range map[gosmo.DatabaseState]string{
 		"ONLINE":            "Take Database Offline",
 		"OFFLINE":           "Bring Database Online",
 		"EMERGENCY":         "Bring Database Online",

@@ -138,7 +138,7 @@ func pageDatabaseGeneral(sc *db.ServerConn, dbName string) propPage {
 			rows := []propsheet.Row{
 				propsheet.Section("Database information"),
 				propsheet.Static("Name", d.Name),
-				propsheet.Static("Status", d.State),
+				propsheet.Static("Status", string(d.State)),
 				ownerRow,
 				propsheet.Static("Date created", formatSQLDate(d.CreateDate)),
 				propsheet.Static("Size (MB)", fmt.Sprintf("%.2f", space.TotalMB)),

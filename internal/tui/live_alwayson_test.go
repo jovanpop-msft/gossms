@@ -10,8 +10,8 @@
 // Neither is reachable from a unit test: both sit behind db.ServerConn.Peer,
 // which connects. The condition is produced the way it actually happens in
 // production — a login that exists on the instance the user connected to and
-// not on the replica holding the primary role — so Peer's resolver hit *and*
-// its parentPeerOptions retry both fail against a live, healthy group.
+// not on the replica holding the primary role — so Peer's registered
+// connection fails against a live, healthy group.
 //
 //	go test -tags livedb ./internal/tui/ -run TestLiveAG -v \
 //	  -live-secondary ubusql1.fritz.box -live-sa sa -live-sa-password PASS \

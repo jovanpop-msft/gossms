@@ -29,7 +29,7 @@ func TestPeerCredentialsResolveByInstanceNotSpelling(t *testing.T) {
 	}
 
 	if _, ok := a.peerCredentialsFor("ubusql9"); ok {
-		t.Error("an instance nobody has connected to resolved to something; the fallback to the parent is unreachable")
+		t.Error("an unregistered instance resolved to another connection's credentials")
 	}
 	// A named instance must not resolve to the default instance's login.
 	if _, ok := a.peerCredentialsFor("ubusql2"); ok {
@@ -89,6 +89,30 @@ func TestRememberPeerCredentialsRefreshesTheMap(t *testing.T) {
 // as a peer read quietly using the wrong login.
 var _ db.PeerCredentials = (*App)(nil).peerCredentialsFor
 
+func TestPeerCredentialsRefuseAmbiguousShortAliases(t *testing.T) {
+	a := newTestApp()
+	a.rememberPeerCredentials(config.Connection{Server: "sql.a.example", User: "a_login"})
+	a.rememberPeerCredentials(config.Connection{Server: "sql.a.example", User: "new_a_login"})
+	if got, ok := a.peerCredentialsFor("SQL"); !ok || got.User != "new_a_login" || got.Server != "sql.a.example" {
+		t.Fatal("a unique alias did not resolve to the latest connection at its saved address")
+	}
+
+	a.rememberPeerCredentials(config.Connection{Server: "sql.b.example", User: "b_login"})
+	a.rememberPeerCredentials(config.Connection{Server: "sql.a.example", User: "latest_a_login"})
+	if _, ok := a.peerCredentialsFor("sql"); ok {
+		t.Fatal("an ambiguous short alias selected one domain's credentials")
+	}
+	for _, server := range []string{"sql.a.example", "sql.b.example"} {
+		if got, ok := a.peerCredentialsFor(server); !ok || got.Server != server {
+			t.Errorf("exact destination %q stopped resolving", server)
+		}
+	}
+	a.rememberPeerCredentials(config.Connection{Server: "sql", User: "explicit_short_login"})
+	if got, ok := a.peerCredentialsFor("sql"); !ok || got.User != "explicit_short_login" {
+		t.Fatal("an explicitly registered short name did not override ambiguous aliases")
+	}
+}
+
 // TestPeerCredentialsKeepTwoInstancesOnOneHostApart is R12: win10cli's
 // default instance and its SQL2017 instance on port 55253 were one key, so the
 // later save answered for both and a peer read tried the other instance's
@@ -98,10 +122,10 @@ var _ db.PeerCredentials = (*App)(nil).peerCredentialsFor
 func TestPeerCredentialsKeepTwoInstancesOnOneHostApart(t *testing.T) {
 	a := newTestApp()
 	a.cfg.Connections = []config.Connection{
-		{Server: "win10cli", Port: 1433, User: "default_login"},
-		{Server: "win10cli", Port: 55253, User: "sql2017_login"},
-		{Server: "win10cli\\inst", Port: 1500, User: "named_login"},
-		{Server: "otherhost,1600", User: "otherhost_login"},
+		{Server: "win10cli", Port: 1433, User: "default_login", Password: "pw"},
+		{Server: "win10cli", Port: 55253, User: "sql2017_login", Password: "pw"},
+		{Server: "win10cli\\inst", Port: 1500, User: "named_login", Password: "pw"},
+		{Server: "otherhost,1600", User: "otherhost_login", Password: "pw"},
 	}
 	a.loadPeerCredentials()
 
@@ -137,9 +161,9 @@ func TestPeerCredentialsKeepTwoInstancesOnOneHostApart(t *testing.T) {
 func TestPeerCredentialsPreferExactHostOverAShortAlias(t *testing.T) {
 	a := newTestApp()
 	a.cfg.Connections = []config.Connection{
-		{Server: "sql.b.example", User: "b_login"},
-		{Server: "sql.a.example", User: "a_login"},
-		{Server: "sql", User: "bare_login"},
+		{Server: "sql.b.example", User: "b_login", Password: "pw"},
+		{Server: "sql.a.example", User: "a_login", Password: "pw"},
+		{Server: "sql", User: "bare_login", Password: "pw"},
 	}
 	a.loadPeerCredentials()
 
@@ -181,16 +205,15 @@ func TestShortHostKeyOnlyAliasesADottedHost(t *testing.T) {
 }
 
 // A saved connection whose password this session cannot decrypt must not be
-// seeded. It would win over the parent connection's own credentials — which
-// are live and working — and connect with an empty password, turning a peer
-// read that used to work into a login failure. A replaced config key blanks
-// every saved password at once, so this is the whole file, not one entry.
+// seeded: connecting with an empty password is not an approved alternative.
+// A replaced config key blanks every saved password at once.
 //
 // Driven through config.Load rather than a hand-built Connection: the sealed
 // ciphertext that marks the state is unexported, and Load is what produces it.
 func TestPeerCredentialsSkipAPasswordThisSessionCannotRead(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", dir)
+	t.Setenv("APPDATA", dir)
 	waitForSavesAtCleanup(t)
 	cfgDir := filepath.Join(dir, "gossms")
 	if err := os.MkdirAll(cfgDir, 0o700); err != nil {
@@ -215,5 +238,28 @@ func TestPeerCredentialsSkipAPasswordThisSessionCannotRead(t *testing.T) {
 	// damage. Windows authentication does not use one.
 	if _, ok := a.peerCredentialsFor("ubusql3"); !ok {
 		t.Error("a Windows-authentication entry was dropped along with it")
+	}
+}
+
+// A saved SQL-authentication entry without a remembered password (the
+// default) would log in with an empty one and fail; it is left unregistered so
+// the read is refused and the Connect prompt is offered instead. Windows
+// Authentication with no user (integrated sign-in) needs none and is seeded.
+func TestPeerCredentialsSkipASavedEntryWithNoPassword(t *testing.T) {
+	a := newTestApp()
+	a.cfg.Connections = []config.Connection{
+		{Server: "ubusql2", AuthMethod: config.AuthSQLServer, User: "sa"},
+		{Server: "ubusql3", AuthMethod: config.AuthWindows},
+		{Server: "ubusql4", AuthMethod: config.AuthSQLServer, User: "sa", Password: "pw"},
+	}
+	a.loadPeerCredentials()
+
+	if _, ok := a.peerCredentialsFor("ubusql2"); ok {
+		t.Error("a saved SQL login with no password was registered; its peer reads fail at login instead of prompting")
+	}
+	for _, server := range []string{"ubusql3", "ubusql4"} {
+		if _, ok := a.peerCredentialsFor(server); !ok {
+			t.Errorf("%s was not registered", server)
+		}
 	}
 }

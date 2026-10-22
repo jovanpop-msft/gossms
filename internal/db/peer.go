@@ -9,7 +9,6 @@ import (
 	"sync"
 	"time"
 
-	gosmo "github.com/radix29/gosmo"
 	"github.com/radix29/gossms/internal/config"
 )
 
@@ -26,7 +25,8 @@ import (
 var ErrServerConnClosed = fmt.Errorf("connection closed: %w", context.Canceled)
 
 // Peer returns a connection to another instance in the same topology,
-// authenticated as sc is and cached on sc so repeated expansions reuse it.
+// using that instance's registered connection, cached on sc so repeated
+// expansions reuse it. Unregistered or ambiguous destinations are refused.
 //
 // server is an instance name as the catalog reports it
 // (sys.availability_replicas.replica_server_name, possibly "HOST\INSTANCE");
@@ -46,11 +46,14 @@ func (sc *ServerConn) Peer(ctx context.Context, server string) (*ServerConn, err
 	if sc.isSelf(server) {
 		return sc, nil
 	}
+	opts, err := sc.peerOptions(server)
+	if err != nil {
+		return nil, err
+	}
 
-	// InstanceKey, not lowercase: "UBUSQL2", "ubusql2,1433" and "ubusql2" are
-	// one instance ("ubusql2,1500" another). The credential resolver uses the
-	// same key.
-	key := config.InstanceKey(server)
+	// Cache the registered destination, not the metadata alias. A direct
+	// connection can then invalidate its failures under the same key.
+	key := config.InstanceKey(config.ConnectionAddress(opts))
 
 	for {
 		sc.peerMu.Lock()
@@ -71,7 +74,7 @@ func (sc *ServerConn) Peer(ctx context.Context, server string) (*ServerConn, err
 		d, leader := sc.peerDials.join(key)
 		if leader {
 			sc.peerMu.Unlock()
-			p, err := sc.dialPeer(ctx, server, key, d)
+			p, err := sc.dialPeer(ctx, opts, key, d)
 			if err != nil && !sc.IsOpen() {
 				err = ErrServerConnClosed
 			}
@@ -102,7 +105,7 @@ func (sc *ServerConn) Peer(ctx context.Context, server string) (*ServerConn, err
 //
 // Connects outside peerMu; holding it across network I/O serialises every
 // replica behind the slowest.
-func (sc *ServerConn) dialPeer(ctx context.Context, server, key string, d *peerDial) (peer *ServerConn, err error) {
+func (sc *ServerConn) dialPeer(ctx context.Context, opts config.Connection, key string, d *peerDial) (peer *ServerConn, err error) {
 	// The dial ends with ctx or with sc: a peer of a closed connection would
 	// only be closed again.
 	dctx, cancel := context.WithCancel(ctx)
@@ -136,22 +139,9 @@ func (sc *ServerConn) dialPeer(ctx context.Context, server, key string, d *peerD
 		d.land()
 	}()
 
-	opts := sc.peerOptions(server)
 	peer, err = connectPeer(dctx, opts, sc.role)
 	if err != nil {
-		// A resolver hit that cannot connect must not leave the instance less
-		// reachable than the parent's credentials would, so retry with the
-		// pre-resolver derivation (one extra attempt against a really down
-		// instance). When both fail, report the first error: it names the
-		// credentials the user registered.
-		fallback := sc.parentPeerOptions(server)
-		if fallback == opts || dctx.Err() != nil {
-			return nil, err
-		}
-		var ferr error
-		if peer, ferr = connectPeer(dctx, fallback, sc.role); ferr != nil {
-			return nil, err
-		}
+		return nil, err
 	}
 	// A peer's peers resolve through the same table: Object Explorer follows a
 	// group to its primary and reads on, and stopping at the first hop would reach
@@ -222,9 +212,7 @@ func (sc *ServerConn) recordPeerFailureLocked(key string, err error) error {
 	return err
 }
 
-// peerOptions returns the options for reaching server: the resolver's saved
-// connection for that instance, or sc's own retargeted, either way with no
-// database.
+// peerOptions returns the registered connection for server with no database.
 //
 // A named database must be openable or connect fails at ping ("Cannot open
 // database %q that was requested by the login"), and the user's database is
@@ -232,66 +220,37 @@ func (sc *ServerConn) recordPeerFailureLocked(key string, err error) error {
 // is lost: Peer's reads are server-scoped, and database-scoped work uses gosmo
 // Database handles that set context per query.
 //
-// A saved connection is taken whole (port, auth, Entra, TLS, extra properties)
-// so future fields aren't dropped; only Server and Database are overridden. If a
-// resolver hit fails to connect, Peer falls back to parentPeerOptions.
-func (sc *ServerConn) peerOptions(server string) config.Connection {
+// The destination must remain the one the user registered, even when catalog
+// metadata uses a short alias. Retargeting or retrying with the parent's login
+// can disclose credentials to a different server.
+func (sc *ServerConn) peerOptions(server string) (config.Connection, error) {
 	if creds := sc.peerCredentials(); creds != nil {
-		if saved, ok := creds(server); ok {
-			return retargetAt(saved, server)
+		if saved, ok := creds(server); ok && strings.TrimSpace(saved.Server) != "" {
+			saved.Database = ""
+			return saved, nil
 		}
 	}
-	return sc.parentPeerOptions(server)
+	return config.Connection{}, &PeerNotRegisteredError{Server: server}
 }
 
-// parentPeerOptions is sc's own options retargeted at server — Peer's fallback
-// when a resolver answer won't connect.
-//
-// The parent's port is kept only for the parent's own instance under another
-// spelling (same host and instance name, e.g. the catalog's portless "HOST" for
-// "host,14330"). For any other instance it is another listener's port:
-// "HOSTA\SQL2017,50110" opening peer "HOSTB\PROD" would dial HOSTB:50110 and
-// bypass SQL Browser. With Port cleared a named instance resolves through
-// Browser and a default instance dials 1433. A different host is a different
-// instance even if both default instances share a port; a replica on a
-// non-default port needs a saved connection.
-func (sc *ServerConn) parentPeerOptions(server string) config.Connection {
-	opts := retargetAt(sc.Opts, server)
-	if !sameInstanceApartFromPort(sc.Opts.Server, server) {
-		opts.Port = 0
-	}
-	return opts
+// PeerNotRegisteredError is Peer's refusal of an instance with no registered
+// connection (or only an ambiguous short alias). Server is the name as the
+// catalog reported it. The UI recognises it to offer a Connect prompt for that
+// instance instead of only reporting it.
+type PeerNotRegisteredError struct {
+	Server string
 }
 
-// sameInstanceApartFromPort reports whether a and b name one host and one
-// instance name (case-insensitive), ignoring any port either carries.
-func sameInstanceApartFromPort(a, b string) bool {
-	hostA, instA, _ := gosmo.ParseServerAddress(strings.TrimSpace(a))
-	hostB, instB, _ := gosmo.ParseServerAddress(strings.TrimSpace(b))
-	return strings.EqualFold(hostA, hostB) && strings.EqualFold(instA, instB)
-}
-
-// retargetAt points a saved connection at server with no database; see
-// peerOptions.
-//
-// A port in the saved Server moves to Port first: the catalog names an instance
-// without one, and "host\SQL2017,55253" retargeted to "HOST\SQL2017" would need
-// SQL Browser, which that host may not run. A port in server itself still wins,
-// in gosmo.
-func retargetAt(opts config.Connection, server string) config.Connection {
-	if _, _, port := gosmo.ParseServerAddress(opts.Server); port != 0 {
-		opts.Port = port
-	}
-	opts.Server = server
-	opts.Database = ""
-	return opts
+func (e *PeerNotRegisteredError) Error() string {
+	return fmt.Sprintf("peer %q is unregistered or ambiguous; connect to it explicitly with File > Connect first", e.Server)
 }
 
 // PeerCredentials returns the saved connection for an instance name; false
-// means none, and peerOptions falls back to the parent's settings.
+// means none or ambiguous, and Peer refuses to dial it. The saved destination
+// is authoritative; server may be an alias supplied by untrusted metadata.
 type PeerCredentials func(server string) (config.Connection, bool)
 
-// SetPeerCredentials installs the resolver peerOptions consults first, so
+// SetPeerCredentials installs the resolver peerOptions consults, so
 // replicas needing a different login or port are reachable. Peer installs it on
 // each peer it opens, so one call covers the topology.
 func (sc *ServerConn) SetPeerCredentials(fn PeerCredentials) {

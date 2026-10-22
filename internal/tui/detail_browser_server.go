@@ -192,7 +192,7 @@ func errorLogFileDetail(ctx context.Context, sc *dbconn.ServerConn, node *explor
 			}
 		}
 	}
-	entries, err := sc.Server.ReadLog(ctx, logType, logNum)
+	entries, err := sc.Server.ReadLog(ctx, logType, logNum, gosmo.LogSearch{})
 	if err != nil {
 		return nil, nil, err
 	}

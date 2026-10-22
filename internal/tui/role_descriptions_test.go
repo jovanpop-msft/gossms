@@ -55,7 +55,7 @@ func TestUserDefinedServerRolesAreRatedFromTheirGrants(t *testing.T) {
 		{Name: "r_unknown_perm"},
 		{Name: "##MS_Future##", IsFixedRole: true},
 	}
-	perm := func(principal, permission, state string) *gosmo.ServerPermissionEntry {
+	perm := func(principal, permission string, state gosmo.PermissionState) *gosmo.ServerPermissionEntry {
 		return &gosmo.ServerPermissionEntry{Principal: principal, PrincipalType: "SERVER_ROLE",
 			Permission: gosmo.ServerPermission(permission), State: state}
 	}

@@ -418,7 +418,7 @@ var indexMaintenanceVerbs = []scriptVerb{
 // own "Update Statistics" item. A full scan, the same read Statistics
 // Properties' Details page runs.
 var statisticUpdateVerb = scriptVerb{"UPDATE STATISTICS To", func(ctx context.Context, sc *db.ServerConn, n nodeData) (string, error) {
-	t, err := findTable(ctx, sc, n.DBName, n.Schema, n.TableName)
+	t, err := findIndexed(ctx, sc, n.DBName, n.Schema, n.TableName)
 	if err != nil {
 		return "", err
 	}
@@ -434,7 +434,7 @@ var statisticUpdateVerb = scriptVerb{"UPDATE STATISTICS To", func(ctx context.Co
 // the script read is what gossms would run; a second copy here would drift.
 func indexMaintenance(f func(ctx context.Context, idx *gosmo.Index) error) scriptGen {
 	return func(ctx context.Context, sc *db.ServerConn, n nodeData) (string, error) {
-		t, err := findTable(ctx, sc, n.DBName, n.Schema, n.TableName)
+		t, err := findIndexed(ctx, sc, n.DBName, n.Schema, n.TableName)
 		if err != nil {
 			return "", err
 		}

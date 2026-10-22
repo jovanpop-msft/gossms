@@ -159,8 +159,8 @@ func TestLivePropFinders(t *testing.T) {
 		if err != nil {
 			t.Fatalf("findStatistic: %v", err)
 		}
-		if tbl.Name != "child" || st.Name != "st_child_note" || !st.IsUserCreated {
-			t.Errorf("findStatistic = %s / %+v, want a user-created st_child_note on child", tbl.Name, st)
+		if tbl.FullName() != "[app].[child]" || st.Name != "st_child_note" || !st.IsUserCreated {
+			t.Errorf("findStatistic = %s / %+v, want a user-created st_child_note on child", tbl.FullName(), st)
 		}
 		if _, _, err := findStatistic(ctx, sc, dbName, "app", "child", "nope"); !errors.Is(err, gosmo.ErrNotFound) {
 			t.Errorf("missing statistic: err = %v, want ErrNotFound", err)

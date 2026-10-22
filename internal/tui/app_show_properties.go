@@ -137,17 +137,30 @@ func (a *App) showTablePropertiesFor(sc *db.ServerConn, dbName, schema, name str
 }
 
 // showIndexPropertiesFor opens Index Properties for a known connection,
-// database, and schema-qualified table/index, from the context menu.
-func (a *App) showIndexPropertiesFor(sc *db.ServerConn, dbName, schema, table, index string) {
-	a.propDialog.show(sc, dbName, "Index Properties", "Index: "+index, "Table: "+fqn(schema, table),
-		func() []propPage { return indexPropPages(a.propDialog, sc, dbName, schema, table, index) })
+// database, and schema-qualified table/index, from the context menu. onView
+// says table names a view (nodeData.OnView).
+func (a *App) showIndexPropertiesFor(sc *db.ServerConn, dbName, schema, table, index string, onView bool) {
+	a.propDialog.show(sc, dbName, "Index Properties", "Index: "+index, ownerHeader(onView)+fqn(schema, table),
+		func() []propPage { return indexPropPages(a.propDialog, sc, dbName, schema, table, index, onView) })
 }
 
 // showStatisticPropertiesFor opens Statistics Properties for a known
-// connection, database, and schema-qualified table/statistic.
-func (a *App) showStatisticPropertiesFor(sc *db.ServerConn, dbName, schema, table, stat string) {
-	a.propDialog.show(sc, dbName, "Statistics Properties", "Statistic: "+stat, "Table: "+fqn(schema, table),
-		func() []propPage { return statisticPropPages(a.propDialog, sc, dbName, schema, table, stat) })
+// connection, database, and schema-qualified table/statistic; onView as for
+// showIndexPropertiesFor.
+func (a *App) showStatisticPropertiesFor(sc *db.ServerConn, dbName, schema, table, stat string, onView bool) {
+	a.propDialog.show(sc, dbName, "Statistics Properties", "Statistic: "+stat, ownerHeader(onView)+fqn(schema, table),
+		func() []propPage { return statisticPropPages(a.propDialog, sc, dbName, schema, table, stat, onView) })
+}
+
+// ownerHeader is the header prefix naming what an index or statistic is on.
+func ownerHeader(onView bool) string { return ownerNoun(onView) + ": " }
+
+// ownerNoun is "View" or "Table": what an index or statistic is on.
+func ownerNoun(onView bool) string {
+	if onView {
+		return "View"
+	}
+	return "Table"
 }
 
 // showForeignKeyPropertiesFor opens the read-only Foreign Key Properties for a

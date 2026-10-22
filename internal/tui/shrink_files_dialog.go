@@ -18,10 +18,13 @@ import (
 
 // shrinkFileTypes maps sys.database_files.type_desc to the File type row's
 // wording, SSMS's, in the order the row lists them.
-var shrinkFileTypes = []struct{ typeDesc, label string }{
-	{"ROWS", "Data"},
-	{"LOG", "Log"},
-	{"FILESTREAM", "FILESTREAM Data"},
+var shrinkFileTypes = []struct {
+	typeDesc gosmo.FileType
+	label    string
+}{
+	{gosmo.FileRows, "Data"},
+	{gosmo.FileLog, "Log"},
+	{gosmo.FileStream, "FILESTREAM Data"},
 }
 
 // shrinkFileActions are the Shrink action choices, indexed by the
@@ -102,7 +105,7 @@ type shrinkFilePicker struct{ files []*gosmo.DatabaseFileInfo }
 
 // types returns the File type labels present, in shrinkFileTypes order, with
 // the type_desc each stands for.
-func (p shrinkFilePicker) types() (labels, typeDescs []string) {
+func (p shrinkFilePicker) types() (labels []string, typeDescs []gosmo.FileType) {
 	for _, t := range shrinkFileTypes {
 		for _, f := range p.files {
 			if f.Type == t.typeDesc {
@@ -117,8 +120,8 @@ func (p shrinkFilePicker) types() (labels, typeDescs []string) {
 
 // fileGroups returns the filegroups holding files of typeDesc, in file order
 // (PRIMARY first, as its file 1 is), or shrinkNoFileGroup for the log.
-func (p shrinkFilePicker) fileGroups(typeDesc string) []string {
-	if typeDesc == "LOG" {
+func (p shrinkFilePicker) fileGroups(typeDesc gosmo.FileType) []string {
+	if typeDesc == gosmo.FileLog {
 		return []string{shrinkNoFileGroup}
 	}
 	var out []string
@@ -131,10 +134,10 @@ func (p shrinkFilePicker) fileGroups(typeDesc string) []string {
 }
 
 // filesIn returns the files of typeDesc in fileGroup (any, for the log).
-func (p shrinkFilePicker) filesIn(typeDesc, fileGroup string) []*gosmo.DatabaseFileInfo {
+func (p shrinkFilePicker) filesIn(typeDesc gosmo.FileType, fileGroup string) []*gosmo.DatabaseFileInfo {
 	var out []*gosmo.DatabaseFileInfo
 	for _, f := range p.files {
-		if f.Type == typeDesc && (typeDesc == "LOG" || f.FileGroup == fileGroup) {
+		if f.Type == typeDesc && (typeDesc == gosmo.FileLog || f.FileGroup == fileGroup) {
 			out = append(out, f)
 		}
 	}
@@ -183,7 +186,7 @@ func (d *ShrinkFilesDialog) buildPages(pf *shrinkFilesPrefetch) {
 		}
 		return nil
 	}
-	typeDesc := func() string {
+	typeDesc := func() gosmo.FileType {
 		if i := typeRow.Selected(); i >= 0 && i < len(typeDescs) {
 			return typeDescs[i]
 		}
@@ -197,7 +200,7 @@ func (d *ShrinkFilesDialog) buildPages(pf *shrinkFilesPrefetch) {
 		location.SetValue(f.PhysicalName)
 		allocated.SetValue(shrinkMB(f.SizeKB))
 		switch {
-		case f.Type == "FILESTREAM":
+		case f.Type == gosmo.FileStream:
 			// A container has no size in sys.database_files (0) and no pages
 			// for FILEPROPERTY to count (NULL), so neither figure means anything.
 			allocated.SetValue(shrinkFilestreamNA)
@@ -206,9 +209,9 @@ func (d *ShrinkFilesDialog) buildPages(pf *shrinkFilesPrefetch) {
 		case f.SpaceUsedKB > 0:
 			free.SetValue(shrinkFreeText(f.SizeKB-f.SpaceUsedKB, f.SizeKB))
 			// DBCC SHRINKFILE's own target 0 stops at the file's creation size,
-			// not its contents, so opts sends 0 as 1.
+			// not its contents, so gosmo sends 0 as 1.
 			occupies := "the space the file's data occupies"
-			if f.Type == "LOG" {
+			if f.Type == gosmo.FileLog {
 				// A log shrinks only down to its last active VLF, which the
 				// used-space figure knows nothing about.
 				occupies = "the log's used space, a lower bound only: a log shrinks no further than its last active virtual log file"
@@ -241,7 +244,7 @@ func (d *ShrinkFilesDialog) buildPages(pf *shrinkFilesPrefetch) {
 	// Release, when another type is.
 	var pinned bool
 	filestream := func() {
-		fs := typeDesc() == "FILESTREAM"
+		fs := typeDesc() == gosmo.FileStream
 		if fs == pinned {
 			return
 		}
@@ -259,7 +262,7 @@ func (d *ShrinkFilesDialog) buildPages(pf *shrinkFilesPrefetch) {
 		filestream()
 		groupRow.SetItems(picker.fileGroups(typeDesc()))
 		groupRow.SetSelected(0)
-		groupRow.SetEnabled(typeDesc() != "LOG")
+		groupRow.SetEnabled(typeDesc() != gosmo.FileLog)
 		pickFiles()
 	}
 	typeRow.SetOnChange(func(string) { pickGroups() })
@@ -296,9 +299,6 @@ func (d *ShrinkFilesDialog) buildPages(pf *shrinkFilesPrefetch) {
 			return nil, gosmo.ShrinkFileOptions{}, fmt.Errorf("pick a file to shrink")
 		}
 		o := gosmo.ShrinkFileOptions{Wait: wait()}
-		if f.Type == "FILESTREAM" && action.Selected() != shrinkFileEmpty {
-			return nil, o, fmt.Errorf("a FILESTREAM container can only be emptied (EMPTYFILE)")
-		}
 		switch action.Selected() {
 		case shrinkFileRelease:
 			o.Truncate = gosmo.ShrinkTruncateOnly
@@ -308,29 +308,30 @@ func (d *ShrinkFilesDialog) buildPages(pf *shrinkFilesPrefetch) {
 				return nil, o, fmt.Errorf("shrink file to must be a whole number of MB from 0 to %d, the file's current size, not %q",
 					maxMB, strings.TrimSpace(target.Value()))
 			}
-			// 0 goes as 1: SHRINKFILE's own 0 stops at the file's creation
-			// size, so the shrink the note promises would silently not happen.
-			// gosmo's DatabaseFileInfo.Shrink floors it the same way.
-			o.TargetMB = new(max(mb, 1))
+			// gosmo sends 0 as 1, the shrink the note promises: SHRINKFILE's
+			// own 0 stops at the file's creation size.
+			o.TargetMB = new(mb)
 		case shrinkFileEmpty:
 			o.EmptyFile = true
 		}
 		return f, o, nil
 	}
 	// preflight reads the rows on the UI goroutine and leaves the request for
-	// the apply, which runs on the pipeline's. A FileRef carries no Type, so
-	// gosmo can't refuse a FILESTREAM container's other forms; opts does.
-	var name string
+	// the apply, which runs on the pipeline's. The file is the one Files
+	// loaded, not a FileRef: it carries its Type, so gosmo refuses a
+	// FILESTREAM container's other forms itself.
+	var file *gosmo.DatabaseFileInfo
 	var req gosmo.ShrinkFileOptions
 	d.preflight = func() error {
 		f, o, err := opts()
 		if err == nil {
-			name, req = f.Name, o
+			file, req = f, o
 		}
 		return err
 	}
 	d.applyFns[0] = func(ctx context.Context) error {
-		return sc.Server.DatabaseRef(dbName).FileRef(name).ShrinkWith(ctx, req)
+		_, err := file.Shrink(ctx, req)
+		return err
 	}
 }
 

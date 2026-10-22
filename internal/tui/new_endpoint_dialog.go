@@ -402,7 +402,7 @@ func (d *NewEndpointDialog) instanceRows() ([]propsheet.Row, func()) {
 		addNameRow,
 		propsheet.Buttons(addBtn, removeBtn),
 		hint,
-		propsheet.Note("An instance is reached with its own saved connection if you have one, otherwise with this connection's credentials — connect to it once via File > Connect to give it different ones. Each keeps its own certificate; only the public half of each is exchanged, and no private key is read or transmitted."),
+		propsheet.Note("An instance is reached with its own saved connection; one without is offered a Connect prompt pre-filled from this connection. Each keeps its own certificate; only the public half of each is exchanged, and no private key is read or transmitted."),
 		propsheet.Note("Certificates are named <instance>_Cert, and each peer gets a login and user named <instance>_login and <instance>_user to own the certificate it presents. A named instance contributes HOST$INSTANCE, not HOST\\INSTANCE. Anything already present is left alone."),
 	}, commit
 }
@@ -705,7 +705,7 @@ func (d *NewEndpointDialog) ensureEndpoint(ctx context.Context, p *endpointPeer,
 			return fmt.Errorf("%s: create endpoint: %w", p.inst.name, err)
 		}
 	}
-	if !strings.EqualFold(ep.State, "STARTED") {
+	if ep.State != gosmo.EndpointStarted {
 		if err := ep.Start(ctx); err != nil {
 			return fmt.Errorf("%s: start endpoint %s: %w", p.inst.name, ep.Name, err)
 		}
@@ -743,7 +743,7 @@ func (d *NewEndpointDialog) runScript() {
 	var groups []endpointScriptGroup
 	scriptCtx = withEndpointScript(scriptCtx, &groups)
 	sc := d.sc
-	d.runPipeline(scriptCtx, func() {
+	d.runPipeline(scriptCtx, func(string) {
 		d.app.openQueryWithText(sc, "", annotateEndpointScript(groups))
 	})
 }

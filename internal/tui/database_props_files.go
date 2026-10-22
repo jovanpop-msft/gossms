@@ -20,7 +20,7 @@ var databaseFileColumns = []string{"Logical name", "Type", "Filegroup", "Size", 
 
 // logFileType is sys.database_files' type_desc for a transaction log file,
 // the one file type that belongs to no filegroup.
-const logFileType = "LOG"
+const logFileType = string(gosmo.FileLog)
 
 // addableFileTypes are the file types the picker offers: the two
 // sys.database_files reports that ALTER DATABASE ... ADD FILE names in the
@@ -35,7 +35,7 @@ var addableFileTypes = []string{"ROWS", logFileType}
 // FILESTREAM purely by going into a FILESTREAM filegroup. The same clause aimed
 // at a ROWS filegroup produces an ordinary data file (measured against a real
 // FILESTREAM database). See fileEdit.spec.
-const filestreamFileType = "FILESTREAM"
+const filestreamFileType = string(gosmo.FileStream)
 
 // noFilegroupItem is what the Filegroup dropdown shows for a LOG file. The list
 // is filegroup names with no empty entry, so indexOf's not-found 0 left PRIMARY
@@ -71,7 +71,7 @@ type fileEdit struct {
 
 func fileEditFromInfo(fl *gosmo.DatabaseFileInfo) *fileEdit {
 	return &fileEdit{
-		origName: fl.Name, name: fl.Name, fileType: fl.Type, fileGroup: fl.FileGroup, path: fl.PhysicalName,
+		origName: fl.Name, name: fl.Name, fileType: string(fl.Type), fileGroup: fl.FileGroup, path: fl.PhysicalName,
 		sizeKB: fl.SizeKB, isPercentGrowth: fl.IsPercentGrowth, growthKB: fl.GrowthKB, growthPercent: fl.GrowthPercent, maxSizeKB: fl.MaxSizeKB,
 		origSizeKB: fl.SizeKB, origIsPercentGrowth: fl.IsPercentGrowth, origGrowthKB: fl.GrowthKB, origGrowthPercent: fl.GrowthPercent, origMaxSizeKB: fl.MaxSizeKB,
 	}
@@ -155,7 +155,7 @@ func (e *fileEdit) shrinks() bool {
 // file, which has no size or autogrowth to send.
 func (e *fileEdit) spec() gosmo.DatabaseFileSpec {
 	spec := gosmo.DatabaseFileSpec{
-		Name: e.name, Type: e.fileType, Path: e.path, MaxSizeKB: e.maxSizeKB,
+		Name: e.name, Type: gosmo.FileType(e.fileType), Path: e.path, MaxSizeKB: e.maxSizeKB,
 	}
 	// A LOG file belongs to no filegroup and gosmo ignores the field; leaving it
 	// empty keeps the spec honest rather than relying on that.
@@ -227,8 +227,8 @@ func fileSizeText(kb int64) string {
 // shrinkStoppedNote says where a shrink to targetKB stopped when that is above
 // the target, "" otherwise: SHRINKFILE stops at the space the file's data
 // occupies, without an error, and without this the only sign is the reloaded
-// grid (review plan N2). The target is compared as sent — whole MB, at least
-// 1 (gosmo's Shrink) — so 0 MB reaching 1 MB isn't reported. Under WithScript
+// grid (review plan N2). The target is compared as sent — whole MB, rounded up
+// by the apply, at least 1 (gosmo's Shrink) — so 0 MB reaching 1 MB isn't reported. Under WithScript
 // reached is 0, never above.
 func shrinkStoppedNote(name string, targetKB, reachedKB int64) string {
 	sentKB := max((targetKB+1023)/1024, 1) * 1024
@@ -587,11 +587,12 @@ func pageDatabaseFiles(sc *db.ServerConn, dbName string) propPage {
 						}
 						// After the Alter, so a renamed file is shrunk by its new name.
 						if e.shrinks() {
-							reached, err := d.FileRef(e.name).Shrink(ctx, e.sizeKB)
+							// SHRINKFILE takes whole MB: rounded up, so the file never ends below the size asked for.
+							res, err := d.FileRef(e.name).Shrink(ctx, gosmo.ShrinkFileOptions{TargetMB: new((e.sizeKB + 1023) / 1024)})
 							if err != nil {
 								return err
 							}
-							if note := shrinkStoppedNote(e.name, e.sizeKB, reached); note != "" {
+							if note := shrinkStoppedNote(e.name, e.sizeKB, res.CurrentKB); note != "" {
 								noteApply(ctx, note)
 							}
 						}

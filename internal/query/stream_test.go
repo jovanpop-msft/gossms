@@ -129,7 +129,7 @@ func TestStreamAndScanRenderIdenticalCells(t *testing.T) {
 	bufDB := openFakeRowsDB(streamTestCols, streamTestRows())
 	defer bufDB.Close()
 	bufRows := queryFakeRows(t, bufDB)
-	rs, err := scanResultSet(bufRows, nil)
+	rs, err := scanResultSet(bufRows, nil, 0)
 	bufRows.Close()
 	if err != nil {
 		t.Fatalf("scanResultSet: %v", err)
@@ -139,7 +139,7 @@ func TestStreamAndScanRenderIdenticalCells(t *testing.T) {
 	defer streamDB.Close()
 	streamRows := queryFakeRows(t, streamDB)
 	sink := &recordingSink{}
-	n, _, err := streamResultSet(streamRows, sink, nil)
+	n, _, err := streamResultSet(streamRows, sink, nil, 0)
 	streamRows.Close()
 	if err != nil {
 		t.Fatalf("streamResultSet: %v", err)
@@ -185,7 +185,7 @@ func TestScanAndStreamMarkOnlyRealNulls(t *testing.T) {
 	bufDB := openFakeRowsDB(cols, rows())
 	defer bufDB.Close()
 	bufRows := queryFakeRows(t, bufDB)
-	rs, err := scanResultSet(bufRows, nil)
+	rs, err := scanResultSet(bufRows, nil, 0)
 	bufRows.Close()
 	if err != nil {
 		t.Fatalf("scanResultSet: %v", err)
@@ -194,7 +194,7 @@ func TestScanAndStreamMarkOnlyRealNulls(t *testing.T) {
 	defer streamDB.Close()
 	streamRows := queryFakeRows(t, streamDB)
 	sink := &recordingSink{}
-	if _, _, err := streamResultSet(streamRows, sink, nil); err != nil {
+	if _, _, err := streamResultSet(streamRows, sink, nil, 0); err != nil {
 		t.Fatalf("streamResultSet: %v", err)
 	}
 	streamRows.Close()
@@ -253,7 +253,7 @@ func TestStreamResultSetWritesEveryRow(t *testing.T) {
 
 	r := queryFakeRows(t, db)
 	sink := &recordingSink{}
-	n, _, err := streamResultSet(r, sink, nil)
+	n, _, err := streamResultSet(r, sink, nil, 0)
 	r.Close()
 	if err != nil {
 		t.Fatalf("streamResultSet: %v", err)
@@ -275,7 +275,7 @@ func TestStreamResultSetReportsSinkFailure(t *testing.T) {
 
 	r := queryFakeRows(t, db)
 	sink := &recordingSink{failOn: 2}
-	n, _, err := streamResultSet(r, sink, nil)
+	n, _, err := streamResultSet(r, sink, nil, 0)
 	r.Close()
 	if err == nil {
 		t.Fatal("streamResultSet returned nil error after the sink failed")
@@ -301,7 +301,7 @@ func TestStreamResultSetEndsASetWhoseBeginFailed(t *testing.T) {
 
 	r := queryFakeRows(t, db)
 	sink := &beginFailSink{}
-	n, _, err := streamResultSet(r, sink, nil)
+	n, _, err := streamResultSet(r, sink, nil, 0)
 	r.Close()
 
 	if err == nil {
@@ -354,7 +354,7 @@ func TestProgressCountsScannedRows(t *testing.T) {
 	bufDB := openFakeRowsDB(streamTestCols, streamTestRows())
 	defer bufDB.Close()
 	bufRows := queryFakeRows(t, bufDB)
-	_, err := scanResultSet(bufRows, &prog)
+	_, err := scanResultSet(bufRows, &prog, 0)
 	bufRows.Close()
 	if err != nil {
 		t.Fatalf("scanResultSet: %v", err)
@@ -367,7 +367,7 @@ func TestProgressCountsScannedRows(t *testing.T) {
 	streamDB := openFakeRowsDB(streamTestCols, streamTestRows())
 	defer streamDB.Close()
 	streamRows := queryFakeRows(t, streamDB)
-	_, _, err = streamResultSet(streamRows, &recordingSink{}, &prog)
+	_, _, err = streamResultSet(streamRows, &recordingSink{}, &prog, 0)
 	streamRows.Close()
 	if err != nil {
 		t.Fatalf("streamResultSet: %v", err)

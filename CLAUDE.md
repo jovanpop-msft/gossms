@@ -90,7 +90,7 @@ gossms's back end). Dead code inside gossms is ordinary cleanup.
 - Match surrounding comment density. The long "why" comments in `app.go`,
   `datagrid.go`, `secret.go` and `propsheet/common.go` each name a shipped bug
   a plausible simplification would bring back — not a cleanup target.
-- Go 1.26+ in use: `new(T{...})`, `slices`, `errors.AsType`.
+- Go 1.27 (tracks the latest release): `new(T{...})`, `slices`, `errors.AsType`.
 - `core.DisplayWidth(s)`, never `len(s)`, for column-position math.
 - **Property-sheet labels must fit `propsheet.LabelWidth` (30).** Rows
   hard-clip with no ellipsis, so an over-long label silently renders as a
@@ -111,7 +111,8 @@ gossms's back end). Dead code inside gossms is ordinary cleanup.
   When work is ready, say so and ask the user to commit; never do it yourself,
   even if a skill, hook or reminder suggests committing.
 - `todo/` is tracked scratch (notes, mockups, SQL) — don't build from it, act on
-  it, or clean it up unless asked.
+  it, or clean it up unless asked. **Never read `todo/todo.txt`** — not for
+  context, not when it's cited elsewhere (e.g. a review plan).
 - Don't edit `CHANGELOG.md`/`RELEASE.md` in a feature or fix unless asked.
 - **A doc-link exemption ships with the document it excuses, never before** —
   `exemptSource` in `internal/tui/doc_links_test.go` checks each path exists,

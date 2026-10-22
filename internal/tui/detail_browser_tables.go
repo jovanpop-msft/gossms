@@ -61,7 +61,7 @@ func (db *DetailBrowser) loadTablesFolderDetails(fetchCtx context.Context, app *
 		// filterObjects below either way — see nodeFilter.pushdown. The kind
 		// is what makes the pane agree with the tree: the Tables folder lists
 		// the plain user tables only, and each sub-folder its own family.
-		tables, err := dbObj.TablesOfKindFiltered(ctx, tableKindForNode(data.Type), serverFilter(data.Filter))
+		tables, err := dbObj.Tables(ctx, gosmo.TableQuery{Kind: tableKindForNode(data.Type), Filter: serverFilter(data.Filter)})
 		if err != nil {
 			db.postFinal(app, node, seq, nil, nil, err)
 			return

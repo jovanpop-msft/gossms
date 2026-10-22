@@ -29,7 +29,7 @@ import (
 // dialogs' size reads go through a USE) and fails on a read-only one, so the
 // script could only fail.
 func shrinkMenuItem(a *App, sc *db.ServerConn, node *explorerNode) (controls.MenuItem, bool) {
-	if node.data.DBState != "ONLINE" || node.data.DBReadOnly {
+	if node.data.DBState != gosmo.DatabaseOnline || node.data.DBReadOnly {
 		return controls.MenuItem{}, false
 	}
 	dbName := node.data.DBName
@@ -154,7 +154,7 @@ func (d *ShrinkDatabaseDialog) buildPages(pf *shrinkDatabasePrefetch) {
 		propsheet.Static("Available free space", shrinkFreeText(pf.freeKB, pf.allocatedKB)),
 		propsheet.Section("Shrink action"),
 		reorganize,
-		propsheet.Note("Selecting this option may affect performance."),
+		propsheet.Note("Ticked or not, the shrink moves pages toward the start of each file, then releases the free space at the end. Ticking only adds the free-space target below."),
 		percent,
 		propsheet.Note("The free space, as a percentage of each file, left in it once shrunk. Unticked, the database shrinks as far as its contents allow."),
 	}

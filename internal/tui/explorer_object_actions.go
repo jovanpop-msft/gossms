@@ -29,9 +29,9 @@ func objectDisplayName(n *explorerNode) string { return objectDataName(n.data) }
 // objectDataName is objectDisplayName for a nodeData on its own (the Details
 // pane holds no node).
 func objectDataName(n nodeData) string {
-	// A column's own Schema/Name are the table's schema and the column's name, so
-	// the meaningful qualifier is the table's.
-	if n.Type == NodeColumn {
+	// A column's own Schema/Name are the table's (or view's) schema and the
+	// column's name, so the meaningful qualifier is the table's.
+	if n.Type == NodeColumn || n.Type == NodeViewColumn {
 		return n.Schema + "." + n.TableName + "." + n.Name
 	}
 	if n.Schema != "" && n.Type != NodeSchema {

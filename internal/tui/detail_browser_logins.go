@@ -37,7 +37,7 @@ func (db *DetailBrowser) loadLoginsDetails(fetchCtx context.Context, app *App, s
 			if l.IsDisabled {
 				status = "Disabled"
 			}
-			rows = append(rows, []string{l.Name, l.LoginType, status, l.DefaultDatabase, formatSQLDate(l.CreateDate)})
+			rows = append(rows, []string{l.Name, string(l.LoginType), status, l.DefaultDatabase, formatSQLDate(l.CreateDate)})
 			objs = append(objs, nodeData{Type: NodeLogin, Name: l.Name})
 		}
 		cols := []string{"Name", "Type", "Status", "Default Database", "Created"}

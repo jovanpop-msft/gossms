@@ -38,7 +38,7 @@ func TestStreamResultSetIsExhaustedWhenOnlyEndSetFailed(t *testing.T) {
 
 	r := queryFakeRows(t, db)
 	sink := &endFailSink{}
-	n, exhausted, err := streamResultSet(r, sink, nil)
+	n, exhausted, err := streamResultSet(r, sink, nil, 0)
 	r.Close()
 
 	if err == nil {
@@ -60,7 +60,7 @@ func TestStreamResultSetIsNotExhaustedWhenASinkRowFailed(t *testing.T) {
 
 	r := queryFakeRows(t, db)
 	sink := &recordingSink{failOn: 2}
-	n, exhausted, err := streamResultSet(r, sink, nil)
+	n, exhausted, err := streamResultSet(r, sink, nil, 0)
 	r.Close()
 
 	if err == nil {
@@ -187,7 +187,7 @@ func TestScanRendersRealAtItsOwnPrecision(t *testing.T) {
 	rows := queryFakeRows(t, db)
 	defer rows.Close()
 
-	rs, err := scanResultSet(rows, nil)
+	rs, err := scanResultSet(rows, nil, 0)
 	if err != nil {
 		t.Fatal(err)
 	}

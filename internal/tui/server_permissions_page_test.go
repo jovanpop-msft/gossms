@@ -216,3 +216,30 @@ func TestServerPermissionsWriteNothingWhenUntouched(t *testing.T) {
 			len(stmts), len(gosmo.ServerPermissionNames()), stmts)
 	}
 }
+
+// TestNewLoginSecurablesGrantWithGrantIsAGrant pins the New Login Securables
+// page's apply: its grid cycles through Grant With Grant like every other
+// permissions grid, and that state is not a verb. Sent as one, gosmo refused
+// it ("unknown verb") after the login had already been created.
+func TestNewLoginSecurablesGrantWithGrantIsAGrant(t *testing.T) {
+	sc, inst := newFakeConn(t)
+	form, apply := buildNewLoginSecurablesPage(sc, func() string { return "newlogin" })
+
+	gr := permGrid(t, form)
+	cyclePermTo(t, gr, permRowIndex(t, gr, "ALTER ANY LOGIN"), "Grant With Grant")
+	cyclePermTo(t, gr, permRowIndex(t, gr, "CONTROL SERVER"), "Deny")
+
+	if err := apply(context.Background()); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	stmts := inst.Statements()
+	if len(stmts) != 2 {
+		t.Fatalf("want two statements, got %d: %q", len(stmts), stmts)
+	}
+	if want := "GRANT ALTER ANY LOGIN TO [newlogin] WITH GRANT OPTION"; !strings.Contains(stmts[0], want) {
+		t.Errorf("Grant With Grant wrote %q, want it to contain %q", stmts[0], want)
+	}
+	if want := "DENY CONTROL SERVER TO [newlogin]"; !strings.Contains(stmts[1], want) {
+		t.Errorf("Deny wrote %q, want it to contain %q", stmts[1], want)
+	}
+}

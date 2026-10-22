@@ -150,6 +150,36 @@ func TestOptionsApplyMaxTextColumnLength(t *testing.T) {
 	}
 }
 
+// Max fetch rows takes a positive number; anything else is 0, unlimited.
+func TestOptionsApplyMaxFetchRows(t *testing.T) {
+	scratchConfigHome(t)
+	t.Cleanup(func() { controls.SetDefaultIndentWidth(controls.DefaultIndentWidth) })
+
+	for _, tc := range []struct {
+		in   string
+		want int
+	}{
+		{"1000", 1000},
+		{"", 0},
+		{"0", 0},
+		{"-3", 0},
+		{"many", 0},
+	} {
+		a := newTestApp()
+		a.cfg.MaxFetchRows = 50
+		d := NewOptionsDialog(a)
+		d.Show()
+		if got := d.fMaxFetchRows.Value(); got != "50" {
+			t.Fatalf("Show() pre-filled %q, want \"50\"", got)
+		}
+		d.fMaxFetchRows.SetValue(tc.in)
+		d.apply()
+		if got := a.cfg.MaxFetchRows; got != tc.want {
+			t.Errorf("apply(%q): MaxFetchRows = %d, want %d", tc.in, got, tc.want)
+		}
+	}
+}
+
 // optionsFocusName names what has keyboard focus on the Options dialog.
 func optionsFocusName(d *OptionsDialog) string {
 	if d.onButtons() {
@@ -168,6 +198,8 @@ func optionsFocusName(d *OptionsDialog) string {
 		return "indent"
 	case d.fXECapacity:
 		return "xecap"
+	case d.fMaxFetchRows:
+		return "fetchrows"
 	case d.cbIntelliSense:
 		return "intellisense"
 	}
@@ -192,9 +224,9 @@ func TestOptionsDialogKeyboardWalk(t *testing.T) {
 	}{
 		{"Tab", tcell.KeyTab}, {"Tab", tcell.KeyTab}, {"Tab", tcell.KeyTab}, {"Tab", tcell.KeyTab},
 		{"Tab", tcell.KeyTab}, {"Tab", tcell.KeyTab}, {"Tab", tcell.KeyTab}, {"Tab", tcell.KeyTab},
-		{"Tab", tcell.KeyTab},
+		{"Tab", tcell.KeyTab}, {"Tab", tcell.KeyTab},
 		{"Right", tcell.KeyRight}, {"Left", tcell.KeyLeft}, {"Left", tcell.KeyLeft},
-		{"Tab", tcell.KeyTab}, {"Up", tcell.KeyUp},
+		{"Tab", tcell.KeyTab}, {"Up", tcell.KeyUp}, {"Backtab", tcell.KeyBacktab},
 		{"Backtab", tcell.KeyBacktab}, {"Up", tcell.KeyUp}, {"Backtab", tcell.KeyBacktab},
 		{"Up", tcell.KeyUp}, {"Backtab", tcell.KeyBacktab}, {"Backtab", tcell.KeyBacktab},
 		{"Down", tcell.KeyDown}, {"Up", tcell.KeyUp}, {"Down", tcell.KeyDown}, {"Down", tcell.KeyDown},
@@ -210,10 +242,10 @@ func TestOptionsDialogKeyboardWalk(t *testing.T) {
 		fmt.Fprintf(&b, " %s>%s(%v,%v)", k.n, optionsFocusName(d), ok, d.FocusedClipboardTarget() != nil)
 	}
 	const want = "icons Tab>theme(true,false) Tab>cell(true,true) Tab>text(true,true) Tab>indent(true,true) " +
-		"Tab>xecap(true,true) Tab>intellisense(true,false) Tab>button0(true,false) Tab>button1(true,false) " +
+		"Tab>xecap(true,true) Tab>fetchrows(true,true) Tab>intellisense(true,false) Tab>button0(true,false) Tab>button1(true,false) " +
 		"Tab>button0(true,false) Right>button1(true,false) Left>button0(true,false) " +
 		"Left>intellisense(true,false) Tab>button0(true,false) Up>intellisense(true,false) " +
-		"Backtab>xecap(true,true) Up>indent(true,true) Backtab>text(true,true) Up>cell(true,true) " +
+		"Backtab>fetchrows(true,true) Backtab>xecap(true,true) Up>indent(true,true) Backtab>text(true,true) Up>cell(true,true) " +
 		"Backtab>theme(true,false) Backtab>icons(true,false) Down>icons(true,false) Up>icons(true,false) " +
 		"Down>icons(true,false) Down>icons(true,false) Down>icons(true,false) Down>theme(true,false) " +
 		"Down>theme(true,false) F5>theme(true,false) Up>theme(true,false) F5>theme(true,false) " +

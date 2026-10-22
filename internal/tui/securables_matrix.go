@@ -71,8 +71,8 @@ func (s securable) gosmo(columns []string) gosmo.Securable {
 type securableEdit struct {
 	sec        securable
 	permission string
-	orig       string
-	current    string
+	orig       gosmo.PermissionState
+	current    gosmo.PermissionState
 }
 
 // columnEdit tracks one (securable, permission, column) cell's pending state —
@@ -83,8 +83,8 @@ type columnEdit struct {
 	sec        securable
 	permission string
 	column     string
-	orig       string
-	current    string
+	orig       gosmo.PermissionState
+	current    gosmo.PermissionState
 }
 
 func columnEditKey(sec securable, permission, column string) string {
@@ -211,7 +211,7 @@ func buildSecurablesMatrix(
 	applyFn securableApplyFn, colApplyFn columnApplyFn,
 ) (*propsheet.Form, propApply) {
 	type entryKey struct{ secKey, permission string }
-	existing := make(map[entryKey]string, len(entries))
+	existing := make(map[entryKey]gosmo.PermissionState, len(entries))
 	for _, e := range entries {
 		k := securable{Type: e.SecurableType, Schema: e.Schema, Name: e.Name}
 		existing[entryKey{k.key(), e.Permission}] = e.State
@@ -245,7 +245,7 @@ func buildSecurablesMatrix(
 		// VIEW, the Type the securable list gives them, and keying them as TABLE
 		// makes columnEditKey miss so an existing grant shows as "(none)".
 		sec := securable{Type: e.ObjectType, Schema: e.Schema, Name: e.Object}
-		state := string(e.State)
+		state := e.State
 		colEdits[columnEditKey(sec, string(e.Permission), e.Column)] = &columnEdit{
 			sec: sec, permission: string(e.Permission), column: e.Column,
 			orig: state, current: state,

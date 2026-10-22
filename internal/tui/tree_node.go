@@ -217,6 +217,11 @@ const (
 	NodeSearchPropertyLists
 	NodeSearchPropertyList
 	NodeExternalFunctions
+	// NodeViewColumns and NodeViewColumn are a view's Columns folder and its
+	// columns: types of their own, not NodeColumns/NodeColumn, because every
+	// table-column action (Delete, Rename) is ALTER TABLE, which a view refuses.
+	NodeViewColumns
+	NodeViewColumn
 	NodeLoading
 	NodeError
 
@@ -232,7 +237,7 @@ func isContainerNode(t NodeType) bool {
 	switch t {
 	case NodeDatabases, NodeSystemDatabases, NodeDatabaseSnapshots, NodeTables,
 		NodeSystemTables, NodeFileTables, NodeExternalTables, NodeGraphTables,
-		NodeColumns, NodeKeys, NodeIndexes,
+		NodeColumns, NodeViewColumns, NodeKeys, NodeIndexes,
 		NodeStatistics, NodeViews, NodeSystemViews,
 		NodeStoredProcedures, NodeSystemProcedures, NodeFunctions, NodeSystemFunctions, NodeExternalFunctions,
 		NodeSecurity, NodeLogins,
@@ -320,6 +325,8 @@ func nodeTypeName(t NodeType) string {
 		return "Server Trigger"
 	case NodeDatabaseTrigger:
 		return "Database Trigger"
+	case NodeViewColumn:
+		return "View Column"
 	case NodeEndpoint:
 		return "Endpoint"
 	case NodeAvailabilityGroup:
@@ -418,7 +425,7 @@ func nodeTypeName(t NodeType) string {
 // hasChildren reports whether this node type can ever have children.
 func hasChildren(t NodeType) bool {
 	switch t {
-	case NodeColumn, NodeLogin, NodeUser, NodeServerRole, NodeDatabaseRole,
+	case NodeColumn, NodeViewColumn, NodeLogin, NodeUser, NodeServerRole, NodeDatabaseRole,
 		NodeCredential, NodeDatabaseScopedCredential, NodeCertificate,
 		NodeAsymmetricKey, NodeSymmetricKey, NodeMasterKey, NodeCryptographicProvider,
 		NodeAudit, NodeServerAuditSpecification,
@@ -463,18 +470,23 @@ func hasChildren(t NodeType) bool {
 // the dialog "Primary Key Properties" vs. "Unique Key Properties" without
 // another round trip.
 type nodeData struct {
-	Type         NodeType
-	Schema       string
-	Name         string
-	TableName    string
-	DBName       string
+	Type      NodeType
+	Schema    string
+	Name      string
+	TableName string
+	DBName    string
+	// OnView marks a view's Indexes and Statistics folders and their leaves,
+	// where TableName (or the folder's Name) is the view's: what an index or
+	// statistic is on decides the extended-property level (VIEW, not TABLE)
+	// and which New Index kinds the folder offers, before anything is read.
+	OnView       bool
 	Loaded       bool
 	IsPrimaryKey bool
 	IsOffline    bool
 	// DBState is a NodeDatabase's sys.databases state_desc (ONLINE, OFFLINE,
-	// RESTORING, …), read at load time; IsOffline is DBState != "ONLINE". The
+	// RESTORING, …), read at load time; IsOffline is DBState != gosmo.DatabaseOnline. The
 	// delete confirmation names what a drop in that state leaves on disk.
-	DBState string
+	DBState gosmo.DatabaseState
 	// DBReadOnly is a NodeDatabase's sys.databases is_read_only, read with
 	// DBState: Shrink is not offered on one, as every DBCC SHRINK* fails there.
 	DBReadOnly bool
@@ -522,6 +534,11 @@ type nodeData struct {
 	// plays for table-scoped nodes: Name on a leaf is the replica or listener, so
 	// the group would be lost once the folder above is flattened away.
 	AGName string
+
+	// UnregisteredPeer is, on a NodeError note, the instance a read could not
+	// follow to because it has no registered connection (agView.unregistered).
+	// Activating the note offers the Connect prompt for it.
+	UnregisteredPeer string
 
 	// AGSuspended and AGIsPrimary carry the two pieces of availability state the
 	// Always On context menus gate on: whether this database's data movement is

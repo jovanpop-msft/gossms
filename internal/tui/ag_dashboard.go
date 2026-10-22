@@ -92,6 +92,13 @@ type AGDashboard struct {
 	snap agSnapshot
 	err  error
 
+	// peerOffered latches the Connect prompt (offerPeerConnect) for a primary
+	// with no registered connection to once per showing: the refusal recurs
+	// every tick, and a declined prompt would otherwise reopen on each. Cleared
+	// by a successful reading, so a later failover to another unregistered
+	// primary prompts again.
+	peerOffered bool
+
 	// paused is atomic: written on the UI goroutine, read by the refresh
 	// goroutine.
 	paused atomic.Bool
@@ -276,13 +283,32 @@ func (d *AGDashboard) apply(snap agSnapshot, err error) {
 			d.topGrid.SetStatus("No data")
 			d.bottomGrid.SetStatus("No data")
 		}
+		d.offerPeerConnect(err)
 		return
 	}
+	d.peerOffered = false
 	d.snap = snap
 	d.setRows(d.topGrid, &d.topRows, d.topColumns(), d.topRowsFrom(snap))
 	d.setRows(d.bottomGrid, &d.bottomRows, d.bottomColumns(), d.bottomRowsFrom(snap))
 	// Re-split now that the top grid's row count is known.
 	d.SetBounds(d.rect.X, d.rect.Y, d.rect.W, d.rect.H)
+}
+
+// offerPeerConnect opens the Connect prompt when err is the primary refused for
+// want of a registered connection; connecting takes a reading at once. Only
+// while the panel is the active one (a prompt over another tab would be about
+// nothing visible) and once per showing (peerOffered). Not latched when
+// offerPeerConnect declines (the Connect dialog already open), so a later tick
+// can still ask.
+func (d *AGDashboard) offerPeerConnect(err error) {
+	if d.peerOffered || !d.active {
+		return
+	}
+	d.peerOffered = d.app.offerPeerConnect(d.conn, err, func() {
+		if d.app.panelHosted(d) {
+			d.forceRefresh()
+		}
+	})
 }
 
 // setRows updates a grid, calling SetData (which resets scroll and selection)
@@ -362,13 +388,13 @@ func agComputeDatabaseMetrics(dbs []*gosmo.AvailabilityDatabase) []agDatabaseMet
 // explains the rest). Empty means healthy.
 func agReplicaIssues(r *gosmo.AvailabilityReplica, dbs []agDatabaseMetrics) string {
 	var issues []string
-	if r.ConnectedState != "" && !strings.EqualFold(r.ConnectedState, "CONNECTED") {
+	if r.ConnectedState != "" && r.ConnectedState != gosmo.ReplicaConnected {
 		issues = append(issues, titleWord(r.ConnectedState))
 	}
-	if r.RecoveryHealth != "" && !strings.EqualFold(r.RecoveryHealth, "ONLINE") {
+	if r.RecoveryHealth != "" && r.RecoveryHealth != gosmo.RecoveryOnline {
 		issues = append(issues, "Recovery "+strings.ToLower(titleWord(r.RecoveryHealth)))
 	}
-	if r.SynchronizationHealth != "" && !strings.EqualFold(r.SynchronizationHealth, "HEALTHY") {
+	if r.SynchronizationHealth != "" && r.SynchronizationHealth != gosmo.SyncHealthy {
 		issues = append(issues, titleWord(r.SynchronizationHealth))
 	}
 	suspended := 0

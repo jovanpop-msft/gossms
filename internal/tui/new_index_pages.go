@@ -215,7 +215,7 @@ func (d *NewIndexDialog) generalForm(pf *nidxPrefetch) *propsheet.Form {
 		propsheet.Section("Index"),
 		d.rows.name,
 		propsheet.Static("Index type", indexTypeName(d.kind.typ)),
-		propsheet.Static("Table", fqn(d.schema, d.table)),
+		propsheet.Static(ownerNoun(d.onView), fqn(d.schema, d.table)),
 	}
 
 	switch {
@@ -235,8 +235,13 @@ func (d *NewIndexDialog) generalForm(pf *nidxPrefetch) *propsheet.Form {
 
 	default:
 		if d.kind.typ != gosmo.IndexTypeColumnStore {
-			d.rows.unique = propsheet.Check("Unique", false)
+			// A view's clustered index must be unique (checkViewRules), so it
+			// starts ticked there.
+			d.rows.unique = propsheet.Check("Unique", pf.onView && d.kind.typ == gosmo.IndexTypeClustered)
 			rows = append(rows, d.rows.unique)
+		}
+		if pf.onView && !pf.schemaBound {
+			rows = append(rows, propsheet.Note("This view is not schema-bound, and only a view created WITH SCHEMABINDING can be indexed."))
 		}
 		rows = append(rows, d.keyColumnRows(pf, d.kind.typ != gosmo.IndexTypeColumnStore)...)
 	}

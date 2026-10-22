@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -11,13 +12,22 @@ import (
 
 // shrinkFilesTestFiles is a database with two filegroups, so the pickers have
 // something to narrow: PRIMARY holds two data files, FG2 one, plus the log.
-func shrinkFilesTestFiles() []*gosmo.DatabaseFileInfo {
+func shrinkFilesTestFiles(sc *db.ServerConn) []*gosmo.DatabaseFileInfo {
 	return sortDatabaseFiles([]*gosmo.DatabaseFileInfo{
-		{FileID: 1, Name: "App", Type: "ROWS", FileGroup: "PRIMARY", PhysicalName: `C:\d\App.mdf`, SizeKB: 72 * 1024, SpaceUsedKB: 19648},
-		{FileID: 2, Name: "App_log", Type: "LOG", PhysicalName: `C:\l\App_log.ldf`, SizeKB: 72 * 1024, SpaceUsedKB: 51064},
-		{FileID: 3, Name: "App_2", Type: "ROWS", FileGroup: "PRIMARY", PhysicalName: `C:\d\App_2.ndf`, SizeKB: 16 * 1024, SpaceUsedKB: 1024},
-		{FileID: 4, Name: "App'fg2", Type: "ROWS", FileGroup: "FG2", PhysicalName: `C:\d\App_fg2.ndf`, SizeKB: 8*1024 + 256, SpaceUsedKB: 512},
+		shrinkTestFile(sc, gosmo.DatabaseFileInfo{FileID: 1, Name: "App", Type: "ROWS", FileGroup: "PRIMARY", PhysicalName: `C:\d\App.mdf`, SizeKB: 72 * 1024, SpaceUsedKB: 19648}),
+		shrinkTestFile(sc, gosmo.DatabaseFileInfo{FileID: 2, Name: "App_log", Type: "LOG", PhysicalName: `C:\l\App_log.ldf`, SizeKB: 72 * 1024, SpaceUsedKB: 51064}),
+		shrinkTestFile(sc, gosmo.DatabaseFileInfo{FileID: 3, Name: "App_2", Type: "ROWS", FileGroup: "PRIMARY", PhysicalName: `C:\d\App_2.ndf`, SizeKB: 16 * 1024, SpaceUsedKB: 1024}),
+		shrinkTestFile(sc, gosmo.DatabaseFileInfo{FileID: 4, Name: "App'fg2", Type: "ROWS", FileGroup: "FG2", PhysicalName: `C:\d\App_fg2.ndf`, SizeKB: 8*1024 + 256, SpaceUsedKB: 512}),
 	})
+}
+
+// shrinkTestFile is a file as Database.Files returns one: a handle bound to
+// AppDB, which the dialog shrinks through, with tpl's catalog fields.
+func shrinkTestFile(sc *db.ServerConn, tpl gosmo.DatabaseFileInfo) *gosmo.DatabaseFileInfo {
+	f := sc.Server.DatabaseRef("AppDB").FileRef(tpl.Name)
+	f.FileID, f.Type, f.FileGroup, f.PhysicalName = tpl.FileID, tpl.Type, tpl.FileGroup, tpl.PhysicalName
+	f.SizeKB, f.SpaceUsedKB = tpl.SizeKB, tpl.SpaceUsedKB
+	return f
 }
 
 func shrinkFilesTestDialog(t *testing.T, sc *db.ServerConn) *ShrinkFilesDialog {
@@ -27,7 +37,7 @@ func shrinkFilesTestDialog(t *testing.T, sc *db.ServerConn) *ShrinkFilesDialog {
 	d.pages = []string{"General"}
 	d.forms = make([]*propsheet.Form, 1)
 	d.applyFns = make([]propApply, 1)
-	d.buildPages(&shrinkFilesPrefetch{files: shrinkFilesTestFiles()})
+	d.buildPages(&shrinkFilesPrefetch{files: shrinkFilesTestFiles(sc)})
 	return d
 }
 
@@ -197,8 +207,8 @@ func TestShrinkFilesFilestreamOnlyEmpties(t *testing.T) {
 	d.pages = []string{"General"}
 	d.forms = make([]*propsheet.Form, 1)
 	d.applyFns = make([]propApply, 1)
-	files := append(shrinkFilesTestFiles(),
-		&gosmo.DatabaseFileInfo{FileID: 65537, Name: "fs1", Type: "FILESTREAM", FileGroup: "FSG", PhysicalName: `C:\fs\fs1`})
+	files := append(shrinkFilesTestFiles(sc),
+		shrinkTestFile(sc, gosmo.DatabaseFileInfo{FileID: 65537, Name: "fs1", Type: "FILESTREAM", FileGroup: "FSG", PhysicalName: `C:\fs\fs1`}))
 	d.buildPages(&shrinkFilesPrefetch{files: files})
 	f := d.forms[0]
 	action := radioRow(t, f, "Shrink action")
@@ -225,10 +235,18 @@ func TestShrinkFilesFilestreamOnlyEmpties(t *testing.T) {
 	if got := shrinkScript(t, d.preflight, d.applyFns[0]); !strings.Contains(got, "DBCC SHRINKFILE (N'fs1', EMPTYFILE)") {
 		t.Errorf("script = %q, want DBCC SHRINKFILE (N'fs1', EMPTYFILE)", got)
 	}
-	// Even were the group forced onto another action, preflight refuses it.
+	// Even were the group forced onto another action, gosmo refuses it: the
+	// apply shrinks the file Files loaded, which knows its Type, not a FileRef.
 	action.SetSelected(shrinkFileReorganize)
-	if err := d.preflight(); err == nil || !strings.Contains(err.Error(), "EMPTYFILE") {
-		t.Errorf("preflight = %v, want the FILESTREAM refusal", err)
+	if err := d.preflight(); err != nil {
+		t.Fatalf("preflight: %v", err)
+	}
+	ctx, script := gosmo.WithScript(context.Background())
+	if err := d.applyFns[0](ctx); err == nil || !strings.Contains(err.Error(), "EMPTYFILE") {
+		t.Errorf("apply = %v, want gosmo's FILESTREAM refusal", err)
+	}
+	if got := script.String(); got != "" {
+		t.Errorf("refused shrink captured %q, want nothing", got)
 	}
 
 	editSelect(t, f, "File type", "Log")

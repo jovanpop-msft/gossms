@@ -189,7 +189,7 @@ func (d *NewAGDialog) fetchPrefetch(ctx context.Context, sc *db.ServerConn) (*ne
 	case ep == nil:
 		pf.blocker = fmt.Sprintf("%s has no database mirroring endpoint. Every replica needs one before a group can name it. Use \"New Database Mirroring Endpoint...\" on the Always On High Availability node to create one on this instance and each of its peers, exchanging certificates between them, then reopen this dialog.", sc.Opts.Server)
 		return pf, nil
-	case !strings.EqualFold(ep.State, "STARTED"):
+	case ep.State != gosmo.EndpointStarted:
 		pf.blocker = fmt.Sprintf("%s's database mirroring endpoint %q is %s, not STARTED. A replica behind a stopped endpoint never connects.", sc.Opts.Server, ep.Name, ep.State)
 		return pf, nil
 	}
@@ -394,7 +394,7 @@ func agSecondaries(req gosmo.CreateAvailabilityGroupRequest) []gosmo.Availabilit
 func (d *NewAGDialog) runScript() {
 	scriptCtx, script := gosmo.WithScript(d.ctx)
 	sc := d.sc
-	d.runPipeline(scriptCtx, func() {
+	d.runPipeline(scriptCtx, func(string) {
 		d.app.openQueryWithText(sc, "", multiInstanceScript("New Availability Group", script))
 	})
 }

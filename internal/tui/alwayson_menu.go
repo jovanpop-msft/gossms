@@ -243,6 +243,13 @@ func (a *App) runAGOperation(sc *db.ServerConn, agName string, op agOperation) {
 			a.explorer.ReloadFolders(sc, sameNodeAs(op.refresh))
 		case err != nil:
 			a.setStatus(fmt.Sprintf("Failed to %s: %v", op.what, err))
+			// Refused before anything was written: the instance it needed
+			// has no registered connection. The prompt only registers one —
+			// a write the user confirmed against a dialog now gone is not
+			// re-run behind a Connect, so they repeat it.
+			a.offerPeerConnect(sc, err, func() {
+				a.setStatus(fmt.Sprintf("Connected — run %s again", op.title))
+			})
 		default:
 			a.setStatus(op.done)
 			a.explorer.ReloadFolders(sc, sameNodeAs(op.refresh))

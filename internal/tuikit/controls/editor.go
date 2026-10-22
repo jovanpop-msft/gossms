@@ -7,7 +7,6 @@ import (
 
 	"github.com/gdamore/tcell/v3"
 	"github.com/radix29/gossms/internal/tuikit/core"
-	"github.com/radix29/gossms/internal/tuikit/sqltext"
 )
 
 // ---------------------------------------------------------------------------
@@ -21,7 +20,8 @@ import (
 //
 // A highlighter caching such state must key the cache on doc.Version() and the
 // *Document itself: the version says whether the text changed, the pointer
-// whether it is the same document. Both built-in highlighters do.
+// whether it is the same document. Both built-in highlighters do, SQL's through
+// the cache on the Document itself.
 type Highlighter func(doc *Document, idx int) []ColorRun
 
 // ColorRun describes a coloured segment within an editor line. Start and Len are
@@ -141,10 +141,6 @@ type Editor struct {
 	// through the OS clipboard from ordinary multi-line text, pasting it back
 	// rectangularly. Cleared by any non-block copy.
 	blockClip string
-
-	// sqlStarts is SQLLineState's cache, separate from the SQL highlighter's: that
-	// one lives in its closure, and an Editor showing XML has none.
-	sqlStarts prefixStates[sqltext.State]
 
 	// sbDragging latches a scrollbar-thumb drag. Separate from mouseDragging: once
 	// set, every Button1 event controls the bar regardless of x.

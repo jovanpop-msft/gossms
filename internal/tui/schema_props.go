@@ -67,10 +67,10 @@ func pageSchemaGeneral(sc *db.ServerConn, dbName, schemaName string) propPage {
 			grants, denies, withGrant := 0, 0, 0
 			for _, p := range perms {
 				principalsSet[p.Principal] = true
-				switch string(p.State) {
-				case "DENY":
+				switch p.State {
+				case gosmo.PermissionDeny:
 					denies++
-				case "GRANT_WITH_GRANT_OPTION":
+				case gosmo.PermissionGrantWithGrantOption:
 					grants++
 					withGrant++
 				default:
@@ -81,7 +81,7 @@ func pageSchemaGeneral(sc *db.ServerConn, dbName, schemaName string) propPage {
 			ownerType := "Database role"
 			for _, u := range users {
 				if u.Name == schema.Owner {
-					ownerType = u.UserType
+					ownerType = string(u.UserType)
 					break
 				}
 			}

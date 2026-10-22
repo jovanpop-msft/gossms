@@ -156,7 +156,7 @@ func (d *newObjectDialog[P]) probeReplicaEndpoint(label, name string,
 // and reopened is dropped, and the propFetchTimeout derives from that context,
 // so a disconnect tears the probe down.
 func (d *newObjectDialog[P]) probe(label string, work func(ctx context.Context) error, onDone func(error)) {
-	sessionCtx := d.ctx
+	sessionCtx, sc := d.ctx, d.sc
 	d.app.safego(label, func() {
 		ctx, cancel := context.WithTimeout(sessionCtx, propFetchTimeout)
 		defer cancel()
@@ -166,6 +166,16 @@ func (d *newObjectDialog[P]) probe(label string, work func(ctx context.Context) 
 				return
 			}
 			onDone(err)
+			// An instance with no registered connection is offered the Connect
+			// prompt, and connecting re-runs the probe. onDone has already
+			// reported the refusal, so declining the prompt leaves the dialog
+			// as any failure does. The retry is dropped if this showing ended
+			// while the prompt was up.
+			d.app.offerPeerConnect(sc, err, func() {
+				if d.ctx == sessionCtx && sessionCtx.Err() == nil {
+					d.probe(label, work, onDone)
+				}
+			})
 		})
 	})
 }
@@ -275,6 +285,13 @@ func (d *newObjectDialog[P]) onLoadPage(page, seq int) {
 				for _, r := range waiting {
 					d.SetPageError(r.page, r.seq, displayError(err))
 				}
+				// A prefetch through the group's primary (Add Database, Add
+				// Listener, Add Replica) refused for want of a registered
+				// connection offers the Connect prompt; connecting refetches.
+				showing := d.ctx
+				d.app.offerPeerConnectForSheet(sc, err, d, len(d.pages), func() bool {
+					return d.ctx == showing && showing.Err() == nil && d.Visible()
+				})
 				return
 			}
 			d.prefetch = pf
@@ -327,8 +344,9 @@ func pipelineLabel(runCtx context.Context) string {
 // runPipeline validates the dialog and, if it passes, runs every page's apply in
 // order on a background goroutine, stopping at the first error. runCtx is d.ctx
 // for a real Apply/OK and a gosmo.WithScript context for Script Changes, the only
-// difference between the paths.
-func (d *newObjectDialog[P]) runPipeline(runCtx context.Context, onSuccess func()) {
+// difference between the paths. onSuccess gets what the steps noted (noteApply),
+// "" for nothing.
+func (d *newObjectDialog[P]) runPipeline(runCtx context.Context, onSuccess func(notes string)) {
 	if d.prefetch == nil {
 		d.SetMessage("Still loading — try again in a moment.", true)
 		return
@@ -354,27 +372,19 @@ func (d *newObjectDialog[P]) runPipeline(runCtx context.Context, onSuccess func(
 		return
 	}
 
-	fns := d.applyFns
-	d.StartApplying(pipelineLabel(runCtx))
-	d.SetMessage("", false)
-	runCtx = d.run.start(withCreatedHandoff(runCtx))
-	stop := d.run.stop
-
-	done := make(chan struct{})
-	d.app.animateUntil("animating the create dialog spinner", propsheet.ApplyingSpinner.Period, done)
-	d.app.watchBlocking(d.sc, pipelineLabel(runCtx), done, d.SetApplyingLabel)
-	d.app.safegoRepair("creating the object", d.applyPanicked, func() {
-		defer close(done)
-		defer stop()
-		progress, runErr := runApplySteps(runCtx, fns)
-		d.post(func() {
-			d.SetApplying(false)
-			if runErr != nil {
-				d.createFailed(runCtx, runErr, progress)
-				return
-			}
-			onSuccess()
-		})
+	d.app.runApplyPipeline(applyHost{
+		sheet:    d.PropertySheet,
+		sc:       d.sc,
+		run:      &d.run,
+		spinner:  "animating the create dialog spinner",
+		work:     "creating the object",
+		panicked: d.applyPanicked,
+	}, withCreatedHandoff(runCtx), d.applyFns, func(runCtx context.Context, progress applyProgress, runErr error, notes string) {
+		if runErr != nil {
+			d.createFailed(runCtx, runErr, progress)
+			return
+		}
+		onSuccess(notes)
 	})
 }
 
@@ -477,9 +487,13 @@ func (d *newObjectDialog[P]) runApply(hideOnSuccess bool) {
 			d.noun, d.objectName(), orDefault(d.verb, "created")), true)
 		return
 	}
-	d.runPipeline(d.ctx, func() {
+	d.runPipeline(d.ctx, func(notes string) {
 		d.created = true
-		d.app.setStatus(fmt.Sprintf("%s %q %s", d.noun, d.objectName(), orDefault(d.verb, "created")))
+		status := fmt.Sprintf("%s %q %s", d.noun, d.objectName(), orDefault(d.verb, "created"))
+		if notes != "" {
+			status += ". " + notes
+		}
+		d.app.setStatus(status)
 		d.refresh(d.sc)
 		if hideOnSuccess {
 			d.Dismiss()
@@ -523,7 +537,7 @@ func scriptSafeAlert(ctx context.Context, sc *db.ServerConn, name string) (*gosm
 func (d *newObjectDialog[P]) runScript() {
 	scriptCtx, script := gosmo.WithScript(d.ctx)
 	sc := d.sc
-	d.runPipeline(scriptCtx, func() {
+	d.runPipeline(scriptCtx, func(string) {
 		if script.Len() == 0 {
 			d.SetMessage("No changes to script.", false)
 			return

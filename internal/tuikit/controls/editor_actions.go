@@ -491,10 +491,11 @@ func (e *Editor) SelectedLinesText() (text string, ok bool) {
 // SQLLineState returns the SQL lexer state line row begins in — inside a string,
 // comment or quoted identifier carried over from the lines above, or
 // sqltext.ModeNormal — as the SQL highlighter colours it. A line-oriented rewrite
-// of SQL checks it before treating the line as code. Cached per document version,
-// so a repeat costs nothing and an edit costs only the lines whose state changed.
+// of SQL checks it before treating the line as code. Reads the cache the SQL
+// highlighter fills (Document.sqlStarts), so after a Draw it costs nothing, and
+// an edit costs only the lines whose state changed.
 func (e *Editor) SQLLineState(row int) sqltext.State {
-	return e.sqlStarts.at(e.doc, row, sqltext.State{}, sqltext.LineEnd)
+	return e.doc.sqlLineState(row)
 }
 
 // ReplaceSelectedLines replaces the lines SelectedLinesText returns with text as

@@ -484,23 +484,37 @@ Peer credentials, easy to undo:
 
 - **Peer credentials come from connections already made.**
   `ServerConn.SetPeerCredentials` installs a resolver `peerOptions` consults
-  before the parent's settings — connecting to a replica once via File >
+  for each peer — connecting to a replica once via File >
   Connect gives it its own login/port/auth/TLS. A saved connection is taken
   whole (so new `config.Connection` fields aren't dropped). Keyed by
   `config.InstanceKey` (case, port, instance spelling); since `@@SERVERNAME` is the
   short name, a saved connection is also registered under its short host at
-  strictly lower priority, so `sql.a.example`/`sql.b.example` never swap logins.
-- **The resolver never makes an instance less reachable.** `Peer` retries once
-  with `parentPeerOptions` when the resolver's answer won't connect;
-  `loadPeerCredentials` skips entries whose password can't be decrypted. A saved
-  low-privilege login still wins on purpose. Removing the retry or ignoring the
-  resolver each break a half.
+  strictly lower priority. An alias shared by different instance keys is
+  refused; an exact registered name still wins.
+- **A peer never retargets registered credentials.** The registered address,
+  port, auth and TLS options are kept intact, even for short-name metadata.
+  Unregistered or ambiguous destinations are refused (`db.PeerNotRegisteredError`). A failed peer login reports its own error, never retries
+  with the parent's credentials. This security boundary supersedes the former
+  reachability-first fallback (GitHub issue #3).
+  `loadPeerCredentials` still skips entries whose password can't be decrypted.
+- **A refused peer is prompted for, SSMS-style — never silently dialled.**
+  Where a refusal lands on the UI goroutine with the user present
+  (`newObjectDialog.probe`, `runAGOperation`, the Object Explorer note, a
+  property-sheet page load — `offerPeerConnectForSheet`, the AG Dashboard —
+  latched once per showing, since it re-reads on a timer),
+  `App.offerPeerConnect` opens Connect pre-filled from the parent
+  (`peerConnectTemplate`: its sign-in, the refused name, no database, no
+  Host Name In Certificate, the port only for the parent's own instance).
+  Pressing Connect is the approval; success registers it like File > Connect.
+  A probe re-runs after, and a sheet reloads its errored pages (same showing
+  only); a confirmed AG write does not (the user repeats it).
 - **`ServerConn.Peer` blanks `Opts.Database`** — a named database fails the
   connect at ping, and everything `Peer` reaches is server-scoped. The other
   three `sc.Opts` clones (query panel, Activity Monitor ×2) keep it.
 - **The peer failure cache is short on purpose.** `recordPeerFailureLocked`
-  keeps the last failure per `InstanceKey` for `peerFailureTTL` (30 s) so a
-  blackholed primary doesn't cost the 15 s connect timeout per expansion.
+  keeps the last dial failure per registered destination's `InstanceKey` for
+  `peerFailureTTL` (30 s) so a blackholed primary doesn't cost the 15 s connect
+  timeout per expansion.
   Invalidated by a successful direct File > Connect to it and by Refresh
   anywhere in the Always On subtree (both recurse into cached peers, where
   chained reads record failures). The 15 s timeout stays (WAN peers).
@@ -510,8 +524,8 @@ Peer credentials, easy to undo:
   silence a superseded load still do.
 - **An unknown saved auth method is refused, not dialled as SQL auth.**
   `db.toGosmoAuth` errors (a hand-edited or newer-gossms config.json), so
-  Connect and the preview refuse it alike; as a peer credential the resolver
-  falls back to the parent's options. The Connect dialog opens such an entry on
+  Connect and the preview refuse it alike; a peer using that entry reports the
+  error without trying another login. The Connect dialog opens such an entry on
   its first method — picking one and connecting is the repair. config.json is
   never rewritten for it.
 - **A hand-edited non-canonical `encrypt_mode` is left as is — author's call.**
@@ -851,7 +865,15 @@ Every result below was probed with `WITHOUT LOGIN` users on 13, 14,
   "Database Triggers" (DDL, `parent_class = 0`). `Database.Triggers` is gosmo's
   database-wide read; gossms has no folder for it.
 - **A view isn't a leaf** — it carries INSTEAD OF triggers, so `NodeView` has a
-  Triggers folder. `Database.ObjectTriggers` serves both (gosmo's `View` has no
+  Triggers folder, beside its Columns (`NodeViewColumns`/`NodeViewColumn`, own
+  types so no table-column Delete/Rename is offered; issue #2), Indexes and
+  Statistics. Those two reuse the table's `NodeIndexes`/`NodeStatistics`
+  marked `nodeData.OnView` (the DDL is the same; OnView picks the extended-
+  property level and the New Index kinds); pages and dialogs, handed names
+  only, resolve table-then-view (`findIndexed`). gosmo models it SMO-style:
+  `View.Indexes`/`Statistics`/…, `Index.View()`, `Table()` nil on a view's.
+  New Index on a view offers Clustered/Non-Clustered only, no Filter page, and
+  preflights Msg 1939/1940/1941; New Statistics preflights 1940. `Database.ObjectTriggers` serves both (gosmo's `View` has no
   database back-pointer for a method of its own).
 - **The DDL family is read/enable/disable/script/drop — no New dialog**, like
   Server Triggers; a trigger body isn't form-buildable. Edit via Script Database
@@ -1410,6 +1432,14 @@ it from the string 'NULL'.
   would otherwise do. The explorer, Table Properties and Index Properties show
   them marked, not hidden, and Delete still works: dropping DTA leftovers is
   the usual cleanup. The full-text key-index picker leaves them out.
+- **Shrink Database's unticked "Reorganize files" scripts the bare
+  `DBCC SHRINKDATABASE (N'db')`** (checked against SSMS 21, 2026-10-21).
+  Ticked with N% it scripts `(N'db', N)`; neither form adds `TRUNCATEONLY` or
+  `NOTRUNCATE`, so both move pages, and the box only adds the free-space
+  target. Microsoft's dialog page, which equates unticked with
+  `TRUNCATEONLY`, is wrong; gosmo's `ShrinkDatabaseOptions` zero value is
+  right. SSMS 21 has no WAIT_AT_LOW_PRIORITY option there — gossms's Locking
+  rows (SQL 2025+) are an extra.
 - **Format Document upper-cases table hints only inside `WITH (…)`**: the
   legacy `JOIN log (nolock)` form stays as typed, since `(…)` after an
   unqualified name there may be a TVF's arguments (`CROSS APPLY f(nolock)`
