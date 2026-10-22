@@ -157,6 +157,9 @@ func newServerConn(ctx context.Context, opts config.Connection, srv *gosmo.Serve
 		Opts: opts, Server: srv, role: role,
 		IsFabricDW: strings.HasSuffix(host, fabricDWDomain),
 	}
+	if srv != nil {
+		srv.IsFabricDW = sc.IsFabricDW
+	}
 	if role == RoleExplorer {
 		sc.ProbeCapabilitiesContext(ctx)
 	}

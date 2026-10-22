@@ -11,6 +11,7 @@ import (
 
 	"github.com/microsoft/go-mssqldb/azuread"
 	"github.com/microsoft/go-mssqldb/msdsn"
+	"github.com/radix29/gosmo"
 	"github.com/radix29/gossms/internal/config"
 )
 
@@ -345,9 +346,13 @@ func TestNewServerConnDetectsFabricDWFromHostname(t *testing.T) {
 		{"warehouse.msit-datawarehouse.fabric.microsoft.com.example.org", false},
 	} {
 		t.Run(tc.server, func(t *testing.T) {
-			sc := newServerConn(context.Background(), config.Connection{Server: tc.server}, nil, RoleQuery)
+			srv := &gosmo.Server{}
+			sc := newServerConn(context.Background(), config.Connection{Server: tc.server}, srv, RoleQuery)
 			if sc.IsFabricDW != tc.want {
 				t.Errorf("IsFabricDW = %v for %q, want %v", sc.IsFabricDW, tc.server, tc.want)
+			}
+			if srv.IsFabricDW != tc.want {
+				t.Errorf("gosmo IsFabricDW = %v for %q, want %v", srv.IsFabricDW, tc.server, tc.want)
 			}
 		})
 	}
