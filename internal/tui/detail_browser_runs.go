@@ -429,7 +429,7 @@ func viewsFolderDetail(ctx context.Context, sc *dbconn.ServerConn, node *explore
 	if err != nil {
 		return nil, nil, err
 	}
-	views, err := dbObj.ViewsFiltered(ctx, serverFilter(node.data.Filter))
+	views, err := dbObj.Views(ctx, serverFilter(node.data.Filter))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -449,7 +449,7 @@ func storedProceduresFolderDetail(ctx context.Context, sc *dbconn.ServerConn, no
 	if err != nil {
 		return nil, nil, err
 	}
-	procs, err := dbObj.StoredProceduresFiltered(ctx, serverFilter(node.data.Filter))
+	procs, err := dbObj.StoredProcedures(ctx, serverFilter(node.data.Filter))
 	if err != nil {
 		return nil, nil, err
 	}

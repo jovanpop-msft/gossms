@@ -459,3 +459,41 @@ func TestNewObjectDialogCommitsBeforePreflight(t *testing.T) {
 		t.Errorf("preflight saw %q, want the editor's value — the Files page was never opened, but its form still commits", built)
 	}
 }
+
+// A New dialog's step that notes something (noteApply) reaches the status bar
+// after the "created" line. The create pipeline once attached no collector, so
+// the note vanished.
+func TestNewObjectDialogReportsApplyNotes(t *testing.T) {
+	const note = "the file was created smaller than asked."
+	a := newTestApp()
+	sc, _ := newFakeConn(t)
+	d := &newObjectDialog[testPrefetch]{}
+	d.init(a, newObjectConfig[testPrefetch]{
+		title: "New Thing",
+		noun:  "Thing",
+		pages: []string{"General"},
+		fetch: func(context.Context, *db.ServerConn) (*testPrefetch, error) { return &testPrefetch{}, nil },
+		build: func(*testPrefetch) {
+			d.forms = []*propsheet.Form{propsheet.NewForm()}
+			d.applyFns = []propApply{func(ctx context.Context) error {
+				noteApply(ctx, note)
+				return nil
+			}}
+			d.objectName = func() string { return "thing" }
+			d.preflight = func() error { return nil }
+		},
+		refresh: func(*db.ServerConn) {},
+	})
+	d.show(sc)
+	waitAndDrain(t, a)
+	if d.prefetch == nil {
+		t.Fatal("setup: the prefetch never landed")
+	}
+
+	d.runApply(false)
+	drainUntil(t, a, func() bool { return !d.Applying() }, "the pipeline to finish")
+
+	if want := `Thing "thing" created. ` + note; a.statusText != want {
+		t.Errorf("status = %q, want %q", a.statusText, want)
+	}
+}

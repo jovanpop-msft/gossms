@@ -743,7 +743,7 @@ func (d *NewEndpointDialog) runScript() {
 	var groups []endpointScriptGroup
 	scriptCtx = withEndpointScript(scriptCtx, &groups)
 	sc := d.sc
-	d.runPipeline(scriptCtx, func() {
+	d.runPipeline(scriptCtx, func(string) {
 		d.app.openQueryWithText(sc, "", annotateEndpointScript(groups))
 	})
 }

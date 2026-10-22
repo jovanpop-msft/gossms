@@ -30,7 +30,7 @@ const (
 	logFilterWidth = 24
 )
 
-// logFileRef names one log file: the two arguments gosmo.Server.ReadLogFiltered
+// logFileRef names one log file: the log type and number gosmo.Server.ReadLog
 // takes. A LogViewer holds an ordered set of these so several files can merge
 // into one grid; the single-file view is the one-element case.
 type logFileRef struct {

@@ -348,7 +348,7 @@ func (d *AGAddReplicaDialog) addReplica(ctx context.Context, r newAGReplica) err
 func (d *AGAddReplicaDialog) runScript() {
 	scriptCtx, script := gosmo.WithScript(d.ctx)
 	sc := d.sc
-	d.runPipeline(scriptCtx, func() {
+	d.runPipeline(scriptCtx, func(string) {
 		d.app.openQueryWithText(sc, "", multiInstanceScript("Add Replica", script))
 	})
 }

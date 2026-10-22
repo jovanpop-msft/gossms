@@ -79,7 +79,9 @@ func loadTablesOfKind(l loaderCtx, node *explorerNode, dbObj *gosmo.Database,
 	// System Views, not the parent's.
 	filter := serverFilter(node.data.Filter)
 	return listChildren(
-		func() ([]*gosmo.Table, error) { return dbObj.TablesOfKindFiltered(l.ctx, kind, filter) },
+		func() ([]*gosmo.Table, error) {
+			return dbObj.Tables(l.ctx, gosmo.TableQuery{Kind: kind, Filter: filter})
+		},
 		func(t *gosmo.Table) *explorerNode {
 			n := l.node(tableLabel(t), NodeTable, t.Schema, t.Name, node.data.DBName)
 			n.data.CreateDate = t.CreateDate
@@ -380,7 +382,7 @@ func withSystemFolder(l loaderCtx, node *explorerNode, label string, nt NodeType
 func loadViewsChildren(l loaderCtx, node *explorerNode) ([]*explorerNode, error) {
 	views, err := loadSchemaScoped(l, node, NodeView, false,
 		func(d *gosmo.Database) ([]*gosmo.View, error) {
-			return d.ViewsFiltered(l.ctx, serverFilter(node.data.Filter))
+			return d.Views(l.ctx, serverFilter(node.data.Filter))
 		}, viewFields)
 	if err != nil {
 		return nil, err
@@ -392,7 +394,7 @@ func loadViewsChildren(l loaderCtx, node *explorerNode) ([]*explorerNode, error)
 func loadSystemViewsChildren(l loaderCtx, node *explorerNode) ([]*explorerNode, error) {
 	return loadSchemaScoped(l, node, NodeView, true,
 		func(d *gosmo.Database) ([]*gosmo.View, error) {
-			return d.SystemViewsFiltered(l.ctx, serverFilter(node.data.Filter))
+			return d.SystemViews(l.ctx, serverFilter(node.data.Filter))
 		}, viewFields)
 }
 
@@ -401,7 +403,7 @@ func loadSystemViewsChildren(l loaderCtx, node *explorerNode) ([]*explorerNode, 
 func loadStoredProceduresChildren(l loaderCtx, node *explorerNode) ([]*explorerNode, error) {
 	procs, err := loadSchemaScoped(l, node, NodeStoredProcedure, false,
 		func(d *gosmo.Database) ([]*gosmo.StoredProcedure, error) {
-			return d.StoredProceduresFiltered(l.ctx, serverFilter(node.data.Filter))
+			return d.StoredProcedures(l.ctx, serverFilter(node.data.Filter))
 		}, procFields)
 	if err != nil {
 		return nil, err
@@ -414,7 +416,7 @@ func loadStoredProceduresChildren(l loaderCtx, node *explorerNode) ([]*explorerN
 func loadSystemProceduresChildren(l loaderCtx, node *explorerNode) ([]*explorerNode, error) {
 	return loadSchemaScoped(l, node, NodeStoredProcedure, true,
 		func(d *gosmo.Database) ([]*gosmo.StoredProcedure, error) {
-			return d.SystemStoredProceduresFiltered(l.ctx, serverFilter(node.data.Filter))
+			return d.SystemStoredProcedures(l.ctx, serverFilter(node.data.Filter))
 		}, procFields)
 }
 
@@ -423,7 +425,7 @@ func loadSystemProceduresChildren(l loaderCtx, node *explorerNode) ([]*explorerN
 func loadFunctionsChildren(l loaderCtx, node *explorerNode) ([]*explorerNode, error) {
 	funcs, err := loadFunctionNodes(l, node, false,
 		func(d *gosmo.Database) ([]*gosmo.UserDefinedFunction, error) {
-			return d.UserDefinedFunctionsFiltered(l.ctx, serverFilter(node.data.Filter))
+			return d.UserDefinedFunctions(l.ctx, serverFilter(node.data.Filter))
 		})
 	if err != nil {
 		return nil, err
@@ -435,7 +437,7 @@ func loadFunctionsChildren(l loaderCtx, node *explorerNode) ([]*explorerNode, er
 func loadSystemFunctionsChildren(l loaderCtx, node *explorerNode) ([]*explorerNode, error) {
 	return loadFunctionNodes(l, node, true,
 		func(d *gosmo.Database) ([]*gosmo.UserDefinedFunction, error) {
-			return d.SystemFunctionsFiltered(l.ctx, serverFilter(node.data.Filter))
+			return d.SystemFunctions(l.ctx, serverFilter(node.data.Filter))
 		})
 }
 

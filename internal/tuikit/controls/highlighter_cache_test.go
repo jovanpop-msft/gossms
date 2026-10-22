@@ -112,6 +112,34 @@ func TestHighlighterCacheDistinguishesTwoDocuments(t *testing.T) {
 	}
 }
 
+// TestSQLHighlighterAndLineStateShareOneCache: the SQL highlighter and
+// Editor.SQLLineState read one prefix-state cache on the Document, so drawing a
+// script leaves SQLLineState nothing to lex. Two caches cost two replays of the
+// whole script after every edit. An XML editor must never build the SQL one.
+func TestSQLHighlighterAndLineStateShareOneCache(t *testing.T) {
+	e := NewEditor(SQLHighlighter(&theme.Default))
+	e.SetBounds(0, 0, 60, 10)
+	e.SetText("SELECT 1 /* open\nstill inside\n*/ SELECT 2")
+	e.Draw(newGlyphScreen(60, 10))
+
+	c := &e.doc.sqlStarts
+	if !c.valid || c.doc != e.doc || c.version != e.doc.Version() {
+		t.Fatal("drawing with the SQL highlighter did not fill the Document's sqlStarts — " +
+			"SQLLineState would lex the script again")
+	}
+	if got := e.SQLLineState(1); got.Mode == sqltext.ModeNormal {
+		t.Errorf("SQLLineState(1) = %v, want inside the comment line 0 opens", got)
+	}
+
+	x := NewEditor(XMLHighlighter(&theme.Default))
+	x.SetBounds(0, 0, 60, 10)
+	x.SetText("<a><!-- open\nstill inside\n<b/>")
+	x.Draw(newGlyphScreen(60, 10))
+	if x.doc.sqlStarts.valid || x.doc.sqlStarts.states != nil {
+		t.Error("drawing an XML editor built the SQL prefix-state cache")
+	}
+}
+
 // TestXMLHighlighterCacheInvalidatesOnEdit mirrors the SQL case for the other
 // built-in highlighter, whose cross-line state is a comment or CDATA section.
 func TestXMLHighlighterCacheInvalidatesOnEdit(t *testing.T) {

@@ -394,7 +394,7 @@ func agSecondaries(req gosmo.CreateAvailabilityGroupRequest) []gosmo.Availabilit
 func (d *NewAGDialog) runScript() {
 	scriptCtx, script := gosmo.WithScript(d.ctx)
 	sc := d.sc
-	d.runPipeline(scriptCtx, func() {
+	d.runPipeline(scriptCtx, func(string) {
 		d.app.openQueryWithText(sc, "", multiInstanceScript("New Availability Group", script))
 	})
 }

@@ -6,7 +6,8 @@ package controls
 
 // prefixStates caches, for one version of one Document, the lexer state each line
 // *begins* in — whether it opens inside a block comment, a CDATA section, and so
-// on. Both built-in highlighters use it; see SQLHighlighter for the measurements.
+// on. Both built-in highlighters use it (SQL's through Document.sqlStarts); see
+// SQLHighlighter for the measurements.
 //
 // A line's starting state depends on every line before it, so answering per line
 // is O(document) and for a whole viewport O(H * document), on every event since

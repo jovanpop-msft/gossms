@@ -4,6 +4,7 @@ import (
 	"slices"
 
 	"github.com/radix29/gossms/internal/tuikit/core"
+	"github.com/radix29/gossms/internal/tuikit/sqltext"
 )
 
 // ---------------------------------------------------------------------------
@@ -15,9 +16,9 @@ import (
 //
 // The counter lets work proportional to the *document* be done once per edit
 // instead of once per Draw (which runs on every event, keystrokes included). Three
-// caches key on it: the syntax highlighters' block-comment prefix states
-// (sql_highlighter.go, xml_highlighter.go), Editor's wrap-mode visual-row
-// flattening (buildVisualLines), and maxDisplayWidth below.
+// caches key on it: the lexer prefix states (sqlStarts below, and
+// XMLHighlighter's), Editor's wrap-mode visual-row flattening
+// (buildVisualLines), and maxDisplayWidth below.
 //
 // The version must never be stale, so the buffer is writable through exactly
 // three methods: setLine, edit and replaceRange. Each ends in a version bump and
@@ -69,6 +70,13 @@ type Document struct {
 	// version behind needs (Enter with auto-indent is a split plus a setLine per
 	// space, all before the wrap cache next looks).
 	splices [spliceLogLen]splice
+
+	// sqlStarts is the SQL lexer state each line begins in, shared by
+	// SQLHighlighter and Editor.SQLLineState so a large script is lexed once per
+	// edit, not once for each. Here rather than in either because both are handed
+	// this Document and nothing else they share. Filled on first use, so a
+	// Document only ever shown as XML or plain text never builds it.
+	sqlStarts prefixStates[sqltext.State]
 }
 
 // spliceLogLen bounds how far behind a cache can fall and still catch up
@@ -102,6 +110,11 @@ func (d *Document) Line(i int) []rune { return d.lines[i] }
 // together with the *Document itself: two Documents number versions
 // independently.
 func (d *Document) Version() uint64 { return d.version }
+
+// sqlLineState returns the SQL lexer state line i begins in (see sqlStarts).
+func (d *Document) sqlLineState(i int) sqltext.State {
+	return d.sqlStarts.at(d, i, sqltext.State{}, sqltext.LineEnd)
+}
 
 // all returns the backing slice for read-only use. Mutating it, or any line
 // reachable from it, without going through setLine or edit is what this type
