@@ -151,7 +151,11 @@ func (p *QueryPanel) keywordCandidates(buf []rune, tokens []sqlparse.Token, quer
 			kind := completionBuiltins[label].kind
 			window := !columnType && (clause == "QUALIFY" || kind&builtinWindow != 0 && kind&builtinAggregate == 0 &&
 				(!fabric || kind&builtinFabricAggregate == 0))
-			items = append(items, completionCallItem(buf, cursor, label, detail, window))
+			item := completionCallItem(buf, cursor, label, detail, window)
+			if fabric && clause == "SELECT" && label == "EXCLUDE" {
+				item.Detail, item.Soft = "keyword", prefix == ""
+			}
+			items = append(items, item)
 			continue
 		}
 		if phrase {
@@ -368,6 +372,15 @@ func forClauseChoices(s *keywordScope) (choices []string) {
 // selectChoices completes the projection list, or FROM after a finished one.
 func selectChoices(s *keywordScope) (choices []string) {
 	projection := keywordProjection(s.f.tokens[s.cc.selectStart:])
+	excluded := s.fabric && len(projection) >= 3 && projection[0].Kind == sqlparse.TokenStar &&
+		keywordIs(projection[1], "EXCLUDE") && projection[2].Kind == sqlparse.TokenParenClose
+	if excluded {
+		projection = append([]sqlparse.Token{projection[0]}, projection[3:]...)
+	}
+	if s.fabric && len(projection) == 2 && projection[0].Kind == sqlparse.TokenStar && keywordIs(projection[1], "NOT") {
+		s.complete, s.sourceComplete = false, true
+		return []string{"LIKE"}
+	}
 	empty := len(projection) == 0 && s.tail.Kind != sqltext.KindString
 	if empty || !s.complete {
 		s.complete = false
@@ -383,6 +396,12 @@ func selectChoices(s *keywordScope) (choices []string) {
 		}
 	} else if !s.cc.hasFrom {
 		choices = []string{"FROM"}
+	}
+	if s.fabric && s.complete && len(projection) == 1 && projection[0].Kind == sqlparse.TokenStar {
+		if !excluded {
+			choices = append(choices, "EXCLUDE(")
+		}
+		choices = append(choices, "LIKE", "NOT LIKE")
 	}
 	return choices
 }

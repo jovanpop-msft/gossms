@@ -688,6 +688,115 @@ func TestSQLCompletionDDLDialects(t *testing.T) {
 	}
 }
 
+func TestSQLFabricStarModifiers(t *testing.T) {
+	for _, tt := range []struct{ sql, want, absent string }{
+		{"SELECT * |", "EXCLUDE", "EXCEPT"},
+		{"SELECT * ex| FROM dbo.Customers", "EXCLUDE", "EXCEPT"},
+		{"SELECT * li| FROM dbo.Customers", "LIKE", ""},
+		{"SELECT * not| FROM dbo.Customers", "NOT LIKE", ""},
+		{"FROM dbo.Customers SELECT * |", "EXCLUDE", "FROM"},
+		{"FROM dbo.Customers SELECT * li|", "LIKE", ""},
+		{"FROM dbo.Customers SELECT * not|", "NOT LIKE", ""},
+		{"SELECT * NOT li| FROM dbo.Customers", "LIKE", "FROM"},
+		{"SELECT * EXCLUDE(Id) fr|", "FROM", "EXCLUDE"},
+		{"SELECT * EXCLUDE(Id, Name) fr|", "FROM", "EXCLUDE"},
+		{"SELECT * EXCLUDE(Id) |", "LIKE", "EXCLUDE"},
+		{"SELECT * EXCLUDE(Id, Name) not|", "NOT LIKE", "EXCLUDE"},
+		{"SELECT * EXCLUDE(Id) NOT li|", "LIKE", "FROM"},
+		{"FROM dbo.Customers\nSELECT * EXCLUDE(Id) |", "LIKE", "EXCEPT"},
+		{"FROM dbo.Customers\nSELECT * EXCLUDE(Id) |", "NOT LIKE", "EXCLUDE"},
+		{"FROM dbo.Customers SELECT * EXCLUDE(Id, Name) li|", "LIKE", "FROM"},
+		{"FROM dbo.Customers SELECT * EXCLUDE(Id, Name) not|", "NOT LIKE", "FROM"},
+		{"FROM dbo.Customers SELECT * EXCLUDE(Id) NOT li|", "LIKE", "FROM"},
+		{"SELECT * EXCLUDE(Id) LIKE 'N%' fr|", "FROM", "LIKE"},
+		{"FROM dbo.Customers SELECT * EXCLUDE(Id) NOT LIKE 'N%' wh|", "WHERE", "LIKE"},
+		{"SELECT * LIKE 'N%' fr|", "FROM", "NOT LIKE"},
+		{"SELECT * NOT LIKE 'N%' fr|", "FROM", "LIKE"},
+		{"FROM dbo.Customers SELECT * EXCLUDE(Id, Name) wh|", "WHERE", "FROM"},
+		{"FROM dbo.Customers SELECT * LIKE 'N%' wh|", "WHERE", "EXCEPT"},
+		{"FROM dbo.Customers SELECT * NOT LIKE 'N%' wh|", "WHERE", "LIKE"},
+		{"SELECT * EXCLUDE(|) FROM dbo.Customers", "Name", "COUNT"},
+		{"SELECT * EXCLUDE(Id, Na|) FROM dbo.Customers", "Name", "ABS"},
+		{"FROM dbo.Customers SELECT * EXCLUDE(Id, |)", "Name", "COUNT"},
+		{"SELECT * EXCLUDE([Na|]) FROM dbo.Customers", "Name", ""},
+		{"SELECT * EXCLUDE(Id) FROM dbo.Cus|", "dbo.Customers", "Name"},
+		{"FROM dbo.Customers SELECT * EXCLUDE(Id)\nSELECT | FROM dbo.Orders", "Total", "Name"},
+		{"FROM dbo.Customers SELECT * EXCLUDE(|)\nSELECT Total FROM dbo.Orders", "Name", "Total"},
+		{"WITH c AS (SELECT * EXCLUDE(|) FROM dbo.Customers) SELECT * FROM c", "Name", "COUNT"},
+		{"SELECT Name ex| FROM dbo.Customers", "", "EXCLUDE"},
+		{"SELECT COUNT(*) ex| FROM dbo.Customers", "", "EXCLUDE"},
+		{"SELECT 2 * ex| FROM dbo.Customers", "", "EXCLUDE"},
+		{"SELECT * FROM dbo.Customers WHERE Id * ex|", "", "EXCLUDE"},
+		{"SELECT * EXCEPT SELECT Name FROM dbo.Customers wh|", "WHERE", ""},
+	} {
+		t.Run(tt.sql, func(t *testing.T) {
+			qp := newTestQueryPanelWithInventory(t, "testdb", testCustomersOrders())
+			qp.conn.Server = fabricConn(t).Server
+			lines, row, col := linesAndCursor(t, tt.sql)
+			items, _ := qp.sqlCompletionCandidates(completionReq(lines, row, col))
+			if tt.want != "" && !containsLabel(items, tt.want) {
+				t.Fatalf("missing %q in %v", tt.want, labels(items))
+			}
+			if tt.absent != "" && containsLabel(items, tt.absent) {
+				t.Fatalf("unexpected %q in %v", tt.absent, labels(items))
+			}
+		})
+	}
+	for _, sql := range []string{"SELECT * |", "SELECT * ex|", "SELECT * li|", "SELECT * not|"} {
+		t.Run("SQLServer/"+sql, func(t *testing.T) {
+			qp := newTestQueryPanelWithInventory(t, "testdb", testCustomersOrders())
+			lines, row, col := linesAndCursor(t, sql)
+			items, _ := qp.sqlCompletionCandidates(completionReq(lines, row, col))
+			for _, label := range []string{"EXCLUDE", "EXCEPT", "LIKE", "NOT LIKE"} {
+				if containsLabel(items, label) {
+					t.Fatalf("unexpected Fabric modifier %q in %v", label, labels(items))
+				}
+			}
+		})
+	}
+}
+
+func TestSQLFabricStarModifierCompletionInEditor(t *testing.T) {
+	for _, tt := range []struct{ before, typed, after, want string }{
+		{"SELECT * ", "ex", "", "SELECT * EXCLUDE(|)"},
+		{"SELECT * ", "ex", "(Id, Name) FROM dbo.Customers", "SELECT * EXCLUDE(|Id, Name) FROM dbo.Customers"},
+		{"FROM dbo.Customers SELECT * ", "ex", "", "FROM dbo.Customers SELECT * EXCLUDE(|)"},
+		{"SELECT * ", "li", "", "SELECT * LIKE |"},
+		{"SELECT * ", "not", "", "SELECT * NOT LIKE |"},
+		{"FROM dbo.Customers SELECT * ", "not", "", "FROM dbo.Customers SELECT * NOT LIKE |"},
+		{"SELECT * EXCLUDE(Id, ", "na", ") FROM dbo.Customers", "SELECT * EXCLUDE(Id, Name|) FROM dbo.Customers"},
+		{"FROM dbo.Customers\nSELECT * EXCLUDE(Id) ", "li", "", "FROM dbo.Customers\nSELECT * EXCLUDE(Id) LIKE |"},
+		{"FROM dbo.Customers\nSELECT * EXCLUDE(Id, Name) ", "not", "", "FROM dbo.Customers\nSELECT * EXCLUDE(Id, Name) NOT LIKE |"},
+		{"SELECT * EXCLUDE(Id) ", "li", " FROM dbo.Customers", "SELECT * EXCLUDE(Id) LIKE |FROM dbo.Customers"},
+	} {
+		for _, key := range []tcell.Key{tcell.KeyTab, tcell.KeyEnter} {
+			t.Run(fmt.Sprintf("%s/%v", tt.want, key), func(t *testing.T) {
+				qp := newTestQueryPanelWithInventory(t, "testdb", testCustomersOrders())
+				qp.conn.Server = fabricConn(t).Server
+				qp.editor.SetText(tt.before + tt.after)
+				qp.editor.HandleKey(tcell.NewEventKey(tcell.KeyEnd, "", tcell.ModCtrl))
+				for range []rune(tt.after) {
+					qp.editor.HandleKey(tcell.NewEventKey(tcell.KeyLeft, "", tcell.ModNone))
+				}
+				for _, r := range tt.typed {
+					qp.editor.HandleKey(tcell.NewEventKey(tcell.KeyRune, string(r), tcell.ModNone))
+				}
+				if !qp.editor.OverlayActive() {
+					t.Fatal("modifier popup did not open")
+				}
+				qp.editor.HandleKey(tcell.NewEventKey(key, "", tcell.ModNone))
+				if got, want := qp.editor.Text(), strings.Replace(tt.want, "|", "", 1); got != want {
+					t.Fatalf("Text() = %q, want %q", got, want)
+				}
+				qp.editor.HandleKey(tcell.NewEventKey(tcell.KeyRune, "x", tcell.ModNone))
+				if got, want := qp.editor.Text(), strings.Replace(tt.want, "|", "x", 1); got != want {
+					t.Fatalf("typing at cursor produced %q, want %q", got, want)
+				}
+			})
+		}
+	}
+}
+
 // CREATE OR ALTER (2016 SP1) and DROP … IF EXISTS (2016) are at the supported
 // floor, so they are offered whatever version the server reports — below the
 // floor too, where gossms warns at connect rather than trimming completions.

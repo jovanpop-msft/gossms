@@ -106,6 +106,32 @@ func TestSQLHighlighterRecognizesNewKeywordCategories(t *testing.T) {
 	}
 }
 
+func TestSQLHighlighterExclude(t *testing.T) {
+	keywordStyle := theme.On(theme.Default.EditorBg, theme.Default.EditorKeyword).Bold(true)
+	for _, tt := range []struct {
+		sql     string
+		keyword bool
+	}{
+		{"SELECT * EXCLUDE(Id) FROM t", true},
+		{"from t select * exclude(Id, Name)", true},
+		{"SELECT [EXCLUDE], 'EXCLUDE' FROM t /* EXCLUDE */", false},
+	} {
+		t.Run(tt.sql, func(t *testing.T) {
+			doc := docOf([][]rune{[]rune(tt.sql)})
+			found := false
+			for _, run := range Highlighter(&theme.Default)(doc, 0) {
+				text := string(doc.Line(0)[run.Start : run.Start+run.Len])
+				if strings.EqualFold(text, "EXCLUDE") && run.Style == keywordStyle {
+					found = true
+				}
+			}
+			if found != tt.keyword {
+				t.Fatalf("EXCLUDE keyword highlight = %v, want %v", found, tt.keyword)
+			}
+		})
+	}
+}
+
 // TestSQLHighlighterBlockCommentSingleLine confirms a /* ... */ comment
 // that opens and closes on the same line is colored as one run, and that
 // code after the closing "*/" is highlighted normally again.

@@ -116,6 +116,9 @@ func TestNarrowStatementForwardMatchesReference(t *testing.T) {
 // forwardCases are shapes whose statement continues past a keyword that would
 // otherwise start one, plus the boundaries that do end it.
 var forwardCases = []string{
+	"FROM t SELECT * EXCLUDE(a, b)\nSELECT c FROM u",
+	"SELECT * EXCLUDE(a, b) FROM t\nSELECT c FROM u",
+	"SELECT * EXCEPT SELECT c FROM u",
 	"FROM t JOIN u ON t.id = u.id SELECT t.a\nSELECT b FROM v",
 	"FROM t SELECT a UNION ALL FROM u SELECT b\nSELECT c FROM v",
 	"WITH c AS (FROM t SELECT a) FROM c SELECT a",

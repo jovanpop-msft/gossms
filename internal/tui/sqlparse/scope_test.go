@@ -84,6 +84,26 @@ func cteNames(s Scope) string {
 
 var clauseNames = [...]string{"unknown", "table", "column"}
 
+func TestScopeStarExclude(t *testing.T) {
+	for _, sql := range []string{
+		"SELECT * EXCLUDE(|) FROM dbo.Customers",
+		"SELECT * EXCLUDE(Id, |) FROM dbo.Customers",
+		"FROM dbo.Customers SELECT * EXCLUDE(Id, |)",
+		"WITH c AS (SELECT * EXCLUDE(|) FROM dbo.Customers) SELECT * FROM c",
+	} {
+		t.Run(sql, func(t *testing.T) {
+			scope := scopeAtCursor(t, sql)
+			if got := refNames(scope.Query); got != "dbo.Customers" || scope.Clause != ClauseColumn {
+				t.Fatalf("scope = %s, %s; want dbo.Customers, column", got, clauseName(scope.Clause))
+			}
+		})
+	}
+	scope := scopeAtCursor(t, "SELECT * FROM dbo.Customers EXCEPT SELECT | FROM dbo.Orders")
+	if got := refNames(scope.Query); got != "dbo.Orders" {
+		t.Fatalf("set operator scope = %s, want dbo.Orders", got)
+	}
+}
+
 func clauseName(c Clause) string {
 	if int(c) < len(clauseNames) {
 		return clauseNames[c]

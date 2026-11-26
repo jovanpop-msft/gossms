@@ -19,7 +19,7 @@ var sqlKeywords = map[string]bool{
 	"IN": true, "IS": true, "NULL": true, "LIKE": true, "BETWEEN": true,
 	"JOIN": true, "INNER": true, "LEFT": true, "RIGHT": true, "FULL": true,
 	"OUTER": true, "ON": true, "AS": true, "ORDER": true, "BY": true,
-	"GROUP": true, "HAVING": true, "QUALIFY": true, "DISTINCT": true, "TOP": true, "LIMIT": true,
+	"GROUP": true, "HAVING": true, "QUALIFY": true, "EXCLUDE": true, "DISTINCT": true, "TOP": true, "LIMIT": true,
 	"OFFSET": true, "UNION": true, "ALL": true, "EXISTS": true, "CASE": true,
 	"WHEN": true, "THEN": true, "ELSE": true, "END": true, "IF": true,
 	"BEGIN": true, "COMMIT": true, "ROLLBACK": true, "TRANSACTION": true,

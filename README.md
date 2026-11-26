@@ -486,6 +486,11 @@ Warehouse/SQL analytics endpoints. Known database compatibility levels also
 filter chunking; service policies, permissions and external-model setup remain
 the server's authority.
 
+On Fabric Warehouse, IntelliSense offers `EXCLUDE(...)`, `LIKE` and `NOT LIKE`
+after `SELECT *`, including `FROM ... SELECT *` queries. `EXCLUDE(...)` completes
+column names for both single-column and comma-separated exclusion lists;
+`LIKE` and `NOT LIKE` are also offered after the exclusion list.
+
 Saved passwords are encrypted with AES-256-GCM using `gossms.key` in the same
 folder; delete both files to reset. Editing a connection's server, port, user,
 authentication or encryption settings by hand invalidates its saved password.

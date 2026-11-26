@@ -186,6 +186,17 @@ func completionFrames(buf []rune, tokens []sqlparse.Token, start, from int, fabr
 func (p *QueryPanel) parenthesizedPosition(buf []rune, stack []completionFrame, from int, fabric bool, c *completionContext) (done bool) {
 	f := c.frame
 	parent := stack[len(stack)-2].tokens
+	if fabric && len(parent) >= 2 && keywordIs(parent[len(parent)-1], "EXCLUDE") {
+		outer := completionContext{frame: stack[len(stack)-2], selectStart: -1}
+		outer.clauseScan(buf)
+		if outer.clause == "SELECT" && outer.selectStart >= 0 {
+			projection := keywordProjection(parent[outer.selectStart:])
+			if len(projection) == 2 && projection[0].Kind == sqlparse.TokenStar {
+				c.parenthesized = true
+				return false
+			}
+		}
+	}
 	if len(parent) > 0 && (len(parent) < 2 || parent[len(parent)-2].Kind != sqlparse.TokenDot) {
 		fn := parent[len(parent)-1]
 		if keywordIs(fn, "JSON_VALUE") || keywordIs(fn, "JSON_QUERY") || keywordIs(fn, "JSON_MODIFY") {
