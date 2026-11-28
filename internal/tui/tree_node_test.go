@@ -19,12 +19,12 @@ func TestDatabaseIconsDistinguishFabricWarehouse(t *testing.T) {
 		conn *db.ServerConn
 		want rune
 	}{
-		{"unknown", nil, '⬢'},
-		{"unconnected", &db.ServerConn{}, '⬢'},
-		{"SQL Server", sqlServer, '⬢'},
-		{"Azure SQL", azure, '⬢'},
-		{"Managed Instance", managedInstance, '⬢'},
-		{"Fabric SQL database", fabricSQL, '⬢'},
+		{"unknown", nil, '⛁'},
+		{"unconnected", &db.ServerConn{}, '⛁'},
+		{"SQL Server", sqlServer, '⛁'},
+		{"Azure SQL", azure, '⛁'},
+		{"Managed Instance", managedInstance, '⛁'},
+		{"Fabric SQL database", fabricSQL, '⛁'},
 		{"Fabric Warehouse", fabricConn(t), '⬟'},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -48,8 +48,8 @@ func TestDatabaseIconsDistinguishFabricWarehouse(t *testing.T) {
 			}
 		})
 	}
-	if got := nodeIcon(nodeData{Type: NodeAvailabilityDatabase}, config.IconStyleSymbols, false); got != '⬢' {
-		t.Errorf("availability database icon = %q, want ⬢", got)
+	if got := nodeIcon(nodeData{Type: NodeAvailabilityDatabase}, config.IconStyleSymbols, false); got != '⛁' {
+		t.Errorf("availability database icon = %q, want ⛁", got)
 	}
 }
 
@@ -57,7 +57,7 @@ func TestDatabaseCompletionIconsDistinguishFabricWarehouse(t *testing.T) {
 	for _, fabric := range []bool{false, true} {
 		qp := newTestQueryPanelWithInventory(t, "testdb", testCustomersOrders())
 		qp.app.cfg.IconStyle = config.IconStyleSymbols
-		want := '⬢'
+		want := '⛁'
 		if fabric {
 			qp.conn.Server = fabricConn(t).Server
 			want = '⬟'
@@ -67,7 +67,7 @@ func TestDatabaseCompletionIconsDistinguishFabricWarehouse(t *testing.T) {
 			t.Errorf("Fabric %v: database completions %v, want one with icon %q", fabric, items, want)
 		}
 		linked := qp.linkedDatabaseItems(&linkedServer{name: "remote", databases: map[string]string{"linkeddb": "linkeddb"}}, "")
-		if len(linked) != 1 || linked[0].Icon != '⬢' {
+		if len(linked) != 1 || linked[0].Icon != '⛁' {
 			t.Errorf("Fabric %v: linked database completions %v, want the ordinary database icon", fabric, linked)
 		}
 	}
